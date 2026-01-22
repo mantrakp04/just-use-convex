@@ -1,0 +1,1 @@
+eval "$(bunx convex env list)" && bunx @better-auth/cli generate -y --config convex/betterAuth/auth.ts && mv schema.ts convex/betterAuth/schema.ts

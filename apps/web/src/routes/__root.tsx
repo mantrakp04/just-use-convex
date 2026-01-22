@@ -11,13 +11,12 @@ import {
 } from "@tanstack/react-router";
 import { TanStackRouterDevtools } from "@tanstack/react-router-devtools";
 import { createServerFn } from "@tanstack/react-start";
-
+import appCss from "../index.css?url";
 import { Toaster } from "@/components/ui/sonner";
 import { authClient } from "@/lib/auth-client";
 import { getToken } from "@/lib/auth-server";
 
 import Header from "../components/header";
-import appCss from "../index.css?url";
 
 const getAuth = createServerFn({ method: "GET" }).handler(async () => {
   return await getToken();
@@ -40,7 +39,7 @@ export const Route = createRootRouteWithContext<RouterAppContext>()({
       },
       {
         title: "My App",
-      },
+      }
     ],
     links: [
       {

@@ -3,10 +3,13 @@ import { ConvexQueryClient } from "@convex-dev/react-query";
 import { QueryClient } from "@tanstack/react-query";
 import { createRouter as createTanStackRouter } from "@tanstack/react-router";
 import { setupRouterSsrQueryIntegration } from "@tanstack/react-router-ssr-query";
+import { persistQueryClient } from "@tanstack/react-query-persist-client";
+import { createAsyncStoragePersister } from "@tanstack/query-async-storage-persister";
+import { Spinner } from "@/components/ui/spinner";
 
-import Loader from "./components/loader";
-import "./index.css";
 import { routeTree } from "./routeTree.gen";
+
+const MAX_AGE = 1000 * 60 * 60 * 24; // 24 hours
 
 export function getRouter() {
   const convexUrl = env.VITE_CONVEX_URL;
@@ -21,16 +24,38 @@ export function getRouter() {
       queries: {
         queryKeyHashFn: convexQueryClient.hashFn(),
         queryFn: convexQueryClient.queryFn(),
+        gcTime: MAX_AGE, // 24 hours - must be >= maxAge for persistence
       },
     },
   });
   convexQueryClient.connect(queryClient);
 
+  // Set up persistence only on the client side
+  if (typeof window !== "undefined") {
+    const persister = createAsyncStoragePersister({
+      storage: window.localStorage,
+    });
+
+    persistQueryClient({
+      queryClient,
+      persister,
+      maxAge: MAX_AGE,
+    });
+  }
+
   const router = createTanStackRouter({
     routeTree,
     defaultPreload: "intent",
-    defaultPendingComponent: () => <Loader />,
-    defaultNotFoundComponent: () => <div>Not Found</div>,
+    defaultPendingComponent: () => (
+      <div className="flex h-screen items-center justify-center">
+        <Spinner className="size-16 animate-spin" />
+      </div>
+    ),
+    defaultNotFoundComponent: () => (
+      <div className="flex h-screen items-center justify-center">
+        <div>Not Found</div>
+      </div>
+    ),
     context: { queryClient, convexQueryClient },
   });
 

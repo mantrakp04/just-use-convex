@@ -1,4 +1,4 @@
-import betterAuth from "@convex-dev/better-auth/convex.config";
+import betterAuth from "./betterAuth/convex.config"; 
 import { defineApp } from "convex/server";
 
 const app = defineApp();
