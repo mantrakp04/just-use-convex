@@ -1,7 +1,7 @@
 import { api } from "@better-convex/backend/convex/_generated/api";
 import { createFileRoute } from "@tanstack/react-router";
 import { useSuspenseQuery } from "@tanstack/react-query";
-import UserMenu from "@/components/user-menu";
+import UserMenu from "@/components/auth/user-menu";
 import { convexQuery } from "@convex-dev/react-query";
 
 export const Route = createFileRoute("/(protected)/dashboard")({

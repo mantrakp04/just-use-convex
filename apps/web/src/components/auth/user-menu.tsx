@@ -12,7 +12,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { authClient } from "@/lib/auth-client";
 
-import { Button } from "./ui/button";
+import { Button } from "../ui/button";
 
 export default function UserMenu() {
   const user = useQuery(api.auth.getCurrentUser);

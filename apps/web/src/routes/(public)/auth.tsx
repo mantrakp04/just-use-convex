@@ -1,7 +1,7 @@
 import { createFileRoute, redirect } from '@tanstack/react-router'
 import { useState } from 'react';
-import SignInForm from '@/components/sign-in-form';
-import SignUpForm from '@/components/sign-up-form';
+import SignInForm from '@/components/auth/sign-in-form';
+import SignUpForm from '@/components/auth/sign-up-form';
 
 export const Route = createFileRoute('/(public)/auth')({
   component: RouteComponent,
