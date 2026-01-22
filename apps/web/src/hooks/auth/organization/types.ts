@@ -1,4 +1,5 @@
 import { authClient } from "@/lib/auth-client";
+export { ROLE_HIERARCHY, ROLES, type MemberRole } from "@convex/shared/auth-shared";
 
 type Session = ReturnType<typeof authClient.useSession>["data"];
 export type User = NonNullable<Session>["user"];
@@ -19,17 +20,3 @@ export type Team = NonNullable<ListTeamsResult["data"]>[number];
 
 type ListTeamMembersResult = Awaited<ReturnType<typeof authClient.organization.listTeamMembers>>;
 export type TeamMember = NonNullable<ListTeamMembersResult["data"]>[number];
-
-export type MemberRole = "member" | "admin" | "owner";
-
-export const ROLES = [
-  { value: "owner", label: "Owner" },
-  { value: "admin", label: "Admin" },
-  { value: "member", label: "Member" },
-] as const;
-
-export const ROLE_HIERARCHY: Record<string, number> = {
-  owner: 3,
-  admin: 2,
-  member: 1,
-};

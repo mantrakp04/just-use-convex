@@ -1,9 +1,10 @@
 import { createClient, type GenericCtx } from "@convex-dev/better-auth";
 import { convex } from "@convex-dev/better-auth/plugins";
 import { betterAuth, type BetterAuthOptions } from "better-auth/minimal";
-import { organization } from "better-auth/plugins"
+import { organization } from "better-auth/plugins";
 
 import type { DataModel } from "./_generated/dataModel";
+import { ac, roles } from "./shared/auth-shared";
 import { components } from "./_generated/api";
 import { internalAction, query } from "./_generated/server";
 import authConfig from "./auth.config";
@@ -36,42 +37,48 @@ export const createAuthOptions = (ctx: GenericCtx<DataModel>) => {
         jwksRotateOnTokenGenerationError: true,
       }),
       organization({
+        ac,
+        roles,
+        allowUserToCreateOrganization: true,
+        creatorRole: "owner",
+        invitationExpiresIn: 48 * 60 * 60, // 48 hours
         teams: {
           enabled: true,
         },
+        
         organizationHooks: {
-          afterCreateOrganization: async ({ organization, user }) => {
-
+          afterCreateOrganization: async ({ organization: _organization, user: _user }) => {
+            // TODO: Add logic after organization creation
           },
-          afterAddMember: async ({ member, organization, user }) => {
-
+          afterAddMember: async ({ member: _member, organization: _organization, user: _user }) => {
+            // TODO: Add logic after member is added
           },
-          afterRemoveMember: async ({ member }) => {
-
+          afterRemoveMember: async ({ member: _member }) => {
+            // TODO: Add logic after member is removed
           },
-          afterCreateTeam: async ({ team, organization }) => {
-
+          afterCreateTeam: async ({ team: _team, organization: _organization }) => {
+            // TODO: Add logic after team creation
           },
-          afterDeleteTeam: async ({ team }) => {
-
+          afterDeleteTeam: async ({ team: _team }) => {
+            // TODO: Add logic after team deletion
           },
-          afterAddTeamMember: async ({ team, teamMember }) => {
-
+          afterAddTeamMember: async ({ team: _team, teamMember: _teamMember }) => {
+            // TODO: Add logic after team member is added
           },
-          afterRemoveTeamMember: async ({ teamMember }) => {
-
+          afterRemoveTeamMember: async ({ teamMember: _teamMember }) => {
+            // TODO: Add logic after team member is removed
           },
-          afterAcceptInvitation: async ({ member, organization, user }) => {
-
+          afterAcceptInvitation: async ({ member: _member, organization: _organization, user: _user }) => {
+            // TODO: Add logic after invitation is accepted
           },
-          afterUpdateMemberRole: async ({ member, previousRole }) => {
-
+          afterUpdateMemberRole: async ({ member: _member, previousRole: _previousRole }) => {
+            // TODO: Add logic after member role is updated
           },
-          beforeDeleteOrganization: async ({ organization }) => {
-
+          beforeDeleteOrganization: async ({ organization: _organization }) => {
+            // TODO: Add logic before organization deletion
           },
-          afterDeleteOrganization: async ({ organization }) => {
-
+          afterDeleteOrganization: async ({ organization: _organization }) => {
+            // TODO: Add logic after organization deletion
           },
         }
       })
@@ -79,23 +86,23 @@ export const createAuthOptions = (ctx: GenericCtx<DataModel>) => {
     databaseHooks: {
       user: {
         create: {
-          after: async (user) => {
-
-          }
+          after: async (_user) => {
+            // TODO: Add logic after user creation
+          },
         },
         delete: {
-          after: async (user) => {
-
-          }
-        }
+          after: async (_user) => {
+            // TODO: Add logic after user deletion
+          },
+        },
       },
       session: {
         create: {
-          before: async (session) => {
-
-          }
-        }
-      }
+          before: async (_session) => {
+            // TODO: Add logic before session creation
+          },
+        },
+      },
     }
   } satisfies BetterAuthOptions;
 };

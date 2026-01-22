@@ -4,11 +4,12 @@ import { z } from "zod";
 import { BuildingIcon, CheckIcon, ChevronDownIcon, PlusIcon, XIcon } from "lucide-react";
 
 import {
+  useActiveOrganization,
   useCreateOrganization,
+  useOrganizations,
   useUserInvitations,
   normalizeSlug,
 } from "@/hooks/auth/organization";
-import { useWorkspace } from "@/providers/workspace";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -147,7 +148,8 @@ function CreateOrganizationDialog({
 }
 
 export default function OrganizationListDropdown() {
-  const { organizations, selectedOrganization, setSelectedOrganization } = useWorkspace();
+  const { organizations } = useOrganizations();
+  const { activeOrganization, setActiveOrganization } = useActiveOrganization();
   const { invitations, acceptInvitation, rejectInvitation } = useUserInvitations();
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
 
@@ -158,7 +160,7 @@ export default function OrganizationListDropdown() {
       <DropdownMenuTrigger render={<Button variant="outline" />}>
         <div className="flex items-center gap-2">
           <BuildingIcon className="size-4" />
-          <span className="truncate">{selectedOrganization?.name ?? "Select Organization"}</span>
+          <span className="truncate">{activeOrganization?.data?.name ?? "Select Organization"}</span>
         </div>
         <ChevronDownIcon className="size-4" />
       </DropdownMenuTrigger>
@@ -171,11 +173,11 @@ export default function OrganizationListDropdown() {
             organizations.map((org) => (
               <DropdownMenuItem
                 key={org.id}
-                onClick={() => setSelectedOrganization(org.id)}
+                onClick={() => setActiveOrganization.mutateAsync(org.id)}
                 className="justify-between"
               >
                 <span className="truncate">{org.name}</span>
-                {selectedOrganization?.id === org.id && <CheckIcon className="size-4" />}
+                {activeOrganization?.data?.id === org.id && <CheckIcon className="size-4" />}
               </DropdownMenuItem>
             ))
           )}

@@ -19,6 +19,25 @@ export function useOrganizations() {
   };
 }
 
+export function useActiveOrganization() {
+  const activeOrganization = authClient.useActiveOrganization();
+  const setActiveOrganizationMutation = useMutation({
+    mutationFn: async (organizationId: string) => {
+      const result = await authClient.organization.setActive({ organizationId });
+      return result.data;
+    },
+    onError: (error: { error?: { message?: string } }) => {
+      toast.error(error.error?.message || "Failed to switch organization");
+    },
+  });
+
+  return {
+    activeOrganization,
+    setActiveOrganization: setActiveOrganizationMutation
+  };
+}
+
+
 export function useCreateOrganization() {
   const queryClient = useQueryClient();
 

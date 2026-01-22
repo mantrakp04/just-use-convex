@@ -1,4 +1,4 @@
-import { ROLE_HIERARCHY } from "./types";
+import { ROLE_HIERARCHY, type MemberRole } from "./types";
 
 export function getInitials(name: string): string {
   return name
@@ -9,10 +9,14 @@ export function getInitials(name: string): string {
     .slice(0, 2);
 }
 
+function isValidRole(role: string): role is MemberRole {
+  return role in ROLE_HIERARCHY;
+}
+
 export function canManageRole(currentRole: string | null, targetRole: string): boolean {
   if (!currentRole) return false;
-  const currentLevel = ROLE_HIERARCHY[currentRole] ?? 0;
-  const targetLevel = ROLE_HIERARCHY[targetRole] ?? 0;
+  const currentLevel = isValidRole(currentRole) ? ROLE_HIERARCHY[currentRole] : 0;
+  const targetLevel = isValidRole(targetRole) ? ROLE_HIERARCHY[targetRole] : 0;
   return currentLevel > targetLevel;
 }
 
