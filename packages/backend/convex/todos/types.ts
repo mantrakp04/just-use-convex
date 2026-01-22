@@ -15,8 +15,18 @@ export const TodoWithSystemFields = z.object(todosWithSystemFields);
 export const TodoAssignedUser = z.object(todoAssignedUsersZodSchema);
 export const TodoAssignedUserWithSystemFields = z.object(todoAssignedUsersWithSystemFields);
 
+// Filter schema - inferred from Todo, omitting org-level fields
+const TodoFilters = z.object(
+  Object.fromEntries(
+    Object.entries(Todo.omit({ organizationId: true }).shape).map(([k, v]) => [
+      k,
+      v instanceof z.ZodDefault ? v.removeDefault() : v,
+    ])
+  )
+).partial();
+
 export const ListArgs = z.object({
-  filters: Todo.omit({ organizationId: true }).partial(),
+  filters: TodoFilters,
   paginationOpts: zPaginationOpts,
 });
 

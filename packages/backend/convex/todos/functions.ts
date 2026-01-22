@@ -17,8 +17,14 @@ export async function ListTodos(ctx: zQueryCtx, args: z.infer<typeof types.ListA
       if (args.filters.userId !== undefined) {
         conditions.push(q.eq(q.field("userId"), args.filters.userId));
       }
+      if (args.filters.teamId !== undefined) {
+        conditions.push(q.eq(q.field("teamId"), args.filters.teamId));
+      }
       if (args.filters.dueDate !== undefined) {
         conditions.push(q.lte(q.field("dueDate"), args.filters.dueDate));
+      }
+      if (args.filters.updatedAt !== undefined) {
+        conditions.push(q.gte(q.field("updatedAt"), args.filters.updatedAt));
       }
 
       if (conditions.length === 0) {
