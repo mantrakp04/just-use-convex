@@ -2,6 +2,7 @@ import { createClient, type GenericCtx } from "@convex-dev/better-auth";
 import { convex } from "@convex-dev/better-auth/plugins";
 import { betterAuth, type BetterAuthOptions } from "better-auth/minimal";
 import { organization } from "better-auth/plugins";
+import type { GenericActionCtx, GenericMutationCtx } from "convex/server";
 
 import type { DataModel } from "./_generated/dataModel";
 import { ac, roles } from "./shared/auth_shared";
@@ -9,6 +10,14 @@ import { components } from "./_generated/api";
 import { internalAction, query } from "./_generated/server";
 import authConfig from "./auth.config";
 import authSchema from "./betterAuth/schema";
+
+type RunMutationCtx = (GenericMutationCtx<DataModel> | GenericActionCtx<DataModel>) & {
+  runMutation: GenericMutationCtx<DataModel>["runMutation"];
+};
+
+const isRunMutationCtx = (ctx: GenericCtx<DataModel>): ctx is RunMutationCtx => {
+  return "runMutation" in ctx;
+};
 
 const siteUrl = process.env.SITE_URL ?? "http://localhost:3001";
 
@@ -45,9 +54,8 @@ export const createAuthOptions = (ctx: GenericCtx<DataModel>) => {
         teams: {
           enabled: true,
         },
-        
         organizationHooks: {
-          afterCreateOrganization: async ({ organization: _organization, user: _user }) => {
+          afterCreateOrganization: async (_ctx) => {
             // TODO: Add logic after organization creation
           },
           afterAddMember: async ({ member: _member, organization: _organization, user: _user }) => {
@@ -86,8 +94,90 @@ export const createAuthOptions = (ctx: GenericCtx<DataModel>) => {
     databaseHooks: {
       user: {
         create: {
-          after: async (_user) => {
-            // TODO: Add logic after user creation
+          after: async (user) => {
+            if (!isRunMutationCtx(ctx)) return;
+
+            // Create a personal organization for the user
+            const slug = user.name.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "") + "-" + Date.now();
+            const now = Date.now();
+
+            // Create the organization
+            const org = await ctx.runMutation(
+              components.betterAuth.adapter.create,
+              {
+                input: {
+                  model: "organization",
+                  data: {
+                    name: `${user.name}'s Organization`,
+                    slug,
+                    createdAt: now,
+                  },
+                },
+              }
+            );
+
+            // Add user as owner member
+            await ctx.runMutation(
+              components.betterAuth.adapter.create,
+              {
+                input: {
+                  model: "member",
+                  data: {
+                    organizationId: org._id,
+                    userId: user.id,
+                    role: "owner",
+                    createdAt: now,
+                  },
+                },
+              }
+            );
+
+            // Create a team
+            const team = await ctx.runMutation(
+              components.betterAuth.adapter.create,
+              {
+                input: {
+                  model: "team",
+                  data: {
+                    name: `${user.name}'s Team`,
+                    organizationId: org._id,
+                    createdAt: now,
+                  },
+                },
+              }
+            );
+
+            // Add user as team member
+            await ctx.runMutation(
+              components.betterAuth.adapter.create,
+              {
+                input: {
+                  model: "teamMember",
+                  data: {
+                    teamId: team._id,
+                    userId: user.id,
+                    createdAt: now,
+                  },
+                },
+              }
+            );
+
+            // Set as active organization
+            await ctx.runMutation(
+              components.betterAuth.adapter.updateOne,
+              {
+                input: {
+                  model: "user",
+                  where: [{ field: "_id", operator: "eq", value: user.id }],
+                  update: {
+                    activeOrganizationId: org._id,
+                    activeTeamId: team._id,
+                    updatedAt: now,
+                  },
+                },
+              }
+            );
+
           },
         },
         delete: {
@@ -98,11 +188,91 @@ export const createAuthOptions = (ctx: GenericCtx<DataModel>) => {
       },
       session: {
         create: {
-          before: async (_session) => {
-            // TODO: Add logic before session creation
+          before: async (session) => {
+            const userResult = await ctx.runQuery(
+              components.betterAuth.adapter.findOne,
+              {
+                model: "user",
+                where: [{ field: "_id", operator: "eq", value: session.userId }],
+              }
+            );
+
+            if (userResult) {
+              
+              // fetch the user member
+              const userMemberResult = await ctx.runQuery(
+                components.betterAuth.adapter.findOne,
+                {
+                  model: "member",
+                  where: [{ field: "userId", operator: "eq", value: userResult._id }],
+                }
+              );
+
+              const sessionData = {
+                ...session,
+                activeOrganizationId: userResult.activeOrganizationId ?? null,
+                activeTeamId: userResult.activeTeamId ?? null,
+                organizationRole: userMemberResult?.role ?? null,
+              };
+
+              return { data: sessionData };
+            }
+            return { data: session };
           },
         },
+        update: {
+          before: async (session) => {
+            // When session is updated (e.g., organization switch), enrich with member role
+            const activeOrgId = session.activeOrganizationId as string | undefined;
+            const userId = session.userId as string | undefined;
+
+            if (activeOrgId && userId) {
+              const memberResult = await ctx.runQuery(
+                components.betterAuth.adapter.findOne,
+                {
+                  model: "member",
+                  where: [
+                    { field: "userId", operator: "eq", value: userId },
+                    { field: "organizationId", operator: "eq", value: activeOrgId },
+                  ],
+                }
+              );
+
+              return {
+                data: {
+                  ...session,
+                  organizationRole: memberResult?.role ?? null,
+                },
+              };
+            }
+
+            return { data: session };
+          },
+        }
       },
+    },
+    user: {
+      additionalFields: {
+        activeOrganizationId: {
+          type: "string",
+          required: false,
+          input: false
+        },
+        activeTeamId: {
+          type: "string",
+          required: false,
+          input: false
+        },
+      }
+    },
+    session: {
+      additionalFields: {
+        organizationRole: {
+          type: "string",
+          required: false,
+          input: false
+        },
+      }
     }
   } satisfies BetterAuthOptions;
 };

@@ -12,6 +12,8 @@
     "@convex-dev/better-auth": "catalog:",
     "better-auth": "catalog:",
     "convex": "catalog:",
+    "convex-ents": "^0.18.1",
+    "convex-helpers": "^0.1.111",
     "dotenv": "catalog:",
     "zod": "catalog:"
   },

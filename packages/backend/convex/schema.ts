@@ -1,3 +1,9 @@
-import { defineSchema } from "convex/server";
+import { defineEntSchema, getEntDefinitions } from "convex-ents";
+import { todosEnt } from "./tables/todos";
 
-export default defineSchema({});
+const schema = defineEntSchema({
+  todos: todosEnt,
+});
+
+export default schema;
+export const entDefinitions = getEntDefinitions(schema);

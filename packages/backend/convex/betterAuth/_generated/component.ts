@@ -31,6 +31,8 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
           input:
             | {
                 data: {
+                  activeOrganizationId?: null | string;
+                  activeTeamId?: null | string;
                   createdAt: number;
                   email: string;
                   emailVerified: boolean;
@@ -48,6 +50,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
                   createdAt: number;
                   expiresAt: number;
                   ipAddress?: null | string;
+                  organizationRole?: null | string;
                   token: string;
                   updatedAt: number;
                   userAgent?: null | string;
@@ -163,6 +166,8 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
                     | "createdAt"
                     | "updatedAt"
                     | "userId"
+                    | "activeOrganizationId"
+                    | "activeTeamId"
                     | "_id";
                   operator?:
                     | "lt"
@@ -199,6 +204,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
                     | "userId"
                     | "activeOrganizationId"
                     | "activeTeamId"
+                    | "organizationRole"
                     | "_id";
                   operator?:
                     | "lt"
@@ -508,6 +514,8 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
                     | "createdAt"
                     | "updatedAt"
                     | "userId"
+                    | "activeOrganizationId"
+                    | "activeTeamId"
                     | "_id";
                   operator?:
                     | "lt"
@@ -544,6 +552,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
                     | "userId"
                     | "activeOrganizationId"
                     | "activeTeamId"
+                    | "organizationRole"
                     | "_id";
                   operator?:
                     | "lt"
@@ -934,6 +943,8 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
             | {
                 model: "user";
                 update: {
+                  activeOrganizationId?: null | string;
+                  activeTeamId?: null | string;
                   createdAt?: number;
                   email?: string;
                   emailVerified?: boolean;
@@ -952,6 +963,8 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
                     | "createdAt"
                     | "updatedAt"
                     | "userId"
+                    | "activeOrganizationId"
+                    | "activeTeamId"
                     | "_id";
                   operator?:
                     | "lt"
@@ -982,6 +995,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
                   createdAt?: number;
                   expiresAt?: number;
                   ipAddress?: null | string;
+                  organizationRole?: null | string;
                   token?: string;
                   updatedAt?: number;
                   userAgent?: null | string;
@@ -999,6 +1013,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
                     | "userId"
                     | "activeOrganizationId"
                     | "activeTeamId"
+                    | "organizationRole"
                     | "_id";
                   operator?:
                     | "lt"
@@ -1360,6 +1375,8 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
             | {
                 model: "user";
                 update: {
+                  activeOrganizationId?: null | string;
+                  activeTeamId?: null | string;
                   createdAt?: number;
                   email?: string;
                   emailVerified?: boolean;
@@ -1378,6 +1395,8 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
                     | "createdAt"
                     | "updatedAt"
                     | "userId"
+                    | "activeOrganizationId"
+                    | "activeTeamId"
                     | "_id";
                   operator?:
                     | "lt"
@@ -1408,6 +1427,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
                   createdAt?: number;
                   expiresAt?: number;
                   ipAddress?: null | string;
+                  organizationRole?: null | string;
                   token?: string;
                   updatedAt?: number;
                   userAgent?: null | string;
@@ -1425,6 +1445,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
                     | "userId"
                     | "activeOrganizationId"
                     | "activeTeamId"
+                    | "organizationRole"
                     | "_id";
                   operator?:
                     | "lt"

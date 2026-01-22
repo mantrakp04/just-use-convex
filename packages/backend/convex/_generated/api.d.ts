@@ -9,10 +9,12 @@
  */
 
 import type * as auth from "../auth.js";
+import type * as functions from "../functions.js";
 import type * as healthCheck from "../healthCheck.js";
 import type * as http from "../http.js";
 import type * as privateData from "../privateData.js";
 import type * as shared_auth_shared from "../shared/auth_shared.js";
+import type * as tables_todos from "../tables/todos.js";
 
 import type {
   ApiFromModules,
@@ -22,10 +24,12 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   auth: typeof auth;
+  functions: typeof functions;
   healthCheck: typeof healthCheck;
   http: typeof http;
   privateData: typeof privateData;
   "shared/auth_shared": typeof shared_auth_shared;
+  "tables/todos": typeof tables_todos;
 }>;
 
 /**
@@ -64,6 +68,8 @@ export declare const components: {
           input:
             | {
                 data: {
+                  activeOrganizationId?: null | string;
+                  activeTeamId?: null | string;
                   createdAt: number;
                   email: string;
                   emailVerified: boolean;
@@ -81,6 +87,7 @@ export declare const components: {
                   createdAt: number;
                   expiresAt: number;
                   ipAddress?: null | string;
+                  organizationRole?: null | string;
                   token: string;
                   updatedAt: number;
                   userAgent?: null | string;
@@ -195,6 +202,8 @@ export declare const components: {
                     | "createdAt"
                     | "updatedAt"
                     | "userId"
+                    | "activeOrganizationId"
+                    | "activeTeamId"
                     | "_id";
                   operator?:
                     | "lt"
@@ -231,6 +240,7 @@ export declare const components: {
                     | "userId"
                     | "activeOrganizationId"
                     | "activeTeamId"
+                    | "organizationRole"
                     | "_id";
                   operator?:
                     | "lt"
@@ -539,6 +549,8 @@ export declare const components: {
                     | "createdAt"
                     | "updatedAt"
                     | "userId"
+                    | "activeOrganizationId"
+                    | "activeTeamId"
                     | "_id";
                   operator?:
                     | "lt"
@@ -575,6 +587,7 @@ export declare const components: {
                     | "userId"
                     | "activeOrganizationId"
                     | "activeTeamId"
+                    | "organizationRole"
                     | "_id";
                   operator?:
                     | "lt"
@@ -962,6 +975,8 @@ export declare const components: {
             | {
                 model: "user";
                 update: {
+                  activeOrganizationId?: null | string;
+                  activeTeamId?: null | string;
                   createdAt?: number;
                   email?: string;
                   emailVerified?: boolean;
@@ -980,6 +995,8 @@ export declare const components: {
                     | "createdAt"
                     | "updatedAt"
                     | "userId"
+                    | "activeOrganizationId"
+                    | "activeTeamId"
                     | "_id";
                   operator?:
                     | "lt"
@@ -1010,6 +1027,7 @@ export declare const components: {
                   createdAt?: number;
                   expiresAt?: number;
                   ipAddress?: null | string;
+                  organizationRole?: null | string;
                   token?: string;
                   updatedAt?: number;
                   userAgent?: null | string;
@@ -1027,6 +1045,7 @@ export declare const components: {
                     | "userId"
                     | "activeOrganizationId"
                     | "activeTeamId"
+                    | "organizationRole"
                     | "_id";
                   operator?:
                     | "lt"
@@ -1387,6 +1406,8 @@ export declare const components: {
             | {
                 model: "user";
                 update: {
+                  activeOrganizationId?: null | string;
+                  activeTeamId?: null | string;
                   createdAt?: number;
                   email?: string;
                   emailVerified?: boolean;
@@ -1405,6 +1426,8 @@ export declare const components: {
                     | "createdAt"
                     | "updatedAt"
                     | "userId"
+                    | "activeOrganizationId"
+                    | "activeTeamId"
                     | "_id";
                   operator?:
                     | "lt"
@@ -1435,6 +1458,7 @@ export declare const components: {
                   createdAt?: number;
                   expiresAt?: number;
                   ipAddress?: null | string;
+                  organizationRole?: null | string;
                   token?: string;
                   updatedAt?: number;
                   userAgent?: null | string;
@@ -1452,6 +1476,7 @@ export declare const components: {
                     | "userId"
                     | "activeOrganizationId"
                     | "activeTeamId"
+                    | "organizationRole"
                     | "_id";
                   operator?:
                     | "lt"

@@ -20,6 +20,8 @@ export const tables = {
     createdAt: v.number(),
     updatedAt: v.number(),
     userId: v.optional(v.union(v.null(), v.string())),
+    activeOrganizationId: v.optional(v.union(v.null(), v.string())),
+    activeTeamId: v.optional(v.union(v.null(), v.string())),
   })
     .index("email_name", ["email","name"])
     .index("name", ["name"])
@@ -34,6 +36,7 @@ export const tables = {
     userId: v.string(),
     activeOrganizationId: v.optional(v.union(v.null(), v.string())),
     activeTeamId: v.optional(v.union(v.null(), v.string())),
+    organizationRole: v.optional(v.union(v.null(), v.string())),
   })
     .index("expiresAt", ["expiresAt"])
     .index("expiresAt_userId", ["expiresAt","userId"])
@@ -93,7 +96,6 @@ export const tables = {
     userId: v.string(),
     createdAt: v.optional(v.union(v.null(), v.number())),
   })
-    .index("teamId_userId", ["teamId","userId"])
     .index("teamId", ["teamId"])
     .index("userId", ["userId"]),
   member: defineTable({
@@ -102,7 +104,6 @@ export const tables = {
     role: v.string(),
     createdAt: v.number(),
   })
-    .index("organizationId_userId", ["organizationId","userId"])
     .index("organizationId", ["organizationId"])
     .index("userId", ["userId"])
     .index("role", ["role"]),
