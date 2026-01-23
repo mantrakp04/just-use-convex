@@ -3,6 +3,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useTodos, useTodosList, useOrgStats, type Priority, type TodoStatus, type Todo, type TodoFilters } from "@/hooks/use-todos";
 import { useTeams } from "@/hooks/auth/organization/use-teams";
 import { useMembers } from "@/hooks/auth/organization/use-members";
+import { useUser } from "@/hooks/auth/user/use-user";
 import { TodoDialog } from "@/components/todos/todo-dialog";
 import { Loader2 } from "lucide-react";
 import {
@@ -23,6 +24,7 @@ function RouteComponent() {
   const { updateStatus, updatePriority } = useTodos();
   const { teams } = useTeams();
   const { members } = useMembers();
+  const { user } = useUser();
   const orgStats = useOrgStats();
 
   const [viewMode, setViewMode] = useState<ViewMode>("kanban");
@@ -41,9 +43,13 @@ function RouteComponent() {
     if (filterPriority !== "all") f.priority = filterPriority;
     if (filterStatus !== "all") f.status = filterStatus;
     if (filterTeamId !== "all") f.teamId = filterTeamId;
-    if (filterMemberId !== "all") f.userId = filterMemberId;
+    if (filterMemberId === "by_me" && user?.id) {
+      f.userId = user.id;
+    } else if (filterMemberId !== "all") {
+      f.assignedUserId = filterMemberId;
+    }
     return f;
-  }, [filterPriority, filterStatus, filterTeamId, filterMemberId]);
+  }, [filterPriority, filterStatus, filterTeamId, filterMemberId, user?.id]);
 
   const todosQuery = useTodosList(filters);
   const { results: todos, status } = todosQuery;

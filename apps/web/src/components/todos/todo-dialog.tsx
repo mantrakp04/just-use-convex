@@ -1,30 +1,17 @@
 import { useState, useEffect, useMemo } from "react";
-import { useTodos, type Priority, type TodoStatus, type Todo } from "@/hooks/use-todos";
+import { useTodos, useTodo, type Priority, type TodoStatus, type Todo } from "@/hooks/use-todos";
 import { useTeams } from "@/hooks/auth/organization/use-teams";
 import { useMembers } from "@/hooks/auth/organization/use-members";
-import { getInitials } from "@/hooks/auth/organization/utils";
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
   DialogDescription,
-  DialogFooter,
 } from "@/components/ui/dialog";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
-import { Label } from "@/components/ui/label";
-import { Badge } from "@/components/ui/badge";
-import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { Trash2, Calendar, Clock, Circle, CircleDot, CheckCircle2, Pencil, User, Users } from "lucide-react";
+import { TodoForm } from "./todo-form";
+import { TodoView } from "./todo-view";
+import { TodoDialogFooter } from "./todo-dialog-footer";
 
 interface TodoDialogProps {
   todo: Todo | null;
@@ -34,28 +21,13 @@ interface TodoDialogProps {
   onModeChange?: (mode: "view" | "edit" | "create") => void;
 }
 
-const priorityColors = {
-  low: "secondary",
-  medium: "outline",
-  high: "destructive",
-} as const satisfies Record<Priority, "secondary" | "outline" | "destructive">;
-
-const statusLabels = {
-  todo: "To Do",
-  in_progress: "In Progress",
-  done: "Done",
-} as const satisfies Record<TodoStatus, string>;
-
-const statusIcons = {
-  todo: Circle,
-  in_progress: CircleDot,
-  done: CheckCircle2,
-} as const satisfies Record<TodoStatus, typeof Circle>;
-
 export function TodoDialog({ todo, open, onOpenChange, mode, onModeChange }: TodoDialogProps) {
-  const { updateTodo, deleteTodo, createTodo, isUpdating, isDeleting, isCreating } = useTodos();
+  const { updateTodo, deleteTodo, createTodo, assignUser, unassignUser, isUpdating, isDeleting, isCreating } = useTodos();
   const { teams } = useTeams();
   const { members } = useMembers();
+
+  // Fetch todo with assigned users for edit mode
+  const { data: todoWithAssignees } = useTodo(mode !== "create" && open ? todo?._id : undefined);
 
   const isEditing = mode === "edit" || mode === "create";
   const [title, setTitle] = useState(todo?.title ?? "");
@@ -65,6 +37,7 @@ export function TodoDialog({ todo, open, onOpenChange, mode, onModeChange }: Tod
   const [dueDate, setDueDate] = useState(todo?.dueDate ? new Date(todo.dueDate).toISOString().split("T")[0] : "");
   const [teamId, setTeamId] = useState<string | undefined>(todo?.teamId);
   const [assignedUserIds, setAssignedUserIds] = useState<string[]>([]);
+  const [initialAssignedUserIds, setInitialAssignedUserIds] = useState<string[]>([]);
 
   // Find creator from members list
   const creator = useMemo(() => {
@@ -78,6 +51,13 @@ export function TodoDialog({ todo, open, onOpenChange, mode, onModeChange }: Tod
     return teams.find((t) => t.id === todo.teamId) ?? null;
   }, [todo?.teamId, teams]);
 
+  // Get assigned users details for display
+  const assignedUsersDetails = useMemo(() => {
+    return assignedUserIds
+      .map((userId) => members.find((m) => m.userId === userId))
+      .filter(Boolean) as typeof members;
+  }, [assignedUserIds, members]);
+
   useEffect(() => {
     if (open) {
       setTitle(todo?.title ?? "");
@@ -86,15 +66,18 @@ export function TodoDialog({ todo, open, onOpenChange, mode, onModeChange }: Tod
       setStatus(todo?.status ?? "todo");
       setDueDate(todo?.dueDate ? new Date(todo.dueDate).toISOString().split("T")[0] : "");
       setTeamId(todo?.teamId);
-      setAssignedUserIds([]);
+      // Initialize assigned user IDs from fetched todo with assignees
+      const userIds = todoWithAssignees?.assignedUsers?.map((a) => a.userId) ?? [];
+      setAssignedUserIds(userIds);
+      setInitialAssignedUserIds(userIds);
     }
-  }, [todo, open]);
+  }, [todo, open, todoWithAssignees]);
 
   const handleSave = async () => {
     if (!title.trim()) return;
 
     if (mode === "create") {
-      await createTodo({
+      const newTodoId = await createTodo({
         data: {
           title: title.trim(),
           description: description.trim() || undefined,
@@ -104,6 +87,10 @@ export function TodoDialog({ todo, open, onOpenChange, mode, onModeChange }: Tod
           teamId: teamId || undefined,
         },
       });
+      // Assign users to the newly created todo
+      for (const userId of assignedUserIds) {
+        await assignUser({ todoId: newTodoId, userId });
+      }
     } else if (todo) {
       await updateTodo({
         _id: todo._id,
@@ -116,6 +103,15 @@ export function TodoDialog({ todo, open, onOpenChange, mode, onModeChange }: Tod
           teamId: teamId || undefined,
         },
       });
+      // Handle assignment changes
+      const usersToAssign = assignedUserIds.filter((id) => !initialAssignedUserIds.includes(id));
+      const usersToUnassign = initialAssignedUserIds.filter((id) => !assignedUserIds.includes(id));
+      for (const userId of usersToAssign) {
+        await assignUser({ todoId: todo._id, userId });
+      }
+      for (const userId of usersToUnassign) {
+        await unassignUser({ todoId: todo._id, userId });
+      }
     }
     onOpenChange(false);
   };
@@ -136,10 +132,6 @@ export function TodoDialog({ todo, open, onOpenChange, mode, onModeChange }: Tod
     });
   };
 
-  const currentStatus = todo?.status ?? "todo";
-  const currentPriority = todo?.priority ?? "medium";
-  const StatusIcon = statusIcons[currentStatus];
-
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
@@ -156,225 +148,50 @@ export function TodoDialog({ todo, open, onOpenChange, mode, onModeChange }: Tod
 
         <div className="flex flex-col gap-4 py-2">
           {isEditing ? (
-            <>
-              <div className="flex flex-col gap-2">
-                <Label htmlFor="title">Title</Label>
-                <Input
-                  id="title"
-                  value={title}
-                  onChange={(e) => setTitle(e.target.value)}
-                  placeholder="What needs to be done?"
-                />
-              </div>
-
-              <div className="flex flex-col gap-2">
-                <Label htmlFor="description">Description</Label>
-                <Textarea
-                  id="description"
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                  placeholder="Add more details..."
-                  className="min-h-24"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div className="flex flex-col gap-2">
-                  <Label>Status</Label>
-                  <Select value={status} onValueChange={(v) => setStatus(v as TodoStatus)}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="todo">To Do</SelectItem>
-                      <SelectItem value="in_progress">In Progress</SelectItem>
-                      <SelectItem value="done">Done</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="flex flex-col gap-2">
-                  <Label>Priority</Label>
-                  <Select value={priority} onValueChange={(v) => setPriority(v as Priority)}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="low">Low</SelectItem>
-                      <SelectItem value="medium">Medium</SelectItem>
-                      <SelectItem value="high">High</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-
-              <div className="flex flex-col gap-2">
-                <Label htmlFor="dueDate">Due Date</Label>
-                <Input
-                  id="dueDate"
-                  type="date"
-                  value={dueDate}
-                  onChange={(e) => setDueDate(e.target.value)}
-                />
-              </div>
-
-              <div className="flex flex-col gap-2">
-                <Label>Team</Label>
-                <Select value={teamId ?? "none"} onValueChange={(v) => setTeamId(!v || v === "none" ? undefined : v)}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select team" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">No Team</SelectItem>
-                    {teams.map((team) => (
-                      <SelectItem key={team.id} value={team.id}>
-                        {team.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="flex flex-col gap-2">
-                <Label>Assign Members</Label>
-                <Select
-                  value={assignedUserIds[0] ?? "none"}
-                  onValueChange={(v) => setAssignedUserIds(!v || v === "none" ? [] : [v])}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select member" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">Unassigned</SelectItem>
-                    {members.map((member) => (
-                      <SelectItem key={member.id} value={member.userId}>
-                        <div className="flex items-center gap-2">
-                          <Avatar size="sm">
-                            <AvatarImage src={member.user.image ?? undefined} />
-                            <AvatarFallback>{getInitials(member.user.name)}</AvatarFallback>
-                          </Avatar>
-                          {member.user.name || member.user.email}
-                        </div>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </>
+            <TodoForm
+              title={title}
+              onTitleChange={setTitle}
+              description={description}
+              onDescriptionChange={setDescription}
+              status={status}
+              onStatusChange={setStatus}
+              priority={priority}
+              onPriorityChange={setPriority}
+              dueDate={dueDate}
+              onDueDateChange={setDueDate}
+              teamId={teamId}
+              onTeamIdChange={setTeamId}
+              assignedUserIds={assignedUserIds}
+              onAssignedUserIdsChange={setAssignedUserIds}
+              teams={teams}
+              members={members}
+            />
           ) : (
             todo && (
-              <>
-                <div className="flex items-start gap-3">
-                  <StatusIcon
-                    className={`size-5 mt-0.5 ${
-                      currentStatus === "done"
-                        ? "text-green-500"
-                        : currentStatus === "in_progress"
-                          ? "text-blue-500"
-                          : "text-muted-foreground"
-                    }`}
-                  />
-                  <div className="flex-1">
-                    <h3
-                      className={`font-medium ${
-                        currentStatus === "done" ? "line-through text-muted-foreground" : ""
-                      }`}
-                    >
-                      {todo.title}
-                    </h3>
-                  </div>
-                </div>
-
-                <div className="flex gap-2 pl-8">
-                  <Badge variant="outline">{statusLabels[currentStatus]}</Badge>
-                  <Badge variant={priorityColors[currentPriority]}>{currentPriority}</Badge>
-                </div>
-
-                {todo.description && (
-                  <div className="pl-8">
-                    <p className="text-muted-foreground text-sm whitespace-pre-wrap">
-                      {todo.description}
-                    </p>
-                  </div>
-                )}
-
-                {/* Created by */}
-                {creator && (
-                  <div className="flex items-center gap-2 pl-8">
-                    <User className="size-3 text-muted-foreground" />
-                    <span className="text-muted-foreground text-xs">Created by:</span>
-                    <Avatar size="sm">
-                      <AvatarImage src={creator.user.image ?? undefined} />
-                      <AvatarFallback>{getInitials(creator.user.name)}</AvatarFallback>
-                    </Avatar>
-                    <span className="text-sm">{creator.user.name || creator.user.email}</span>
-                  </div>
-                )}
-
-                {/* Team */}
-                {assignedTeam && (
-                  <div className="flex items-center gap-2 pl-8">
-                    <Users className="size-3 text-muted-foreground" />
-                    <span className="text-muted-foreground text-xs">Team:</span>
-                    <Badge variant="outline">{assignedTeam.name}</Badge>
-                  </div>
-                )}
-
-                <div className="flex flex-wrap gap-3 text-muted-foreground text-xs pl-8">
-                  {todo.dueDate && (
-                    <span className="flex items-center gap-1">
-                      <Calendar className="size-3" />
-                      Due: {new Date(todo.dueDate).toLocaleDateString()}
-                    </span>
-                  )}
-                  <span className="flex items-center gap-1">
-                    <Clock className="size-3" />
-                    Updated: {formatDate(todo.updatedAt)}
-                  </span>
-                </div>
-              </>
+              <TodoView
+                todo={todo}
+                creator={creator}
+                assignedTeam={assignedTeam}
+                assignedUsersDetails={assignedUsersDetails}
+                formatDate={formatDate}
+              />
             )
           )}
         </div>
 
-        <DialogFooter className="gap-2 sm:gap-0">
-          {mode !== "create" && todo && (
-            <Button
-              variant="destructive"
-              size="sm"
-              onClick={handleDelete}
-              disabled={isDeleting}
-              className="mr-auto"
-            >
-              <Trash2 className="size-3.5" />
-              Delete
-            </Button>
-          )}
-
-          {isEditing ? (
-            <Button
-              size="sm"
-              onClick={handleSave}
-              disabled={isUpdating || isCreating || !title.trim()}
-            >
-              {mode === "create" ? "Create" : "Save"}
-            </Button>
-          ) : (
-            <>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => onModeChange?.("edit")}
-              >
-                <Pencil className="size-3.5" />
-                Edit
-              </Button>
-              <Button size="sm" onClick={() => onOpenChange(false)}>
-                Close
-              </Button>
-            </>
-          )}
-        </DialogFooter>
+        {(isEditing || todo) && (
+          <TodoDialogFooter
+            mode={mode}
+            onSave={handleSave}
+            onDelete={handleDelete}
+            onEdit={() => onModeChange?.("edit")}
+            onClose={() => onOpenChange(false)}
+            isUpdating={isUpdating}
+            isDeleting={isDeleting}
+            isCreating={isCreating}
+            isSaveDisabled={!title.trim()}
+          />
+        )}
       </DialogContent>
     </Dialog>
   );

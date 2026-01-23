@@ -28,7 +28,8 @@ export default function SignUpForm({ onSwitchToSignIn }: { onSwitchToSignIn: () 
           name: value.name,
         },
         {
-          onSuccess: () => {
+          onSuccess: async () => {
+            new Promise((resolve) => setTimeout(resolve, 2000));
             navigate({
               to: "/dashboard",
             });

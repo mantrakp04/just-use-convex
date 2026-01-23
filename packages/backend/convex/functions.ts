@@ -37,11 +37,14 @@ export const zQuery = zCustomQuery(baseQuery, {
   args: {},
   input: async (ctx) => {
     const identity = await ctx.auth.getUserIdentity();
+    if (!identity?.subject || !identity?.activeOrganizationId) {
+      throw new Error("Unauthorized: User must be authenticated with an active organization");
+    }
     const parsedIdentity: Infer<typeof baseIdentity> = {
-      userId: identity?.subject as string,
-      activeOrganizationId: identity?.activeOrganizationId as string,
-      activeTeamId: identity?.activeTeamId as string,
-      organizationRole: identity?.organizationRole as string,
+      userId: identity.subject,
+      activeOrganizationId: identity.activeOrganizationId as string,
+      activeTeamId: identity.activeTeamId as string | undefined,
+      organizationRole: identity.organizationRole as string,
     };
     return {
       ctx: { ...ctx, table: entsTableFactory(ctx, entDefinitions), identity: parsedIdentity },
@@ -61,11 +64,14 @@ export const zMutation = zCustomMutation(baseMutation, {
   args: {},
   input: async (ctx) => {
     const identity = await ctx.auth.getUserIdentity();
+    if (!identity?.subject || !identity?.activeOrganizationId) {
+      throw new Error("Unauthorized: User must be authenticated with an active organization");
+    }
     const parsedIdentity: Infer<typeof baseIdentity> = {
-      userId: identity?.subject as string,
-      activeOrganizationId: identity?.activeOrganizationId as string,
-      activeTeamId: identity?.activeTeamId as string,
-      organizationRole: identity?.organizationRole as string,
+      userId: identity.subject,
+      activeOrganizationId: identity.activeOrganizationId as string,
+      activeTeamId: identity.activeTeamId as string | undefined,
+      organizationRole: identity.organizationRole as string,
     };
     return {
       ctx: { ...ctx, table: entsTableFactory(ctx, entDefinitions), identity: parsedIdentity },
@@ -87,11 +93,14 @@ export const zAction = zCustomAction(baseAction, {
   args: {},
   input: async (ctx) => {
     const identity = await ctx.auth.getUserIdentity();
+    if (!identity?.subject || !identity?.activeOrganizationId) {
+      throw new Error("Unauthorized: User must be authenticated with an active organization");
+    }
     const parsedIdentity: Infer<typeof baseIdentity> = {
-      userId: identity?.subject as string,
-      activeOrganizationId: identity?.activeOrganizationId as string,
-      activeTeamId: identity?.activeTeamId as string,
-      organizationRole: identity?.organizationRole as string,
+      userId: identity.subject,
+      activeOrganizationId: identity.activeOrganizationId as string,
+      activeTeamId: identity.activeTeamId as string | undefined,
+      organizationRole: identity.organizationRole as string,
     };
     return {
       ctx: { ...ctx, identity: parsedIdentity },

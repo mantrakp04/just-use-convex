@@ -127,3 +127,12 @@ export type OrgStats = FunctionReturnType<typeof api.todos.index.getOrgStats>
 export function useOrgStats() {
   return useQuery(convexQuery(api.todos.index.getOrgStats, {}));
 }
+
+export type TodoWithAssignees = FunctionReturnType<typeof api.todos.index.get>;
+
+export function useTodo(todoId: Id<"todos"> | undefined) {
+  return useQuery({
+    ...convexQuery(api.todos.index.get, todoId ? { _id: todoId } : "skip"),
+    enabled: !!todoId,
+  });
+}

@@ -26,7 +26,8 @@ export default function SignInForm({ onSwitchToSignUp }: { onSwitchToSignUp: () 
           password: value.password,
         },
         {
-          onSuccess: () => {
+          onSuccess: async () => {
+            new Promise((resolve) => setTimeout(resolve, 2000));
             navigate({
               to: "/dashboard",
             });

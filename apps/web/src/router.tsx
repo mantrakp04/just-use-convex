@@ -9,8 +9,6 @@ import { Spinner } from "@/components/ui/spinner";
 
 import { routeTree } from "./routeTree.gen";
 
-const MAX_AGE = 1000 * 60 * 60 * 24; // 24 hours
-
 export function getRouter() {
   const convexUrl = env.VITE_CONVEX_URL;
   if (!convexUrl) {
@@ -24,7 +22,9 @@ export function getRouter() {
       queries: {
         queryKeyHashFn: convexQueryClient.hashFn(),
         queryFn: convexQueryClient.queryFn(),
-        gcTime: MAX_AGE, // 24 hours - must be >= maxAge for persistence
+        gcTime: Infinity,
+        staleTime: Infinity,
+        refetchOnWindowFocus: true
       },
     },
   });
@@ -39,7 +39,7 @@ export function getRouter() {
     persistQueryClient({
       queryClient,
       persister,
-      maxAge: MAX_AGE,
+      maxAge: Infinity,
     });
   }
 

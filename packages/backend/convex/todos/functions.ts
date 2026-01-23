@@ -2,11 +2,11 @@ import type { z } from "zod";
 import type { zMutationCtx, zQueryCtx } from "../functions";
 import * as types from "./types";
 
-export async function ListTodos(ctx: zQueryCtx, args: z.infer<typeof types.ListArgs>) {
-  const todos = await ctx.table("todos", 'organizationId',  (q) => q
+async function runTodosQuery(ctx: zQueryCtx, args: z.infer<typeof types.ListArgs>) {
+  return ctx.table("todos", 'organizationId', (q) => q
     .eq('organizationId', ctx.identity.activeOrganizationId))
     .filter((q) => {
-      const conditions = [];
+      const conditions: ReturnType<typeof q.eq>[] = [];
 
       if (args.filters.status !== undefined) {
         conditions.push(q.eq(q.field("status"), args.filters.status));
@@ -31,11 +31,47 @@ export async function ListTodos(ctx: zQueryCtx, args: z.infer<typeof types.ListA
         return true;
       }
       if (conditions.length === 1) {
-        return conditions[0];
+        return conditions[0]!;
       }
       return q.and(...conditions);
     })
     .paginate(args.paginationOpts);
+}
+
+export async function ListTodos(ctx: zQueryCtx, args: z.infer<typeof types.ListArgs>) {
+  // If filtering by assigned user, get the set of todo IDs first
+  let assignedTodoIds: Set<string> | null = null;
+  if (args.filters.assignedUserId !== undefined) {
+    const assignments = await ctx.table("todoAssignedUsers", "userId", (q) =>
+      q.eq("userId", args.filters.assignedUserId!)
+    );
+    assignedTodoIds = new Set(assignments.map((a) => a.todoId));
+  }
+
+  let todos;
+  try {
+    todos = await runTodosQuery(ctx, args);
+  } catch (error) {
+    // Handle invalid cursor error by retrying without cursor
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    if (errorMessage.includes("InvalidCursor")) {
+      todos = await runTodosQuery(ctx, {
+        ...args,
+        paginationOpts: { ...args.paginationOpts, cursor: null },
+      });
+    } else {
+      throw error;
+    }
+  }
+
+  // Filter by assigned user if specified (post-pagination JS filter)
+  if (assignedTodoIds !== null) {
+    return {
+      ...todos,
+      page: todos.page.filter((todo) => assignedTodoIds!.has(todo._id)),
+    };
+  }
+
   return todos;
 }
 

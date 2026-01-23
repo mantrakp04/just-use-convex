@@ -103,7 +103,11 @@ export function DashboardToolbar({
           onValueChange={(v) => onFilterTeamIdChange(v ?? "all")}
         >
           <SelectTrigger className="w-32">
-            <SelectValue placeholder="Team" />
+            <SelectValue placeholder="Team">
+              {filterTeamId === "all"
+                ? "All Teams"
+                : teams.find((t) => t.id === filterTeamId)?.name || "Team"}
+            </SelectValue>
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All Teams</SelectItem>
@@ -120,10 +124,19 @@ export function DashboardToolbar({
           onValueChange={(v) => onFilterMemberIdChange(v ?? "all")}
         >
           <SelectTrigger className="w-36">
-            <SelectValue placeholder="Member" />
+            <SelectValue placeholder="Member">
+              {filterMemberId === "all"
+                ? "All Members"
+                : filterMemberId === "by_me"
+                  ? "Created by Me"
+                  : members.find((m) => m.userId === filterMemberId)?.user.name ||
+                    members.find((m) => m.userId === filterMemberId)?.user.email ||
+                    "Member"}
+            </SelectValue>
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All Members</SelectItem>
+            <SelectItem value="by_me">Created by Me</SelectItem>
             {members.map((member) => (
               <SelectItem key={member.id} value={member.userId}>
                 {member.user.name || member.user.email}

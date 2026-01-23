@@ -15,15 +15,18 @@ export const TodoWithSystemFields = z.object(todosWithSystemFields);
 export const TodoAssignedUser = z.object(todoAssignedUsersZodSchema);
 export const TodoAssignedUserWithSystemFields = z.object(todoAssignedUsersWithSystemFields);
 
-// Filter schema - inferred from Todo, omitting org-level fields
-const TodoFilters = z.object(
-  Object.fromEntries(
-    Object.entries(Todo.omit({ organizationId: true }).shape).map(([k, v]) => [
-      k,
-      v instanceof z.ZodDefault ? v.removeDefault() : v,
-    ])
-  )
-).partial();
+// Filter schema - explicit definition for proper type inference
+const TodoFilters = z.object({
+  userId: z.string(),
+  teamId: z.string(),
+  title: z.string(),
+  description: z.string(),
+  status: z.enum(["todo", "in_progress", "done"]),
+  dueDate: z.number(),
+  priority: z.enum(["low", "medium", "high"]),
+  updatedAt: z.number(),
+  assignedUserId: z.string(),
+}).partial();
 
 export const ListArgs = z.object({
   filters: TodoFilters,
