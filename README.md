@@ -2,6 +2,8 @@
 
 An organization-ready full-stack template built with [Better-T-Stack](https://github.com/AmanVarshney01/create-better-t-stack). Pre-configured with Better Auth, Convex, Zod validation, and Convex Ents - everything you need to build multi-tenant SaaS applications.
 
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fmantrakp04%2Fbetter-convex&env=VITE_SITE_URL,CONVEX_DEPLOY_KEY,VITE_CONVEX_URL,VITE_CONVEX_SITE_URL&envDefaults=%7B%22VITE_SITE_URL%22%3A%22https%3A%2F%2Fbetter-convex-web.vercel.app%2F%22%2C%22CONVEX_DEPLOY_KEY%22%3A%22go%20to%20https%3A%2F%2Fdashboard.convex.dev%2Ft%2Fbarrel-lube%2Fbetter-cvx%2F%3Cprod%20slug%3E%2Fsettings%20-%3E%20Deploy%20Keys%20-%3E%20Generate%20deploy%20key%22%2C%22VITE_CONVEX_URL%22%3A%22https%3A%2F%2F%3Cslug%3E.convex.cloud%22%2C%22VITE_CONVEX_SITE_URL%22%3A%22https%3A%2F%2F%3Cslug%3E.convex.site%22%7D&project-name=better-convex&demo-title=Better-Convex&demo-description=An%20org%20configured%20template)
+
 ## Why This Template?
 
 Skip weeks of boilerplate setup. This template provides:

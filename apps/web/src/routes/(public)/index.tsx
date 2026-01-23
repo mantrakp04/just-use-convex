@@ -2,6 +2,7 @@ import { api } from "@better-convex/backend/convex/_generated/api";
 import { convexQuery } from "@convex-dev/react-query";
 import { useSuspenseQuery } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
+import { Github } from "lucide-react";
 
 export const Route = createFileRoute("/(public)/")({
   component: HomeComponent,
@@ -39,6 +40,30 @@ function HomeComponent() {
             <span className="text-muted-foreground text-sm">
               {healthCheck.data === "OK" ? "Connected" : "Error"}
             </span>
+          </div>
+        </section>
+        <section className="flex flex-col gap-1 rounded-lg border p-2">
+          <div className="flex gap-2">
+            <a
+              href="https://github.com/mantrakp04/better-convex"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-muted-foreground hover:text-foreground transition-colors"
+              aria-label="GitHub"
+            >
+              <Github className="size-5" />
+            </a>
+            <a
+              href="https://x.com/barre_of_lube"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-muted-foreground hover:text-foreground transition-colors"
+              aria-label="X"
+            >
+              <svg className="size-5" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
+              </svg>
+            </a>
           </div>
         </section>
       </div>
