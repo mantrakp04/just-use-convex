@@ -338,7 +338,7 @@ function UserSettingsPage() {
             onClick={() => signOut()}
             disabled={isSigningOut}
           >
-            <LogOutIcon className="mr-2 size-4" />
+            <LogOutIcon className="size-4" />
             {isSigningOut ? "Signing out..." : "Sign Out"}
           </Button>
         </CardContent>

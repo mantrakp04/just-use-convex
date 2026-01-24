@@ -58,8 +58,8 @@ export function TodoMemberSelect({
         </span>
         <ChevronDown className="size-4 opacity-50" />
       </PopoverTrigger>
-      <PopoverContent align="start" className="w-[280px] p-0">
-        <div className="max-h-64 overflow-y-auto p-1">
+      <PopoverContent align="start" className="w-[280px] p-0 gap-0">
+        <div className="max-h-64 overflow-y-auto">
           {members.length === 0 ? (
             <div className="p-2 text-center text-muted-foreground text-sm">
               No members found
@@ -87,14 +87,14 @@ export function TodoMemberSelect({
           )}
         </div>
         {selectedUserIds.length > 0 && (
-          <div className="border-t p-2">
+          <div className="border-t">
             <Button
               variant="ghost"
               size="sm"
               className="w-full text-xs"
               onClick={() => onSelectionChange([])}
             >
-              <X className="size-3 mr-1" />
+              <X className="size-3" />
               Clear all
             </Button>
           </div>
