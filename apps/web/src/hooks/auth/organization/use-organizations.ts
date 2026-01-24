@@ -1,8 +1,8 @@
-import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { useRouter } from "@tanstack/react-router";
+import { useMutation } from "@tanstack/react-query";
 import { toast } from "sonner";
 
 import { authClient } from "@/lib/auth-client";
+import { useRefreshAuth } from "../use-refresh-auth";
 
 export const organizationsKeys = {
   all: ["organizations"] as const,
@@ -22,16 +22,16 @@ export function useOrganizations() {
 
 export function useActiveOrganization() {
   const activeOrganization = authClient.useActiveOrganization();
-  const router = useRouter();
-  const queryClient = useQueryClient();
+  const refreshAuth = useRefreshAuth();
 
   const setActiveOrganizationMutation = useMutation({
     mutationFn: async (organizationId: string) => {
       const result = await authClient.organization.setActive({ organizationId });
-      await authClient.getSession();
-      await queryClient.refetchQueries();
-      await router.invalidate();
       return result.data;
+    },
+    onSuccess: () => {
+      toast.success("Organization switched successfully");
+      refreshAuth();
     },
     onError: (error: { error?: { message?: string } }) => {
       toast.error(error.error?.message || "Failed to switch organization");
@@ -46,8 +46,7 @@ export function useActiveOrganization() {
 
 
 export function useCreateOrganization() {
-  const queryClient = useQueryClient();
-  const router = useRouter();
+  const refreshAuth = useRefreshAuth();
 
   const mutation = useMutation({
     mutationFn: async (data: { name: string; slug: string }) => {
@@ -55,14 +54,12 @@ export function useCreateOrganization() {
 
       if (result.data?.id) {
         await authClient.organization.setActive({ organizationId: result.data.id });
-        await queryClient.refetchQueries();
-        await router.invalidate();
       }
       return result.data;
     },
     onSuccess: () => {
       toast.success("Organization created successfully");
-      queryClient.invalidateQueries({ queryKey: organizationsKeys.all });
+      refreshAuth();
     },
     onError: (error: { error?: { message?: string } }) => {
       toast.error(error.error?.message || "Failed to create organization");
