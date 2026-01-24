@@ -1,0 +1,94 @@
+---
+title: Installation
+description: How to install and set up the Better Convex template
+---
+
+# Installation
+
+This template uses a Turborepo monorepo structure with Bun as the package manager.
+
+## Prerequisites
+
+Before you begin, ensure you have:
+
+- [Bun](https://bun.sh/) v1.3.6 or later
+- A [Convex account](https://convex.dev/) (free tier available)
+
+## Quick Start
+
+### 1. Clone the Repository
+
+```bash
+git clone https://github.com/mantrakp04/better-convex.git
+cd better-convex
+```
+
+### 2. Install Dependencies
+
+```bash
+bun install
+```
+
+### 3. Set Up Convex
+
+Run the setup command and follow the prompts to create a new Convex project:
+
+```bash
+bun run dev:setup
+```
+
+### 4. Configure Environment Variables
+
+Set the required environment variables in Convex:
+
+```bash
+bunx convex env set BETTER_AUTH_SECRET=$(openssl rand -base64 32)
+bunx convex env set SITE_URL http://localhost:3001
+```
+
+### 5. Set Up JWKS for Auth Token Validation
+
+Generate and set the JWKS environment variable for Better Auth:
+
+```bash
+cd packages/backend && bunx convex run auth:getLatestJwks | bunx convex env set JWKS
+```
+
+### 6. Start Development Server
+
+```bash
+bun run dev
+```
+
+Open [http://localhost:3001](http://localhost:3001) in your browser.
+
+## Environment Variables
+
+| Variable | Description |
+|----------|-------------|
+| `VITE_CONVEX_URL` | Convex deployment URL |
+| `VITE_CONVEX_SITE_URL` | Convex site URL for file serving |
+| `VITE_SITE_URL` | Your frontend application URL |
+| `JWKS` | JSON Web Key Set for token validation |
+| `VITE_DATA_BUDDY_CLIENT_ID` | (Optional) DataBuddy analytics client ID |
+
+## Available Scripts
+
+| Command | Description |
+|---------|-------------|
+| `bun run dev` | Start all apps in development mode |
+| `bun run dev:web` | Start only the web application |
+| `bun run dev:setup` | Setup and configure Convex project |
+| `bun run check-types` | TypeScript type checking across all packages |
+
+## One-Click Deploy
+
+Deploy directly to Vercel with all environment variables pre-configured:
+
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fmantrakp04%2Fbetter-convex&env=VITE_SITE_URL,CONVEX_DEPLOY_KEY,VITE_CONVEX_URL,VITE_CONVEX_SITE_URL)
+
+## Next Steps
+
+- Read the [Introduction](/docs/getting-started/introduction) to understand the template architecture
+- Explore the [Project Structure](/docs/getting-started/project-structure) to navigate the codebase
+- Learn about [Authentication](/docs/auth/overview) to understand the auth flow

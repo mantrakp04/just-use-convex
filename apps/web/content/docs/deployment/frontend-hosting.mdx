@@ -21,6 +21,12 @@ This creates an optimized production build in the output directory.
 
 Vercel provides the best experience for TanStack Start applications.
 
+### One-Click Deploy
+
+Deploy directly to Vercel with pre-configured environment variables:
+
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fmantrakp04%2Fbetter-convex&env=VITE_SITE_URL,CONVEX_DEPLOY_KEY,VITE_CONVEX_URL,VITE_CONVEX_SITE_URL)
+
 ### Automatic Deployment
 
 1. Push your code to GitHub
@@ -46,9 +52,10 @@ Set environment variables in Vercel dashboard:
 
 1. Go to Project Settings → Environment Variables
 2. Add your variables:
-   - `CONVEX_URL`
-   - `BETTER_AUTH_URL` (your production URL)
-   - OAuth credentials
+   - `VITE_CONVEX_URL` - Your Convex deployment URL
+   - `VITE_CONVEX_SITE_URL` - Your Convex site URL
+   - `VITE_SITE_URL` - Your production frontend URL
+   - `CONVEX_DEPLOY_KEY` - For automated deployments
 
 ### Custom Domain
 

@@ -82,11 +82,19 @@ bunx convex deploy --prod
 bun run build
 ```
 
+## One-Click Deploy
+
+The fastest way to deploy is using the Vercel one-click deploy button:
+
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fmantrakp04%2Fbetter-convex&env=VITE_SITE_URL,CONVEX_DEPLOY_KEY,VITE_CONVEX_URL,VITE_CONVEX_SITE_URL)
+
 ## Deployment Checklist
 
 Before deploying to production:
 
-- [ ] Set all required environment variables
+- [ ] Set all required environment variables (`VITE_CONVEX_URL`, `VITE_CONVEX_SITE_URL`, `VITE_SITE_URL`)
+- [ ] Generate and set JWKS for auth token validation
+- [ ] Configure `CONVEX_DEPLOY_KEY` for CI/CD
 - [ ] Configure authentication callback URLs
 - [ ] Set up custom domain (if applicable)
 - [ ] Enable rate limiting

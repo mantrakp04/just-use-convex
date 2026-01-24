@@ -120,8 +120,11 @@ bunx convex env unset OLD_VARIABLE
 
 | Variable | Where | Description |
 |----------|-------|-------------|
-| `CONVEX_URL` | Frontend | Convex deployment URL |
-| `CONVEX_DEPLOY_KEY` | CI/CD | Deploy authentication |
+| `VITE_CONVEX_URL` | Frontend | Convex deployment URL (e.g., `https://<slug>.convex.cloud`) |
+| `VITE_CONVEX_SITE_URL` | Frontend | Convex site URL for file serving (e.g., `https://<slug>.convex.site`) |
+| `VITE_SITE_URL` | Frontend | Your frontend application URL |
+| `CONVEX_DEPLOY_KEY` | CI/CD | Deploy authentication key from Convex dashboard |
+| `JWKS` | Convex | JSON Web Key Set for token validation |
 
 ### Better Auth
 
@@ -129,6 +132,12 @@ bunx convex env unset OLD_VARIABLE
 |----------|-------|-------------|
 | `BETTER_AUTH_URL` | Both | Application base URL |
 | `BETTER_AUTH_SECRET` | Convex | Token signing secret |
+
+### Optional
+
+| Variable | Where | Description |
+|----------|-------|-------------|
+| `VITE_DATA_BUDDY_CLIENT_ID` | Frontend | DataBuddy analytics client ID |
 
 ### OAuth Providers
 
