@@ -19,7 +19,7 @@ import { getToken } from "@/lib/auth-server";
 import { seo } from '@/utils/seo'
 
 import Header from "../components/header";
-import { env } from "@better-convex/env/web";
+import { env } from "@just-use-convex/env/web";
 
 const getAuth = createServerFn({ method: "GET" }).handler(async () => {
   return await getToken();

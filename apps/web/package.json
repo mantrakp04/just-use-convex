@@ -9,8 +9,8 @@
   },
   "dependencies": {
     "@base-ui/react": "^1.0.0",
-    "@better-convex/backend": "workspace:*",
-    "@better-convex/env": "workspace:*",
+    "@just-use-convex/backend": "workspace:*",
+    "@just-use-convex/env": "workspace:*",
     "@convex-dev/better-auth": "catalog:",
     "@convex-dev/react-query": "^0.1.0",
     "@tailwindcss/vite": "^4.1.8",
@@ -58,7 +58,7 @@
     "zod": "catalog:"
   },
   "devDependencies": {
-    "@better-convex/config": "workspace:*",
+    "@just-use-convex/config": "workspace:*",
     "@tanstack/react-router-devtools": "^1.141.1",
     "@testing-library/dom": "^10.4.0",
     "@testing-library/react": "^16.2.0",

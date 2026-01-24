@@ -1,5 +1,5 @@
 {
-  "name": "better-convex",
+  "name": "just-use-convex",
   "private": true,
   "workspaces": {
     "packages": [
@@ -22,16 +22,16 @@
     "check-types": "turbo check-types",
     "dev:native": "turbo -F native dev",
     "dev:web": "turbo -F web dev",
-    "dev:server": "turbo -F @better-convex/backend dev",
-    "dev:setup": "turbo -F @better-convex/backend dev:setup"
+    "dev:server": "turbo -F @just-use-convex/backend dev",
+    "dev:setup": "turbo -F @just-use-convex/backend dev:setup"
   },
   "dependencies": {
-    "@better-convex/env": "workspace:*",
+    "@just-use-convex/env": "workspace:*",
     "dotenv": "catalog:",
     "zod": "catalog:"
   },
   "devDependencies": {
-    "@better-convex/config": "workspace:*",
+    "@just-use-convex/config": "workspace:*",
     "@types/node": "^25.0.10",
     "turbo": "^2.6.3",
     "typescript": "catalog:"

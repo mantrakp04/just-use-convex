@@ -1,5 +1,5 @@
 {
-  "name": "@better-convex/backend",
+  "name": "@just-use-convex/backend",
   "version": "1.0.0",
   "description": "",
   "license": "ISC",
@@ -20,7 +20,7 @@
     "zod": "catalog:"
   },
   "devDependencies": {
-    "@better-convex/config": "workspace:*",
+    "@just-use-convex/config": "workspace:*",
     "@types/node": "^24.3.0",
     "typescript": "catalog:"
   }

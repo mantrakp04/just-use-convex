@@ -1,7 +1,7 @@
 import { createFileRoute, Outlet, useNavigate } from "@tanstack/react-router";
 import { authClient } from "@/lib/auth-client";
 import { AuthBoundary } from "@convex-dev/better-auth/react";
-import { api } from "@better-convex/backend/convex/_generated/api";
+import { api } from "@just-use-convex/backend/convex/_generated/api";
 import { isAuthError } from "@/lib/utils";
 import { toast } from "sonner";
 import { convexQuery } from "@convex-dev/react-query";

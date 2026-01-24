@@ -23,7 +23,7 @@ import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import type { Todo, TodoStatus } from "@/hooks/use-todos";
-import type { Id } from "@better-convex/backend/convex/_generated/dataModel";
+import type { Id } from "@just-use-convex/backend/convex/_generated/dataModel";
 import {
   priorityColors,
   statusIcons,

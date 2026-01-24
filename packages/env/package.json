@@ -1,5 +1,5 @@
 {
-  "name": "@better-convex/env",
+  "name": "@just-use-convex/env",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -12,7 +12,7 @@
     "zod": "catalog:"
   },
   "devDependencies": {
-    "@better-convex/config": "workspace:*",
+    "@just-use-convex/config": "workspace:*",
     "typescript": "catalog:"
   }
 }

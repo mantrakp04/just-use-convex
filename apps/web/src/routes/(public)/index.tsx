@@ -1,4 +1,4 @@
-import { api } from "@better-convex/backend/convex/_generated/api";
+import { api } from "@just-use-convex/backend/convex/_generated/api";
 import { convexQuery } from "@convex-dev/react-query";
 import { useSuspenseQuery } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
@@ -10,12 +10,12 @@ export const Route = createFileRoute("/(public)/")({
 });
 
 const TITLE_TEXT = `
- ██████╗ ███████╗████████╗████████╗███████╗██████╗
- ██╔══██╗██╔════╝╚══██╔══╝╚══██╔══╝██╔════╝██╔══██╗
- ██████╔╝█████╗     ██║      ██║   █████╗  ██████╔╝
- ██╔══██╗██╔══╝     ██║      ██║   ██╔══╝  ██╔══██╗
- ██████╔╝███████╗   ██║      ██║   ███████╗██║  ██║
- ╚═════╝ ╚══════╝   ╚═╝      ╚═╝   ╚══════╝╚═╝  ╚═╝
+      ██╗██╗   ██╗███████╗████████╗    ██╗   ██╗███████╗███████╗
+      ██║██║   ██║██╔════╝╚══██╔══╝    ██║   ██║██╔════╝██╔════╝
+      ██║██║   ██║███████╗   ██║       ██║   ██║███████╗█████╗
+ ██   ██║██║   ██║╚════██║   ██║       ██║   ██║╚════██║██╔══╝
+ ╚█████╔╝╚██████╔╝███████║   ██║       ╚██████╔╝███████║███████╗
+  ╚════╝  ╚═════╝ ╚══════╝   ╚═╝        ╚═════╝ ╚══════╝╚══════╝
 
   ██████╗ ██████╗ ███╗   ██╗██╗   ██╗███████╗██╗  ██╗
  ██╔════╝██╔═══██╗████╗  ██║██║   ██║██╔════╝╚██╗██╔╝
@@ -46,7 +46,7 @@ function HomeComponent() {
         <section className="flex flex-row gap-1 rounded-lg border p-2 justify-between items-center">
           <div className="flex gap-2 items-center">
             <a
-              href="https://github.com/mantrakp04/better-convex"
+              href="https://github.com/mantrakp04/just-use-convex"
               target="_blank"
               rel="noopener noreferrer"
               className="text-muted-foreground hover:text-foreground transition-colors"

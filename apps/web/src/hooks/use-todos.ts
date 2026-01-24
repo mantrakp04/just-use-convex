@@ -1,12 +1,12 @@
 import { useCallback } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useConvexMutation, useConvexPaginatedQuery, convexQuery } from "@convex-dev/react-query";
-import { api } from "@better-convex/backend/convex/_generated/api";
-import type { Id } from "@better-convex/backend/convex/_generated/dataModel";
+import { api } from "@just-use-convex/backend/convex/_generated/api";
+import type { Id } from "@just-use-convex/backend/convex/_generated/dataModel";
 import type { FunctionArgs, FunctionReturnType } from "convex/server";
 import { toast } from "sonner";
 
-import type { Priority, TodoStatus } from "@better-convex/backend/convex/todos/types";
+import type { Priority, TodoStatus } from "@just-use-convex/backend/convex/todos/types";
 export type { Priority, TodoStatus };
 
 type ListArgs = FunctionArgs<typeof api.todos.index.list>;
