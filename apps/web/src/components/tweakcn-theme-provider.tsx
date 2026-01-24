@@ -49,6 +49,39 @@ const themeScript = (storageKey: string, defaultTheme: string, attribute: string
     el.setAttribute(attribute, resolved)
   }
   el.style.colorScheme = resolved
+
+  // Also load TweakCN custom theme styles
+  try {
+    const stored = localStorage.getItem("theme-config")
+    if (stored) {
+      const themeConfig = JSON.parse(stored)
+      if (themeConfig?.cssVars) {
+        const getCSSVariables = (vars: Record<string, string>) => {
+          return Object.entries(vars)
+            .map(([key, value]: [string, string]) => `  --${key}: ${value};`)
+            .join("\n")
+        }
+
+        const cssLines: string[] = []
+        if (themeConfig.cssVars.theme) {
+          cssLines.push(`:root {\n${getCSSVariables(themeConfig.cssVars.theme)}\n}`)
+        }
+        if (themeConfig.cssVars.light) {
+          cssLines.push(`:root {\n${getCSSVariables(themeConfig.cssVars.light)}\n}`)
+        }
+        if (themeConfig.cssVars.dark) {
+          cssLines.push(`.dark {\n${getCSSVariables(themeConfig.cssVars.dark)}\n}`)
+        }
+
+        const styleTag = document.createElement("style")
+        styleTag.id = "tweakcn-theme-styles"
+        styleTag.textContent = cssLines.join("\n\n")
+        document.head.appendChild(styleTag)
+      }
+    }
+  } catch {
+    // Ignore TweakCN theme loading errors
+  }
 }
 
 export function ThemeScript({
@@ -66,6 +99,51 @@ export function ThemeScript({
       }}
     />
   )
+}
+
+// TweakCN Theme utilities
+const THEME_STYLE_ID = "tweakcn-theme-styles"
+const THEME_STORAGE_KEY = "theme-config"
+
+function getStoredTheme(): Theme | null {
+  if (typeof window === 'undefined') return null
+  const stored = localStorage.getItem(THEME_STORAGE_KEY)
+  if (!stored) return null
+  try {
+    return JSON.parse(stored) as Theme
+  } catch {
+    return null
+  }
+}
+
+function getCSSVariables(vars: Record<string, string>): string {
+  return Object.entries(vars)
+    .map(([key, value]) => `  --${key}: ${value};`)
+    .join("\n")
+}
+
+function generateThemeCSS(theme: Theme): string {
+  const cssLines: string[] = []
+
+  if (theme.cssVars.theme) {
+    cssLines.push(`:root {\n${getCSSVariables(theme.cssVars.theme)}\n}`)
+  }
+  cssLines.push(`:root {\n${getCSSVariables(theme.cssVars.light)}\n}`)
+  cssLines.push(`.dark {\n${getCSSVariables(theme.cssVars.dark)}\n}`)
+
+  return cssLines.join("\n\n")
+}
+
+function removeThemeStyleElement() {
+  document.getElementById(THEME_STYLE_ID)?.remove()
+}
+
+function applyThemeStyles(theme: Theme) {
+  removeThemeStyleElement()
+  const styleTag = document.createElement("style")
+  styleTag.id = THEME_STYLE_ID
+  styleTag.textContent = generateThemeCSS(theme)
+  document.head.appendChild(styleTag)
 }
 
 export function ThemeProvider({
@@ -132,6 +210,14 @@ export function ThemeProvider({
     resolvedTheme,
   }), [theme, setTheme, resolvedTheme])
 
+  // Re-apply TweakCN theme after hydration (inline script may be removed by React)
+  React.useLayoutEffect(() => {
+    const storedTheme = getStoredTheme()
+    if (storedTheme) {
+      applyThemeStyles(storedTheme)
+    }
+  }, [])
+
   return (
     <ThemeContext.Provider value={value}>
       <ThemeScript storageKey={storageKey} defaultTheme={defaultTheme} attribute={attribute} enableSystem={enableSystem} />
@@ -140,34 +226,20 @@ export function ThemeProvider({
   )
 }
 
-// TweakCN Theme functionality
 export function useTweakCNThemes() {
-  const [currentTheme, setCurrentTheme] = React.useState<Theme | null>(null)
+  const [currentTheme, setCurrentTheme] = React.useState<Theme | null>(getStoredTheme)
 
   const applyTheme = React.useCallback((theme: Theme | null) => {
     if (typeof window === 'undefined') return
 
     if (theme) {
       applyThemeStyles(theme)
-      localStorage.setItem("theme-config", JSON.stringify(theme))
+      localStorage.setItem(THEME_STORAGE_KEY, JSON.stringify(theme))
       setCurrentTheme(theme)
     } else {
-      clearThemeStyles()
-      localStorage.removeItem("theme-config")
+      removeThemeStyleElement()
+      localStorage.removeItem(THEME_STORAGE_KEY)
       setCurrentTheme(null)
-    }
-  }, [])
-
-  React.useEffect(() => {
-    const stored = localStorage.getItem("theme-config")
-    if (stored) {
-      try {
-        const theme = JSON.parse(stored) as Theme
-        setCurrentTheme(theme)
-        applyThemeStyles(theme)
-      } catch (error) {
-        console.error("Failed to parse stored theme:", error)
-      }
     }
   }, [])
 
@@ -175,49 +247,5 @@ export function useTweakCNThemes() {
     currentTheme,
     applyTheme,
     setTheme: applyTheme,
-  }
-}
-
-const THEME_STYLE_ID = "tweakcn-theme-styles"
-
-function generateThemeCSS(theme: Theme): string {
-  const cssLines: string[] = []
-
-  const getCSSVariables = (vars: Record<string, string>) => {
-    return Object.entries(vars)
-      .map(([key, value]) => `  --${key}: ${value};`)
-      .join("\n")
-  }
-
-  if (theme.cssVars.theme) {
-    const themeVars = getCSSVariables(theme.cssVars.theme)
-    cssLines.push(`:root {\n${themeVars}\n}`)
-  }
-
-  const lightVars = getCSSVariables(theme.cssVars.light)
-  cssLines.push(`:root {\n${lightVars}\n}`)
-
-  const darkVars = getCSSVariables(theme.cssVars.dark)
-  cssLines.push(`.dark {\n${darkVars}\n}`)
-
-  return cssLines.join("\n\n")
-}
-
-function applyThemeStyles(theme: Theme) {
-  const existingStyle = document.getElementById(THEME_STYLE_ID)
-  if (existingStyle) {
-    existingStyle.remove()
-  }
-
-  const styleTag = document.createElement("style")
-  styleTag.id = THEME_STYLE_ID
-  styleTag.textContent = generateThemeCSS(theme)
-  document.head.appendChild(styleTag)
-}
-
-function clearThemeStyles() {
-  const existingStyle = document.getElementById(THEME_STYLE_ID)
-  if (existingStyle) {
-    existingStyle.remove()
   }
 }
