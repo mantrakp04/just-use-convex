@@ -9,7 +9,7 @@ export default function Header() {
     { to: "", label: "Home" },
     { to: "docs", label: "Docs" },
     { to: "dashboard", label: "Dashboard" },
-    { to: "chat", label: "Chat" },
+    { to: "chats", label: "Chats" },
     { to: "settings", label: "Settings" },
   ] as const;
 

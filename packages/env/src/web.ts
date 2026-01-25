@@ -8,6 +8,7 @@ export const env = createEnv({
     VITE_CONVEX_SITE_URL: z.url(),
     VITE_SITE_URL: z.url().default("http://localhost:3001"),
     VITE_AGENT_URL: z.url().default("http://localhost:1337"),
+    VITE_DEFAULT_MODEL: z.string().default("openai/gpt-5.2-chat"),
   },
   runtimeEnv: (import.meta as any).env,
   emptyStringAsUndefined: true,

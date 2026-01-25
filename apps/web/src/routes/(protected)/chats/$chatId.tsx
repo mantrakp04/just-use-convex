@@ -15,7 +15,7 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { VirtualMessageList } from "@/components/chat/virtual-message-list";
 
-export const Route = createFileRoute("/(protected)/chat")({
+export const Route = createFileRoute("/(protected)/chats/$chatId")({
   component: ChatPage,
 });
 
@@ -31,8 +31,9 @@ function ChatLoadingSkeleton() {
 }
 
 function ChatPage() {
+  const { chatId } = Route.useParams();
   const { messages, sendMessage, status, error, isConnected, settings, setSettings, stop } = useAgentChatInstance({
-    name: "chat",
+    name: `chat-${chatId}`,
     onError: (err: Error) => {
       console.error("Chat error:", err);
     },

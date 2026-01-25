@@ -16,12 +16,14 @@ import { Route as ApiSearchRouteImport } from './routes/api/search'
 import { Route as ApiModelsRouteImport } from './routes/api/models'
 import { Route as publicAuthRouteImport } from './routes/(public)/auth'
 import { Route as protectedDashboardRouteImport } from './routes/(protected)/dashboard'
-import { Route as protectedChatRouteImport } from './routes/(protected)/chat'
 import { Route as publicDocsRouteRouteImport } from './routes/(public)/docs/route'
 import { Route as protectedSettingsRouteRouteImport } from './routes/(protected)/settings/route'
+import { Route as protectedChatsRouteRouteImport } from './routes/(protected)/chats/route'
 import { Route as protectedSettingsIndexRouteImport } from './routes/(protected)/settings/index'
+import { Route as protectedChatsIndexRouteImport } from './routes/(protected)/chats/index'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
 import { Route as publicDocsSplatRouteImport } from './routes/(public)/docs/$'
+import { Route as protectedChatsChatIdRouteImport } from './routes/(protected)/chats/$chatId'
 import { Route as protectedSettingsOrganizationRouteRouteImport } from './routes/(protected)/settings/organization/route'
 import { Route as protectedSettingsOrganizationIndexRouteImport } from './routes/(protected)/settings/organization/index'
 import { Route as protectedSettingsOrganizationTeamsRouteImport } from './routes/(protected)/settings/organization/teams'
@@ -60,11 +62,6 @@ const protectedDashboardRoute = protectedDashboardRouteImport.update({
   path: '/dashboard',
   getParentRoute: () => protectedRouteRoute,
 } as any)
-const protectedChatRoute = protectedChatRouteImport.update({
-  id: '/chat',
-  path: '/chat',
-  getParentRoute: () => protectedRouteRoute,
-} as any)
 const publicDocsRouteRoute = publicDocsRouteRouteImport.update({
   id: '/docs',
   path: '/docs',
@@ -75,10 +72,20 @@ const protectedSettingsRouteRoute = protectedSettingsRouteRouteImport.update({
   path: '/settings',
   getParentRoute: () => protectedRouteRoute,
 } as any)
+const protectedChatsRouteRoute = protectedChatsRouteRouteImport.update({
+  id: '/chats',
+  path: '/chats',
+  getParentRoute: () => protectedRouteRoute,
+} as any)
 const protectedSettingsIndexRoute = protectedSettingsIndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => protectedSettingsRouteRoute,
+} as any)
+const protectedChatsIndexRoute = protectedChatsIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => protectedChatsRouteRoute,
 } as any)
 const ApiAuthSplatRoute = ApiAuthSplatRouteImport.update({
   id: '/api/auth/$',
@@ -89,6 +96,11 @@ const publicDocsSplatRoute = publicDocsSplatRouteImport.update({
   id: '/$',
   path: '/$',
   getParentRoute: () => publicDocsRouteRoute,
+} as any)
+const protectedChatsChatIdRoute = protectedChatsChatIdRouteImport.update({
+  id: '/$chatId',
+  path: '/$chatId',
+  getParentRoute: () => protectedChatsRouteRoute,
 } as any)
 const protectedSettingsOrganizationRouteRoute =
   protectedSettingsOrganizationRouteRouteImport.update({
@@ -116,17 +128,19 @@ const protectedSettingsOrganizationMembersRoute =
   } as any)
 
 export interface FileRoutesByFullPath {
+  '/chats': typeof protectedChatsRouteRouteWithChildren
   '/settings': typeof protectedSettingsRouteRouteWithChildren
   '/docs': typeof publicDocsRouteRouteWithChildren
-  '/chat': typeof protectedChatRoute
   '/dashboard': typeof protectedDashboardRoute
   '/auth': typeof publicAuthRoute
   '/api/models': typeof ApiModelsRoute
   '/api/search': typeof ApiSearchRoute
   '/': typeof publicIndexRoute
   '/settings/organization': typeof protectedSettingsOrganizationRouteRouteWithChildren
+  '/chats/$chatId': typeof protectedChatsChatIdRoute
   '/docs/$': typeof publicDocsSplatRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
+  '/chats/': typeof protectedChatsIndexRoute
   '/settings/': typeof protectedSettingsIndexRoute
   '/settings/organization/members': typeof protectedSettingsOrganizationMembersRoute
   '/settings/organization/teams': typeof protectedSettingsOrganizationTeamsRoute
@@ -134,14 +148,15 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/docs': typeof publicDocsRouteRouteWithChildren
-  '/chat': typeof protectedChatRoute
   '/dashboard': typeof protectedDashboardRoute
   '/auth': typeof publicAuthRoute
   '/api/models': typeof ApiModelsRoute
   '/api/search': typeof ApiSearchRoute
   '/': typeof publicIndexRoute
+  '/chats/$chatId': typeof protectedChatsChatIdRoute
   '/docs/$': typeof publicDocsSplatRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
+  '/chats': typeof protectedChatsIndexRoute
   '/settings': typeof protectedSettingsIndexRoute
   '/settings/organization/members': typeof protectedSettingsOrganizationMembersRoute
   '/settings/organization/teams': typeof protectedSettingsOrganizationTeamsRoute
@@ -151,17 +166,19 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/(protected)': typeof protectedRouteRouteWithChildren
   '/(public)': typeof publicRouteRouteWithChildren
+  '/(protected)/chats': typeof protectedChatsRouteRouteWithChildren
   '/(protected)/settings': typeof protectedSettingsRouteRouteWithChildren
   '/(public)/docs': typeof publicDocsRouteRouteWithChildren
-  '/(protected)/chat': typeof protectedChatRoute
   '/(protected)/dashboard': typeof protectedDashboardRoute
   '/(public)/auth': typeof publicAuthRoute
   '/api/models': typeof ApiModelsRoute
   '/api/search': typeof ApiSearchRoute
   '/(public)/': typeof publicIndexRoute
   '/(protected)/settings/organization': typeof protectedSettingsOrganizationRouteRouteWithChildren
+  '/(protected)/chats/$chatId': typeof protectedChatsChatIdRoute
   '/(public)/docs/$': typeof publicDocsSplatRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
+  '/(protected)/chats/': typeof protectedChatsIndexRoute
   '/(protected)/settings/': typeof protectedSettingsIndexRoute
   '/(protected)/settings/organization/members': typeof protectedSettingsOrganizationMembersRoute
   '/(protected)/settings/organization/teams': typeof protectedSettingsOrganizationTeamsRoute
@@ -170,17 +187,19 @@ export interface FileRoutesById {
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
+    | '/chats'
     | '/settings'
     | '/docs'
-    | '/chat'
     | '/dashboard'
     | '/auth'
     | '/api/models'
     | '/api/search'
     | '/'
     | '/settings/organization'
+    | '/chats/$chatId'
     | '/docs/$'
     | '/api/auth/$'
+    | '/chats/'
     | '/settings/'
     | '/settings/organization/members'
     | '/settings/organization/teams'
@@ -188,14 +207,15 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/docs'
-    | '/chat'
     | '/dashboard'
     | '/auth'
     | '/api/models'
     | '/api/search'
     | '/'
+    | '/chats/$chatId'
     | '/docs/$'
     | '/api/auth/$'
+    | '/chats'
     | '/settings'
     | '/settings/organization/members'
     | '/settings/organization/teams'
@@ -204,17 +224,19 @@ export interface FileRouteTypes {
     | '__root__'
     | '/(protected)'
     | '/(public)'
+    | '/(protected)/chats'
     | '/(protected)/settings'
     | '/(public)/docs'
-    | '/(protected)/chat'
     | '/(protected)/dashboard'
     | '/(public)/auth'
     | '/api/models'
     | '/api/search'
     | '/(public)/'
     | '/(protected)/settings/organization'
+    | '/(protected)/chats/$chatId'
     | '/(public)/docs/$'
     | '/api/auth/$'
+    | '/(protected)/chats/'
     | '/(protected)/settings/'
     | '/(protected)/settings/organization/members'
     | '/(protected)/settings/organization/teams'
@@ -280,13 +302,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof protectedDashboardRouteImport
       parentRoute: typeof protectedRouteRoute
     }
-    '/(protected)/chat': {
-      id: '/(protected)/chat'
-      path: '/chat'
-      fullPath: '/chat'
-      preLoaderRoute: typeof protectedChatRouteImport
-      parentRoute: typeof protectedRouteRoute
-    }
     '/(public)/docs': {
       id: '/(public)/docs'
       path: '/docs'
@@ -301,12 +316,26 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof protectedSettingsRouteRouteImport
       parentRoute: typeof protectedRouteRoute
     }
+    '/(protected)/chats': {
+      id: '/(protected)/chats'
+      path: '/chats'
+      fullPath: '/chats'
+      preLoaderRoute: typeof protectedChatsRouteRouteImport
+      parentRoute: typeof protectedRouteRoute
+    }
     '/(protected)/settings/': {
       id: '/(protected)/settings/'
       path: '/'
       fullPath: '/settings/'
       preLoaderRoute: typeof protectedSettingsIndexRouteImport
       parentRoute: typeof protectedSettingsRouteRoute
+    }
+    '/(protected)/chats/': {
+      id: '/(protected)/chats/'
+      path: '/'
+      fullPath: '/chats/'
+      preLoaderRoute: typeof protectedChatsIndexRouteImport
+      parentRoute: typeof protectedChatsRouteRoute
     }
     '/api/auth/$': {
       id: '/api/auth/$'
@@ -321,6 +350,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/docs/$'
       preLoaderRoute: typeof publicDocsSplatRouteImport
       parentRoute: typeof publicDocsRouteRoute
+    }
+    '/(protected)/chats/$chatId': {
+      id: '/(protected)/chats/$chatId'
+      path: '/$chatId'
+      fullPath: '/chats/$chatId'
+      preLoaderRoute: typeof protectedChatsChatIdRouteImport
+      parentRoute: typeof protectedChatsRouteRoute
     }
     '/(protected)/settings/organization': {
       id: '/(protected)/settings/organization'
@@ -352,6 +388,19 @@ declare module '@tanstack/react-router' {
     }
   }
 }
+
+interface protectedChatsRouteRouteChildren {
+  protectedChatsChatIdRoute: typeof protectedChatsChatIdRoute
+  protectedChatsIndexRoute: typeof protectedChatsIndexRoute
+}
+
+const protectedChatsRouteRouteChildren: protectedChatsRouteRouteChildren = {
+  protectedChatsChatIdRoute: protectedChatsChatIdRoute,
+  protectedChatsIndexRoute: protectedChatsIndexRoute,
+}
+
+const protectedChatsRouteRouteWithChildren =
+  protectedChatsRouteRoute._addFileChildren(protectedChatsRouteRouteChildren)
 
 interface protectedSettingsOrganizationRouteRouteChildren {
   protectedSettingsOrganizationMembersRoute: typeof protectedSettingsOrganizationMembersRoute
@@ -392,14 +441,14 @@ const protectedSettingsRouteRouteWithChildren =
   )
 
 interface protectedRouteRouteChildren {
+  protectedChatsRouteRoute: typeof protectedChatsRouteRouteWithChildren
   protectedSettingsRouteRoute: typeof protectedSettingsRouteRouteWithChildren
-  protectedChatRoute: typeof protectedChatRoute
   protectedDashboardRoute: typeof protectedDashboardRoute
 }
 
 const protectedRouteRouteChildren: protectedRouteRouteChildren = {
+  protectedChatsRouteRoute: protectedChatsRouteRouteWithChildren,
   protectedSettingsRouteRoute: protectedSettingsRouteRouteWithChildren,
-  protectedChatRoute: protectedChatRoute,
   protectedDashboardRoute: protectedDashboardRoute,
 }
 

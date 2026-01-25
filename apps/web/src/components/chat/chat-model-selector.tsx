@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { ChevronDownIcon, Sparkles, Star } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { OpenRouterModel } from "@/hooks/use-openrouter-models";
@@ -22,6 +22,7 @@ import {
   ModelSelectorBadge,
   ModelSelectorMain,
 } from "@/components/ai-elements/model-selector";
+import { env } from "@just-use-convex/env/web";
 
 export type ChatModelSelectorProps = {
   groupedModels: [string, OpenRouterModel[]][];
@@ -39,7 +40,7 @@ export function ChatModelSelector({
   onSettingsChange,
 }: ChatModelSelectorProps) {
   const [open, setOpen] = useState(false);
-
+  const defaultModel = env.VITE_DEFAULT_MODEL;
   const {
     selectedAuthor,
     setSelectedAuthor,
@@ -54,6 +55,16 @@ export function ChatModelSelector({
   const reasoningEfforts = selectedModel?.reasoning_config?.supported_reasoning_efforts ?? [];
   const providerLabel = selectedModel?.author ? getProviderLabel(selectedModel.author) : null;
   const providerSlug = providerLabel ? getProviderLogoSlug(providerLabel) : "openrouter";
+
+  useEffect(() => {
+    if (!selectedModel) {
+      onSettingsChange((prev) => ({
+        ...prev,
+        model: defaultModel,
+        reasoningEffort: defaultModel.includes("reasoning") ? prev.reasoningEffort : undefined,
+      }));
+    }
+  }, [selectedModel]);
 
   const handleModelSelect = (model: OpenRouterModel) => {
     onSettingsChange((prev) => ({
