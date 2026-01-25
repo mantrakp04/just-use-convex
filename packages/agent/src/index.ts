@@ -7,6 +7,9 @@ import { ChatOpenAI } from "@langchain/openai";
 import { HumanMessage } from "@langchain/core/messages";
 import { CloudflareDOCheckpointer, type CloudflareSqlStorage } from "./checkpointer";
 import type { worker } from "../alchemy.run";
+import { ConvexHttpClient } from "convex/browser";
+import { api } from "@just-use-convex/backend/convex/_generated/api";
+import type { FunctionReturnType } from "convex/server";
 
 // State type for chat settings synced from frontend
 type ChatState = {
@@ -17,7 +20,7 @@ type ChatState = {
 export default {
   async fetch(request: Request, env: typeof worker.Env): Promise<Response> {
     // Get origin for CORS (credentials require specific origin, not *)
-    const origin = request.headers.get('origin') || '*';
+    const origin = env.SITE_URL;
 
     return (
       (await routeAgentRequest(request, env, {
@@ -35,46 +38,50 @@ export default {
 };
 
 export class AgentWorker extends AIChatAgent<typeof worker.Env, ChatState> {
-  private _checkpointer: CloudflareDOCheckpointer | null = null;
+  private checkpointer: CloudflareDOCheckpointer | null = null;
+  private convexClient: ConvexHttpClient | null = null;
+  private user: FunctionReturnType<typeof api.auth.getCurrentUser> | null = null;
 
   private getCheckpointer(): CloudflareDOCheckpointer {
-    if (!this._checkpointer) {
-      this._checkpointer = new CloudflareDOCheckpointer(
+    if (!this.checkpointer) {
+      this.checkpointer = new CloudflareDOCheckpointer(
         this.ctx.storage.sql as CloudflareSqlStorage
       );
     }
-    return this._checkpointer;
+    return this.checkpointer;
   }
 
-  private getTokenFromRequest(request: Request): string | undefined {
+  private async _init(request: Request): Promise<void> {
     const headers = request.headers;
-    return headers.get('cookie')?.split(';').find(cookie =>
-      cookie.trim().startsWith('better-auth.session_token=')
+    const token = headers.get('cookie')?.split(';').find(cookie =>
+      cookie.trim().startsWith('better-auth.convex_jwt=')
     )?.split('=')[1];
+    if (!token) {
+      throw new Error("Unauthorized: No token provided");
+    }
+
+    if (!this.convexClient) {
+      this.convexClient = new ConvexHttpClient(this.env.CONVEX_URL);
+      this.convexClient.setAuth(token);
+
+      // query the user session
+      const user = await this.convexClient.query(api.auth.getCurrentUser, {});
+      if (!user) {
+        throw new Error("Unauthorized: No user found");
+      }
+      this.user = user;
+    }
   }
 
   override async onRequest(request: Request): Promise<Response> {
-    // Check auth for /get-messages endpoint
-    if (new URL(request.url).pathname.endsWith('/get-messages')) {
-      const token = this.getTokenFromRequest(request);
-      if (!token) {
-        return new Response('Unauthorized: No token provided', { status: 401 });
-      }
-    }
+    await this._init(request);
     return await super.onRequest(request);
   }
 
   override async onConnect(connection: Connection, ctx: ConnectionContext): Promise<void> {
-    const request = ctx.request;
-    if (request) {
-      const token = this.getTokenFromRequest(request);
-      if (!token) {
-        throw new Error("Unauthorized: No token provided");
-      }
-    }
+    await this._init(ctx.request);
     return await super.onConnect(connection, ctx);
   }
-
 
   override async onStateUpdate(state: ChatState, source: Connection | "server"): Promise<void> {
     await super.onStateUpdate(state, source);
