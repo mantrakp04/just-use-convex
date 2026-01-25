@@ -5,8 +5,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
-import { SendHorizontal, Loader2, Bot, User, ChevronDown, ChevronUp } from "lucide-react";
-import { type UIMessage } from "@ai-sdk/react";
+import { SendHorizontal, Loader2, Bot, User, ChevronDown, ChevronUp, CheckCircle2, AlertCircle } from "lucide-react";
+import type { UIMessage } from "@ai-sdk/react";
 
 export const Route = createFileRoute("/(protected)/chat")({
   component: ChatPage,
@@ -115,17 +115,8 @@ function ChatPage() {
                         </p>
                       );
                     }
-                    if (
-                      part.type === "dynamic-tool" &&
-                      part.state === "output-available"
-                    ) {
-                      return (
-                        <ToolCallAccordion
-                          key={i}
-                          toolName={part.toolName}
-                          output={part.output}
-                        />
-                      );
+                    if (part.type === "dynamic-tool") {
+                      return <ToolCallAccordion key={i} {...part} />;
                     }
                     return null;
                   })}
@@ -179,17 +170,41 @@ function ChatPage() {
   );
 }
 
-function ToolCallAccordion({ toolName, output }: { toolName: string; output: unknown }) {
+
+function ToolCallAccordion(props: Extract<UIMessage['parts'][number], { type: 'dynamic-tool' }>) {
   const [isOpen, setIsOpen] = useState(false);
 
+  const isLoading = props.state === "input-streaming" || props.state === "input-available" || props.state === "approval-requested" || props.state === "approval-responded";
+  const isError = props.state === "output-error" || props.state === "output-denied";
+  const isCompleted = props.state === "output-available";
+
+  const StatusIcon = () => {
+    if (isLoading) {
+      return <Loader2 className="size-3.5 animate-spin text-amber-500" />;
+    }
+    if (isError) {
+      return <AlertCircle className="size-3.5 text-destructive" />;
+    }
+    if (isCompleted) {
+      return <CheckCircle2 className="size-3.5 text-emerald-500" />;
+    }
+    return null;
+  };
+
   return (
-    <div className="mt-2 bg-background/50 rounded text-xs font-mono">
+    <div className={cn(
+      "mt-2 bg-background/50 rounded text-xs font-mono",
+      isError && "border border-destructive/30"
+    )}>
       <button
         type="button"
         onClick={() => setIsOpen(!isOpen)}
         className="flex items-center justify-between w-full p-2 hover:bg-background/80 rounded transition-colors"
       >
-        <span className="text-muted-foreground">Tool: {toolName}</span>
+        <div className="flex items-center gap-2">
+          <StatusIcon />
+          <span className="text-muted-foreground">Tool: {props.toolName}</span>
+        </div>
         {isOpen ? (
           <ChevronUp className="size-4 text-muted-foreground" />
         ) : (
@@ -197,13 +212,31 @@ function ToolCallAccordion({ toolName, output }: { toolName: string; output: unk
         )}
       </button>
       {isOpen && (
-        <div className="px-2 pb-2">
-          <pre className="overflow-auto">
-            {JSON.stringify(output, null, 2)}
-          </pre>
+        <div className="px-2 pb-2 space-y-2">
+          {isLoading && props.input !== undefined && (
+            <div>
+              <span className="text-muted-foreground">Input:</span>
+              <pre className="overflow-auto mt-1">
+                {JSON.stringify(props.input, null, 2)}
+              </pre>
+            </div>
+          )}
+          {isError && props.errorText ? (
+            <pre className="overflow-auto text-destructive">
+              {String(props.errorText)}
+            </pre>
+          ) : props.output !== undefined ? (
+            <div>
+              <span className="text-muted-foreground">Output:</span>
+              <pre className="overflow-auto mt-1">
+                {JSON.stringify(props.output, null, 2)}
+              </pre>
+            </div>
+          ) : !isLoading && (
+            <span className="text-muted-foreground">Waiting for output...</span>
+          )}
         </div>
       )}
     </div>
   );
 }
-
