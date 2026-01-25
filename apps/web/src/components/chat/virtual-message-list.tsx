@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useCallback } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { useStickToBottomContext } from "use-stick-to-bottom";
 import type { UIMessage } from "@ai-sdk/react";
@@ -15,9 +15,11 @@ export function VirtualMessageList({ messages, isStreaming }: VirtualMessageList
   const { scrollRef, scrollToBottom } = useStickToBottomContext();
   const prevMessagesLength = useRef(messages.length);
 
+  const getScrollElement = useCallback(() => scrollRef.current, [scrollRef]);
+
   const virtualizer = useVirtualizer({
     count: messages.length,
-    getScrollElement: () => scrollRef.current,
+    getScrollElement,
     estimateSize: () => 200,
     gap: 32,
     overscan: 5,

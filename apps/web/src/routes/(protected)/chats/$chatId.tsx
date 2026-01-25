@@ -1,11 +1,9 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useAgentChatInstance } from "@/providers/agents";
 import { Bot } from "lucide-react";
 import type { UIMessage } from "@ai-sdk/react";
-import { useMemo } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useOpenRouterModels } from "@/hooks/use-openrouter-models";
-import { ChatInput, type ChatInputProps } from "@/components/chat";
-import type { QueueTodo } from "@/components/ai-elements/queue";
+import { ChatInput, type ChatInputProps, type ChatSettings } from "@/components/chat";
 import {
   Conversation,
   ConversationContent,
@@ -14,6 +12,9 @@ import {
 } from "@/components/ai-elements/conversation";
 import { Skeleton } from "@/components/ui/skeleton";
 import { VirtualMessageList } from "@/components/chat/virtual-message-list";
+import { useAgent } from "agents/react";
+import { useAgentChat } from "@cloudflare/ai-chat/react";
+import { env } from "@just-use-convex/env/web";
 
 export const Route = createFileRoute("/(protected)/chats/$chatId")({
   component: ChatPage,
@@ -32,54 +33,86 @@ function ChatLoadingSkeleton() {
 
 function ChatPage() {
   const { chatId } = Route.useParams();
-  const { messages, sendMessage, status, error, isConnected, settings, setSettings, stop } = useAgentChatInstance({
+
+  const [settings, setSettings] = useState<ChatSettings>({});
+
+  const handleStateUpdate = useCallback((state: ChatSettings | undefined, source: string) => {
+    if (source === "server" && state) {
+      setSettings(state);
+    }
+  }, []);
+
+  const handleError = useCallback((error: Error) => {
+    console.error("Chat error:", error);
+  }, []);
+
+  const agent = useAgent<ChatSettings>({
+    agent: "agent-worker",
     name: `chat-${chatId}`,
-    onError: (err: Error) => {
-      console.error("Chat error:", err);
-    },
+    host: env.VITE_AGENT_URL,
+    onStateUpdate: handleStateUpdate,
+  });
+
+  const chat = useAgentChat({
+    agent,
+    credentials: "include",
+    resume: true,
+    onError: handleError
   });
 
   const { groupedModels, models } = useOpenRouterModels();
-
-  const isStreaming = status === "streaming" && messages[messages.length - 1]?.role === "assistant";
 
   const selectedModel = useMemo(
     () => models.find((m) => m.slug === settings.model),
     [models, settings.model]
   );
 
-  // Derive state from the most recent assistant message's tool calls
-  const derivedState = useMemo(() => {
-    const state = {
-      todos: [] as QueueTodo[],
-      // Add additional fields here as needed
-    };
+  const handleSettingsChange = useCallback(
+    (settingsOrFn: ChatSettings | ((prev: ChatSettings) => ChatSettings)) => {
+      setSettings((prev) =>
+        typeof settingsOrFn === "function" ? settingsOrFn(prev) : settingsOrFn
+      );
+    },
+    []
+  );
 
+  // Show loading while chat instance is initializing
+  if (!chat) {
+    return (
+      <div className="flex flex-col h-full">
+        <div className="flex-1 flex">
+          <ChatLoadingSkeleton />
+        </div>
+      </div>
+    );
+  }
+
+  const { messages, sendMessage, status, error, stop } = chat;
+  const isStreaming = status === "streaming";
+  
+  // Derive state from the most recent assistant message's tool calls
+  const derivedTodos = useMemo(() => {
     const lastMsg = messages[messages.length - 1];
-    if (lastMsg?.role !== "assistant") return state;
+    if (lastMsg?.role !== "assistant") return [];
 
     for (const part of lastMsg.parts) {
       if (part.type !== "dynamic-tool") continue;
 
-      switch (part.toolName) {
-        case "write_todos": {
-          const output = part.output as {
-            update?: { todos?: Array<{ content: string; status: string }> };
-          };
-          if (output?.update?.todos) {
-            state.todos = output.update.todos.map((t, idx) => ({
-              id: `todo-${idx}`,
-              title: t.content,
-              status: t.status as "pending" | "in_progress" | "completed",
-            }));
-          }
-          break;
+      if (part.toolName === "write_todos") {
+        const output = part.output as {
+          update?: { todos?: Array<{ content: string; status: string }> };
+        };
+        if (output?.update?.todos) {
+          return output.update.todos.map((t, idx) => ({
+            id: `todo-${idx}`,
+            title: t.content,
+            status: t.status as "pending" | "in_progress" | "completed",
+          }));
         }
-        // Add additional tool handlers here
       }
     }
 
-    return state;
+    return [];
   }, [messages]);
 
   const handleSubmit: ChatInputProps["onSubmit"] = async ({ text, files }) => {
@@ -105,16 +138,6 @@ function ChatPage() {
       parts,
     });
   };
-
-  if (!isConnected) {
-    return (
-      <div className="flex flex-col h-full">
-        <div className="flex-1 flex">
-          <ChatLoadingSkeleton />
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="flex flex-col h-full w-full">
@@ -143,11 +166,11 @@ function ChatPage() {
         status={status}
         onStop={stop}
         settings={settings}
-        setSettings={setSettings}
+        setSettings={handleSettingsChange}
         groupedModels={groupedModels}
         models={models}
         selectedModel={selectedModel}
-        todos={derivedState.todos}
+        todos={derivedTodos}
       />
     </div>
   );

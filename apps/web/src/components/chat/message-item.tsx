@@ -1,5 +1,4 @@
 import type { UIMessage } from "@ai-sdk/react";
-import { memo } from "react";
 import {
   Message,
   MessageContent,
@@ -34,7 +33,7 @@ interface TextPartProps {
   partKey: number;
 }
 
-const TextPart = memo(function TextPart({ part, role, partKey }: TextPartProps) {
+function TextPart({ part, role, partKey }: TextPartProps) {
   return role === "user" ? (
     <p key={partKey} className="whitespace-pre-wrap">
       {part.text}
@@ -42,7 +41,7 @@ const TextPart = memo(function TextPart({ part, role, partKey }: TextPartProps) 
   ) : (
     <MessageResponse key={partKey}>{part.text}</MessageResponse>
   );
-});
+}
 
 interface ReasoningPartProps {
   part: Extract<UIMessage["parts"][number], { type: "reasoning" }>;
@@ -50,21 +49,21 @@ interface ReasoningPartProps {
   partKey: number;
 }
 
-const ReasoningPart = memo(function ReasoningPart({ part, isStreaming, partKey }: ReasoningPartProps) {
+function ReasoningPart({ part, isStreaming, partKey }: ReasoningPartProps) {
   return (
     <Reasoning key={partKey} isStreaming={isStreaming}>
       <ReasoningTrigger />
       <ReasoningContent>{part.text}</ReasoningContent>
     </Reasoning>
   );
-});
+}
 
 interface ToolPartProps {
   part: Extract<UIMessage["parts"][number], { type: "dynamic-tool" }>;
   partKey: number;
 }
 
-const ToolPart = memo(function ToolPart({ part, partKey }: ToolPartProps) {
+function ToolPart({ part, partKey }: ToolPartProps) {
   return (
     <Tool key={partKey}>
       <ToolHeader type="dynamic-tool" state={part.state} toolName={part.toolName} />
@@ -74,14 +73,14 @@ const ToolPart = memo(function ToolPart({ part, partKey }: ToolPartProps) {
       </ToolContent>
     </Tool>
   );
-});
+}
 
 interface FilePartProps {
   part: Extract<UIMessage["parts"][number], { type: "file" }>;
   partKey: number;
 }
 
-const FilePart = memo(function FilePart({ part, partKey }: FilePartProps) {
+function FilePart({ part, partKey }: FilePartProps) {
   return (
     <Attachments key={partKey} variant="grid">
       <Attachment data={{ ...part, id: String(partKey) }}>
@@ -89,9 +88,9 @@ const FilePart = memo(function FilePart({ part, partKey }: FilePartProps) {
       </Attachment>
     </Attachments>
   );
-});
+}
 
-export const MessageItem = memo(function MessageItem({ message, isStreaming }: MessageItemProps) {
+export function MessageItem({ message, isStreaming }: MessageItemProps) {
   return (
     <Message from={message.role} className="mx-auto w-4xl px-4">
       <MessageContent className="group-[.is-user]:max-w-[70%]">
@@ -119,4 +118,4 @@ export const MessageItem = memo(function MessageItem({ message, isStreaming }: M
       </MessageContent>
     </Message>
   );
-});
+}

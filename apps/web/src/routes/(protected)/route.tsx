@@ -5,7 +5,6 @@ import { api } from "@just-use-convex/backend/convex/_generated/api";
 import { isAuthError } from "@/lib/utils";
 import { toast } from "sonner";
 import { convexQuery } from "@convex-dev/react-query";
-import { AgentsProvider } from "@/providers/agents";
 
 export const Route = createFileRoute("/(protected)")({
   component: ProtectedLayout,
@@ -32,11 +31,9 @@ function ProtectedLayout() {
       getAuthUserFn={api.auth.getAuthUser}
       isAuthError={isAuthError}
     >
-      <AgentsProvider>
-        <div className="flex-1 overflow-hidden bg-background h-full w-full">
-          <Outlet />
-        </div>
-      </AgentsProvider>
+      <div className="flex-1 overflow-hidden bg-background h-full w-full">
+        <Outlet />
+      </div>
     </AuthBoundary>
   );
 }

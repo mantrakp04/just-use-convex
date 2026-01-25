@@ -1,5 +1,5 @@
 import { cn } from "@/lib/utils";
-import type { ChatSettings } from "@/providers/agents";
+import type { ChatSettings } from "./chat-input";
 
 export type ReasoningEffortSelectorProps = {
   efforts: string[];

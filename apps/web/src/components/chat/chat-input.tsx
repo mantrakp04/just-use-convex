@@ -1,7 +1,11 @@
 import { PaperclipIcon } from "lucide-react";
 import type { OpenRouterModel } from "@/hooks/use-openrouter-models";
-import type { ChatSettings } from "@/providers/agents";
-import type { useAgentChatInstance } from "@/providers/agents";
+import type { useAgentChat } from "@cloudflare/ai-chat/react";
+
+export type ChatSettings = {
+  model?: string;
+  reasoningEffort?: "low" | "medium" | "high";
+};
 import {
   PromptInput,
   PromptInputTextarea,
@@ -23,7 +27,7 @@ import type { QueueTodo } from "@/components/ai-elements/queue";
 
 export type ChatInputProps = {
   onSubmit: (message: { text: string; files: Array<{ url: string; mediaType: string; filename?: string }> }) => void;
-  status: ReturnType<typeof useAgentChatInstance>["status"];
+  status: NonNullable<ReturnType<typeof useAgentChat>>["status"];
   onStop?: () => void;
   settings: ChatSettings;
   setSettings: (settings: ChatSettings | ((prev: ChatSettings) => ChatSettings)) => void;

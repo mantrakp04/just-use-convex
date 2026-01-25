@@ -126,7 +126,7 @@ function ChatsListPage() {
       <div className="flex items-center justify-between shrink-0">
         <div>
           <h1 className="text-2xl font-semibold">Chats</h1>
-          <p className="text-muted-foreground text-sm">
+          <p className="text-muted-foreground text-sm" suppressHydrationWarning>
             {total} {total === 1 ? "conversation" : "conversations"}
           </p>
         </div>

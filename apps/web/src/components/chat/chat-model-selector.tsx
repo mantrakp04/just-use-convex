@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { ChevronDownIcon, Sparkles, Star } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { OpenRouterModel } from "@/hooks/use-openrouter-models";
-import type { ChatSettings } from "@/providers/agents";
+import type { ChatSettings } from "./chat-input";
 import { useModelFiltering, getProviderLabel, getProviderDisplayName, getProviderLogoSlug } from "@/hooks/use-model-filtering";
 import { ReasoningEffortSelector } from "./reasoning-effort-selector";
 import {
@@ -57,14 +57,14 @@ export function ChatModelSelector({
   const providerSlug = providerLabel ? getProviderLogoSlug(providerLabel) : "openrouter";
 
   useEffect(() => {
-    if (!selectedModel) {
+    if (!selectedModel && models.length > 0 && !settings.model) {
       onSettingsChange((prev) => ({
         ...prev,
         model: defaultModel,
         reasoningEffort: defaultModel.includes("reasoning") ? prev.reasoningEffort : undefined,
       }));
     }
-  }, [selectedModel]);
+  }, [selectedModel, models.length, settings.model, onSettingsChange, defaultModel]);
 
   const handleModelSelect = (model: OpenRouterModel) => {
     onSettingsChange((prev) => ({
