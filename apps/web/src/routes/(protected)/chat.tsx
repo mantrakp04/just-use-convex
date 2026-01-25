@@ -4,7 +4,7 @@ import { Bot } from "lucide-react";
 import type { UIMessage } from "@ai-sdk/react";
 import { useMemo } from "react";
 import { useOpenRouterModels } from "@/hooks/use-openrouter-models";
-import { ChatInput, MessageItem, type ChatInputProps } from "@/components/chat";
+import { ChatInput, type ChatInputProps } from "@/components/chat";
 import {
   Conversation,
   ConversationContent,
@@ -12,6 +12,7 @@ import {
   ConversationEmptyState,
 } from "@/components/ai-elements/conversation";
 import { Skeleton } from "@/components/ui/skeleton";
+import { VirtualMessageList } from "@/components/chat/virtual-message-list";
 
 export const Route = createFileRoute("/(protected)/chat")({
   component: ChatPage,
@@ -80,7 +81,7 @@ function ChatPage() {
   }
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-full w-full">
       <Conversation className="flex-1">
         <ConversationContent>
           {messages.length === 0 ? (
@@ -90,13 +91,7 @@ function ChatPage() {
               description="Ask me anything or share files to get started"
             />
           ) : (
-            messages.map((message) => (
-              <MessageItem
-                key={message.id}
-                message={message}
-                isStreaming={isStreaming}
-              />
-            ))
+            <VirtualMessageList messages={messages} isStreaming={isStreaming} />
           )}
           {error && (
             <div className="text-sm text-destructive bg-destructive/10 rounded-lg px-4 py-3">

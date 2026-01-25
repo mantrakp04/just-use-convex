@@ -33,7 +33,7 @@ function ProtectedLayout() {
       isAuthError={isAuthError}
     >
       <AgentsProvider>
-        <div className="flex-1 overflow-y-auto bg-background h-full container mx-auto w-4xl py-2">
+        <div className="flex-1 overflow-hidden bg-background h-full w-full">
           <Outlet />
         </div>
       </AgentsProvider>

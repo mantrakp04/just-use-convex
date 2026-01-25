@@ -41,7 +41,7 @@ export function ChatInput({
   selectedModel,
 }: ChatInputProps) {
   return (
-    <div className="p-1">
+    <div className="pb-1 mx-auto w-4xl">
       <PromptInput
         onSubmit={({ text, files }) => onSubmit({ text, files })}
         accept="image/*,application/pdf"
