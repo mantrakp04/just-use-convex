@@ -5,7 +5,7 @@ import {
   WranglerJson
 } from "alchemy/cloudflare";
 
-const app = await alchemy("just-use-convex-agent", {
+const app = await alchemy("just-use-convex", {
   phase: process.argv.includes("--destroy") ? "destroy" : "up",
   password: process.env.ALCHEMY_PASSWORD
 });
