@@ -1,0 +1,27 @@
+{
+  "name": "just-use-convex-agent-agent-worker-barrel",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-01-20",
+  "compatibility_flags": [
+    "nodejs_compat",
+    "nodejs_compat_populate_process_env"
+  ],
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "agentWorker",
+        "class_name": "AgentWorker",
+        "script_name": "just-use-convex-agent-agent-worker-barrel"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": [
+        "AgentWorker"
+      ],
+      "new_classes": []
+    }
+  ]
+}

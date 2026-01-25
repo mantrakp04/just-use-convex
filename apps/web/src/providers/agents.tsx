@@ -77,7 +77,7 @@ type UseAgentChatOptions = AgentChatOptions & {
 };
 
 export function useAgentChatInstance(options: UseAgentChatOptions) {
-  const { name, agentType = "agent", host = env.VITE_AGENT_URL, credentials = "include", onError } = options;
+  const { name, agentType = "agent-worker", host = env.VITE_AGENT_URL, credentials = "include", onError } = options;
 
   const store = useAgentChatStore();
 

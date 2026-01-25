@@ -1,7 +1,8 @@
 import alchemy from "alchemy";
 import {
   Worker,
-  DurableObjectNamespace
+  DurableObjectNamespace,
+  WranglerJson
 } from "alchemy/cloudflare";
 
 const app = await alchemy("just-use-convex-agent", {
@@ -10,22 +11,26 @@ const app = await alchemy("just-use-convex-agent", {
 });
 
 // Durable Object namespace for agent state with SQLite storage
-const agent = DurableObjectNamespace("agent", {
-  className: "Agent",
+const agentWorkerNamespace = DurableObjectNamespace("agent-worker", {
+  className: "AgentWorker",
   sqlite: true,
 });
 
 // Deploy the agent worker
-export const worker = await Worker("agent", {
+export const worker = await Worker("agent-worker", {
   entrypoint: "./src/index.ts",
   url: false,
   compatibility: "node",
   bindings: {
-    agent: agent, // Binding name must match the agent namespace requested by client
+    agentWorker: agentWorkerNamespace,
     OPENROUTER_API_KEY: alchemy.secret(process.env.OPENROUTER_API_KEY),
     OPENROUTER_MODEL: alchemy.secret(process.env.OPENROUTER_MODEL || "openai/gpt-5.2-chat"),
-  },
-  logpush: true
+  }
+});
+
+await WranglerJson({
+  worker,
+  path: "./wrangler.json",
 });
 
 await app.finalize();

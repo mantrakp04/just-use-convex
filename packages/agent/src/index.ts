@@ -34,7 +34,7 @@ export default {
   },
 };
 
-export class Agent extends AIChatAgent<typeof worker.Env, ChatState> {
+export class AgentWorker extends AIChatAgent<typeof worker.Env, ChatState> {
   private _checkpointer: CloudflareDOCheckpointer | null = null;
 
   private getCheckpointer(): CloudflareDOCheckpointer {
