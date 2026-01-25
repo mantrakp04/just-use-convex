@@ -1,12 +1,13 @@
 import { useState, useRef, useEffect } from "react";
+import { useAgent } from "agents/react";
 import { createFileRoute } from "@tanstack/react-router";
 import { useAgentChat } from "@cloudflare/ai-chat/react";
-import { useAgentById } from "@/providers/agent";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
-import { SendHorizontal, Loader2, Bot, User } from "lucide-react";
+import { SendHorizontal, Loader2, Bot, User, ChevronDown, ChevronUp } from "lucide-react";
+import { env } from "@just-use-convex/env/web";
 
 type MessagePart =
   | { type: "text"; text: string }
@@ -23,7 +24,11 @@ export const Route = createFileRoute("/(protected)/chat")({
 });
 
 function ChatPage() {
-  const { agent, isLoading: isAgentLoading } = useAgentById("chat");
+  const agent = useAgent({
+    agent: "agent",
+    name: "chat",
+    host: env.VITE_AGENT_URL
+  });
 
   if (!agent) {
     return (
@@ -35,7 +40,7 @@ function ChatPage() {
           </div>
         </div>
         <div className="flex-1 flex items-center justify-center">
-          {isAgentLoading ? (
+          {agent ? (
             <Loader2 className="size-6 animate-spin text-muted-foreground" />
           ) : (
             <p className="text-sm text-muted-foreground">Failed to connect to agent</p>
@@ -48,16 +53,42 @@ function ChatPage() {
   return <ChatContent agent={agent} />;
 }
 
-type AgentInstance = NonNullable<ReturnType<typeof useAgentById>["agent"]>;
+function ToolCallAccordion({ toolName, output }: { toolName: string; output: unknown }) {
+  const [isOpen, setIsOpen] = useState(false);
 
-function ChatContent({ agent }: { agent: AgentInstance }) {
+  return (
+    <div className="mt-2 bg-background/50 rounded text-xs font-mono">
+      <button
+        type="button"
+        onClick={() => setIsOpen(!isOpen)}
+        className="flex items-center justify-between w-full p-2 hover:bg-background/80 rounded transition-colors"
+      >
+        <span className="text-muted-foreground">Tool: {toolName}</span>
+        {isOpen ? (
+          <ChevronUp className="size-4 text-muted-foreground" />
+        ) : (
+          <ChevronDown className="size-4 text-muted-foreground" />
+        )}
+      </button>
+      {isOpen && (
+        <div className="px-2 pb-2">
+          <pre className="overflow-auto">
+            {JSON.stringify(output, null, 2)}
+          </pre>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ChatContent({ agent }: { agent: ReturnType<typeof useAgent<any>> }) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const [input, setInput] = useState("");
 
   const { messages, sendMessage, clearHistory, status, error } = useAgentChat({
-    agent,
-    getInitialMessages: null, // Skip HTTP fetch for initial messages
+    agent: agent,
+    credentials: 'include', // Send cookies with requests
     onError: (err: Error) => {
       console.error("Chat error:", err);
     },
@@ -143,17 +174,11 @@ function ChatContent({ agent }: { agent: AgentInstance }) {
                       part.state === "output-available"
                     ) {
                       return (
-                        <div
+                        <ToolCallAccordion
                           key={i}
-                          className="mt-2 p-2 bg-background/50 rounded text-xs font-mono"
-                        >
-                          <span className="text-muted-foreground">
-                            Tool: {part.toolName}
-                          </span>
-                          <pre className="mt-1 overflow-auto">
-                            {JSON.stringify(part.output, null, 2)}
-                          </pre>
-                        </div>
+                          toolName={part.toolName}
+                          output={part.output}
+                        />
                       );
                     }
                     return null;

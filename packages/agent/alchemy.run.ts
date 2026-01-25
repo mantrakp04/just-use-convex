@@ -6,7 +6,7 @@ import {
 
 const app = await alchemy("just-use-convex-agent", {
   phase: process.argv.includes("--destroy") ? "destroy" : "up",
-  password: process.env.ALCHEMY_PASSWORD,
+  password: process.env.ALCHEMY_PASSWORD
 });
 
 // Durable Object namespace for agent state with SQLite storage
@@ -25,10 +25,7 @@ export const worker = await Worker("agent", {
     OPENROUTER_API_KEY: alchemy.secret(process.env.OPENROUTER_API_KEY),
     OPENROUTER_MODEL: alchemy.secret(process.env.OPENROUTER_MODEL || "openai/gpt-5.2-chat"),
   },
-});
-
-console.log({
-  workerUrl: worker.url,
+  logpush: true
 });
 
 await app.finalize();

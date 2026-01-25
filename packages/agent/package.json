@@ -12,6 +12,7 @@
   "dependencies": {
     "@ai-sdk/langchain": "^2.0.54",
     "@langchain/core": "^1.1.16",
+    "@langchain/langgraph-checkpoint": "^1.0.0",
     "@langchain/openai": "^1.2.3",
     "@libsql/client": "^0.17.0",
     "agents": "^0.3.6",
