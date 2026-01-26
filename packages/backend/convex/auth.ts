@@ -20,6 +20,7 @@ const isRunMutationCtx = (ctx: GenericCtx<DataModel>): ctx is RunMutationCtx => 
 };
 
 const siteUrl = process.env.SITE_URL ?? "http://localhost:3001";
+const agentUrl = process.env.AGENT_URL ?? "http://localhost:1337";
 
 export const authComponent = createClient<DataModel, typeof authSchema>(
   components.betterAuth,
@@ -33,7 +34,7 @@ export const authComponent = createClient<DataModel, typeof authSchema>(
 export const createAuthOptions = (ctx: GenericCtx<DataModel>) => {
   return {
     baseURL: siteUrl,
-    trustedOrigins: [siteUrl],
+    trustedOrigins: [siteUrl, agentUrl],
     database: authComponent.adapter(ctx),
     emailAndPassword: {
       enabled: true,
