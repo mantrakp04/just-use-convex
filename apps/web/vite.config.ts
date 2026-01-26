@@ -12,6 +12,10 @@ export default defineConfig({
   server: {
     port: 3001,
   },
+  build: {
+    minify: false,
+    sourcemap: true,
+  },
   ssr: {
     noExternal: ["@convex-dev/better-auth"],
   },

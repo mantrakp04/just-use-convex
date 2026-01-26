@@ -129,7 +129,7 @@ const CopyButton = memo(function CopyButton({ text }: { text: string }) {
   );
 });
 
-export function MessageItem({ message, isStreaming }: MessageItemProps) {
+export const MessageItem = memo(function MessageItem({ message, isStreaming }: MessageItemProps) {
   const messageText = message.parts
     .filter((part) => part.type === "text")
     .map((part) => (part as Extract<UIMessage["parts"][number], { type: "text" }>).text)
@@ -161,7 +161,7 @@ export function MessageItem({ message, isStreaming }: MessageItemProps) {
             return null;
           })}
         </MessageContent>
-        {messageText && (
+        {messageText && !isStreaming && (
           <MessageActions className="mt-2 opacity-0 transition-opacity group-hover/message:opacity-100 justify-end">
             <CopyButton text={messageText} />
           </MessageActions>
@@ -169,4 +169,4 @@ export function MessageItem({ message, isStreaming }: MessageItemProps) {
       </div>
     </Message>
   );
-}
+});

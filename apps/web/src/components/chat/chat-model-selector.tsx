@@ -31,7 +31,7 @@ export type ChatModelSelectorProps = {
   selectedModel?: OpenRouterModel;
   settings: ChatSettings;
   onSettingsChange: (settings: ChatSettings | ((prev: ChatSettings) => ChatSettings)) => void;
-  messagesLength: number;
+  hasMessages: boolean;
 };
 
 export function ChatModelSelector({
@@ -40,7 +40,7 @@ export function ChatModelSelector({
   selectedModel,
   settings,
   onSettingsChange,
-  messagesLength,
+  hasMessages,
 }: ChatModelSelectorProps) {
   const [open, setOpen] = useState(false);
   const [defaultModel, setDefaultModel] = useAtom(defaultModelAtom);
@@ -77,7 +77,7 @@ export function ChatModelSelector({
     }));
 
     // Update default model only if there are no messages yet
-    if (messagesLength === 0) {
+    if (!hasMessages) {
       setDefaultModel(model.slug);
     }
 

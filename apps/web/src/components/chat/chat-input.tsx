@@ -36,7 +36,7 @@ export type ChatInputProps = {
   models: OpenRouterModel[];
   selectedModel?: OpenRouterModel;
   todos?: QueueTodo[];
-  messagesLength: number;
+  hasMessages: boolean;
 };
 
 export function ChatInput({
@@ -49,7 +49,7 @@ export function ChatInput({
   models,
   selectedModel,
   todos = [],
-  messagesLength,
+  hasMessages,
 }: ChatInputProps) {
   const supportsReasoning = selectedModel?.supports_reasoning ?? false;
 
@@ -72,7 +72,7 @@ export function ChatInput({
               selectedModel={selectedModel}
               settings={settings}
               onSettingsChange={setSettings}
-              messagesLength={messagesLength}
+              hasMessages={hasMessages}
             />
             {supportsReasoning && (
               <ReasoningEffortSelector

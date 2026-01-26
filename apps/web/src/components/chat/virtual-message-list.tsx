@@ -60,7 +60,7 @@ export function VirtualMessageList({ messages, isStreaming }: VirtualMessageList
         >
           <MessageItem
             message={messages[virtualItem.index]!}
-            isStreaming={isStreaming}
+            isStreaming={isStreaming && virtualItem.index === messages.length - 1}
           />
         </div>
       ))}
