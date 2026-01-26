@@ -5,7 +5,8 @@
     "CONVEX_DEPLOY_KEY",
     "VITE_CONVEX_URL",
     "VITE_CONVEX_SITE_URL",
-    "VITE_SITE_URL"
+    "VITE_SITE_URL",
+    "VITE_AGENT_URL"
   ],
   "tasks": {
     "build": {
