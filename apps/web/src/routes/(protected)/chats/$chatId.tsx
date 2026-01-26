@@ -180,6 +180,7 @@ function ChatPage() {
         models={models}
         selectedModel={selectedModel}
         todos={derivedState.todos}
+        messagesLength={messages.length}
       />
     </div>
   );

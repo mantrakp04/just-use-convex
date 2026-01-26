@@ -3,11 +3,12 @@ import type { zMutationCtx, zQueryCtx } from "../functions";
 import * as types from "./types";
 
 async function runChatsQuery(ctx: zQueryCtx, args: z.infer<typeof types.ListArgs>) {
-  return ctx.table("chats", "organizationId_userId", (q) =>
-    q
-      .eq("organizationId", ctx.identity.activeOrganizationId)
-      .eq("userId", ctx.identity.userId)
+  return ctx.table("chats", "organizationId_userId_isPinned", (q) => q
+    .eq("organizationId", ctx.identity.activeOrganizationId)
+    .eq("userId", ctx.identity.userId)
+    .eq("isPinned", args.filters.isPinned)
   )
+    .order("desc")
     .filter((q) => {
       const conditions: ReturnType<typeof q.eq>[] = [];
 
@@ -62,6 +63,7 @@ export async function CreateChat(ctx: zMutationCtx, args: z.infer<typeof types.C
     ...args.data,
     organizationId: ctx.identity.activeOrganizationId,
     userId: ctx.identity.userId,
+    isPinned: false,
     updatedAt: now,
   });
   return chat;

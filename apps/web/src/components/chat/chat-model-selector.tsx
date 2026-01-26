@@ -1,10 +1,9 @@
 import { useState, useEffect } from "react";
-import { ChevronDownIcon, Sparkles, Star } from "lucide-react";
+import { ChevronDownIcon, Star } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { OpenRouterModel } from "@/hooks/use-openrouter-models";
 import type { ChatSettings } from "./chat-input";
 import { useModelFiltering, getProviderLabel, getProviderDisplayName, getProviderLogoSlug } from "@/hooks/use-model-filtering";
-import { ReasoningEffortSelector } from "./reasoning-effort-selector";
 import {
   ModelSelector,
   ModelSelectorTrigger,
@@ -23,6 +22,8 @@ import {
   ModelSelectorMain,
 } from "@/components/ai-elements/model-selector";
 import { env } from "@just-use-convex/env/web";
+import { useAtom } from "jotai";
+import { defaultModelAtom } from "@/store/models";
 
 export type ChatModelSelectorProps = {
   groupedModels: [string, OpenRouterModel[]][];
@@ -30,6 +31,7 @@ export type ChatModelSelectorProps = {
   selectedModel?: OpenRouterModel;
   settings: ChatSettings;
   onSettingsChange: (settings: ChatSettings | ((prev: ChatSettings) => ChatSettings)) => void;
+  messagesLength: number;
 };
 
 export function ChatModelSelector({
@@ -38,9 +40,11 @@ export function ChatModelSelector({
   selectedModel,
   settings,
   onSettingsChange,
+  messagesLength,
 }: ChatModelSelectorProps) {
   const [open, setOpen] = useState(false);
-  const defaultModel = env.VITE_DEFAULT_MODEL;
+  const [defaultModel, setDefaultModel] = useAtom(defaultModelAtom);
+  const fallbackModel = env.VITE_DEFAULT_MODEL;
   const {
     selectedAuthor,
     setSelectedAuthor,
@@ -51,20 +55,19 @@ export function ChatModelSelector({
     favorites,
   } = useModelFiltering({ groupedModels, models });
 
-  const supportsReasoning = selectedModel?.supports_reasoning ?? false;
-  const reasoningEfforts = selectedModel?.reasoning_config?.supported_reasoning_efforts ?? [];
   const providerLabel = selectedModel?.author ? getProviderLabel(selectedModel.author) : null;
   const providerSlug = providerLabel ? getProviderLogoSlug(providerLabel) : "openrouter";
 
   useEffect(() => {
     if (!selectedModel && models.length > 0 && !settings.model) {
+      const modelToUse = defaultModel || fallbackModel;
       onSettingsChange((prev) => ({
         ...prev,
-        model: defaultModel,
-        reasoningEffort: defaultModel.includes("reasoning") ? prev.reasoningEffort : undefined,
+        model: modelToUse,
+        reasoningEffort: modelToUse.includes("reasoning") ? prev.reasoningEffort : undefined,
       }));
     }
-  }, [selectedModel, models.length, settings.model, onSettingsChange, defaultModel]);
+  }, [selectedModel, models.length, settings.model, onSettingsChange, defaultModel, fallbackModel]);
 
   const handleModelSelect = (model: OpenRouterModel) => {
     onSettingsChange((prev) => ({
@@ -72,6 +75,12 @@ export function ChatModelSelector({
       model: model.slug,
       reasoningEffort: model.supports_reasoning ? prev.reasoningEffort : undefined,
     }));
+
+    // Update default model only if there are no messages yet
+    if (messagesLength === 0) {
+      setDefaultModel(model.slug);
+    }
+
     setOpen(false);
   };
 
@@ -81,8 +90,6 @@ export function ChatModelSelector({
         <TriggerContent
           selectedModel={selectedModel}
           providerSlug={providerSlug}
-          supportsReasoning={supportsReasoning}
-          reasoningEffort={settings.reasoningEffort}
         />
         <ChevronDownIcon className="size-3 text-muted-foreground/70" />
       </ModelSelectorTrigger>
@@ -123,13 +130,6 @@ export function ChatModelSelector({
                 </ModelSelectorGroup>
               ))}
             </ModelSelectorList>
-            {supportsReasoning && reasoningEfforts.length > 0 && (
-              <ReasoningEffortSelector
-                efforts={reasoningEfforts}
-                currentEffort={settings.reasoningEffort}
-                onSelect={(effort) => onSettingsChange((prev) => ({ ...prev, reasoningEffort: effort }))}
-              />
-            )}
           </ModelSelectorMain>
         </div>
       </ModelSelectorContent>
@@ -140,15 +140,11 @@ export function ChatModelSelector({
 type TriggerContentProps = {
   selectedModel?: OpenRouterModel;
   providerSlug: string;
-  supportsReasoning: boolean;
-  reasoningEffort?: ChatSettings["reasoningEffort"];
 };
 
 function TriggerContent({
   selectedModel,
   providerSlug,
-  supportsReasoning,
-  reasoningEffort,
 }: TriggerContentProps) {
   if (!selectedModel) {
     return <span className="text-muted-foreground">Select model</span>;
@@ -160,12 +156,6 @@ function TriggerContent({
       <span className="max-w-24 truncate text-muted-foreground">
         {selectedModel.short_name || selectedModel.name}
       </span>
-      {supportsReasoning && reasoningEffort && (
-        <span className="flex items-center gap-0.5 text-amber-600 dark:text-amber-400">
-          <Sparkles className="size-2.5" />
-          <span className="text-[10px] uppercase">{reasoningEffort}</span>
-        </span>
-      )}
     </>
   );
 }

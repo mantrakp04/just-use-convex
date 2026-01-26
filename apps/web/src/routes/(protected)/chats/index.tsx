@@ -12,7 +12,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { MessageSquare, Plus, MoreVertical, Trash2, Pencil } from "lucide-react";
+import { MessageSquare, Plus, MoreVertical, Trash2, Pencil, Pin } from "lucide-react";
 
 export const Route = createFileRoute("/(protected)/chats/")({
   component: ChatsListPage,
@@ -31,8 +31,9 @@ function ChatCardSkeleton() {
 
 function ChatsListPage() {
   const navigate = useNavigate();
-  const { createChat, deleteChat, isCreating, isDeleting } = useChats();
-  const chatListQuery = useChatsList();
+  const { createChat, deleteChat, togglePin, isCreating, isDeleting } = useChats();
+  const pinnedChatsQuery = useChatsList({ isPinned: true });
+  const unpinnedChatsQuery = useChatsList({ isPinned: false });
   const { data: stats } = useChatStats();
 
   const handleCreateChat = useCallback(async () => {
@@ -45,6 +46,13 @@ function ChatsListPage() {
       await deleteChat({ _id: chatId });
     },
     [deleteChat]
+  );
+
+  const handleTogglePin = useCallback(
+    async (chatId: Chat["_id"], currentPinState: boolean) => {
+      await togglePin(chatId, !currentPinState);
+    },
+    [togglePin]
   );
 
   const handleOpenChat = useCallback(
@@ -74,7 +82,11 @@ function ChatsListPage() {
         <CardHeader className="flex flex-row items-center justify-between p-2 border-border border">
           <div className="flex items-center gap-2">
             <div className="size-8 rounded-md bg-muted flex items-center justify-center">
-              <MessageSquare className="size-4" />
+              {chat.isPinned ? (
+                <Pin className="size-4 text-primary" />
+              ) : (
+                <MessageSquare className="size-4" />
+              )}
             </div>
             <div>
               <CardTitle>{chat.title}</CardTitle>
@@ -87,30 +99,30 @@ function ChatsListPage() {
           </div>
           <DropdownMenu>
             <DropdownMenuTrigger
-              onClick={(e) => e.stopPropagation()}
+              onClick={(e: React.MouseEvent) => e.stopPropagation()}
               className="inline-flex items-center justify-center size-8 rounded-md text-sm font-medium transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
             >
               <MoreVertical className="size-4" />
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
               <DropdownMenuItem
-                onClick={(e) => {
+                onClick={(e: React.MouseEvent) => {
                   e.stopPropagation();
-                  handleOpenChat(chat._id);
+                  handleTogglePin(chat._id, chat.isPinned);
                 }}
               >
-                <Pencil className="size-4 mr-2" />
-                Open
+                <Pin className="size-4" />
+                {chat.isPinned ? "Unpin" : "Pin"}
               </DropdownMenuItem>
               <DropdownMenuItem
-                className="text-destructive"
-                onClick={(e) => {
+                variant="destructive"
+                onClick={(e: React.MouseEvent) => {
                   e.stopPropagation();
                   handleDeleteChat(chat._id);
                 }}
                 disabled={isDeleting}
               >
-                <Trash2 className="size-4 mr-2" />
+                <Trash2 className="size-4" />
                 Delete
               </DropdownMenuItem>
             </DropdownMenuContent>
@@ -118,8 +130,12 @@ function ChatsListPage() {
         </CardHeader>
       </Card>
     ),
-    [handleOpenChat, handleDeleteChat, isDeleting, formatDate]
+    [handleOpenChat, handleDeleteChat, handleTogglePin, isDeleting, formatDate]
   );
+
+  const hasPinnedChats = pinnedChatsQuery.results && pinnedChatsQuery.results.length > 0;
+  const hasUnpinnedChats = unpinnedChatsQuery.results && unpinnedChatsQuery.results.length > 0;
+  const hasAnyChats = hasPinnedChats || hasUnpinnedChats;
 
   return (
     <div className="flex flex-col gap-4 p-2 w-4xl mx-auto h-full">
@@ -136,37 +152,61 @@ function ChatsListPage() {
         </Button>
       </div>
 
-      <VirtualList
-        query={chatListQuery}
-        renderItem={renderChatItem}
-        estimateSize={72}
-        gap={8}
-        getItemKey={(_, chat) => chat._id}
-        loadingState={
-          <div className="flex flex-col gap-3">
-            <ChatCardSkeleton />
-            <ChatCardSkeleton />
-            <ChatCardSkeleton />
+      {!pinnedChatsQuery.isLoading && !unpinnedChatsQuery.isLoading && !hasAnyChats && (
+        <Empty className="border">
+          <EmptyHeader>
+            <EmptyMedia>
+              <MessageSquare className="size-12 text-muted-foreground" />
+            </EmptyMedia>
+            <EmptyTitle>No chats yet</EmptyTitle>
+            <EmptyDescription>
+              Start a new conversation with the AI assistant.
+            </EmptyDescription>
+          </EmptyHeader>
+          <Button onClick={handleCreateChat} disabled={isCreating}>
+            <Plus className="size-4 mr-2" />
+            Start your first chat
+          </Button>
+        </Empty>
+      )}
+
+      {pinnedChatsQuery.isLoading && unpinnedChatsQuery.isLoading && (
+        <div className="flex flex-col gap-3">
+          <ChatCardSkeleton />
+          <ChatCardSkeleton />
+          <ChatCardSkeleton />
+        </div>
+      )}
+
+      <div className="flex flex-col gap-6">
+        {hasPinnedChats && (
+          <div className="flex flex-col gap-2">
+            <h2 className="text-sm font-medium text-muted-foreground px-1">Pinned</h2>
+            <VirtualList
+              query={pinnedChatsQuery}
+              renderItem={renderChatItem}
+              estimateSize={72}
+              gap={8}
+              getItemKey={(_: number, chat: Chat) => chat._id}
+            />
           </div>
-        }
-        emptyState={
-          <Empty className="border">
-            <EmptyHeader>
-              <EmptyMedia>
-                <MessageSquare className="size-12 text-muted-foreground" />
-              </EmptyMedia>
-              <EmptyTitle>No chats yet</EmptyTitle>
-              <EmptyDescription>
-                Start a new conversation with the AI assistant.
-              </EmptyDescription>
-            </EmptyHeader>
-            <Button onClick={handleCreateChat} disabled={isCreating}>
-              <Plus className="size-4 mr-2" />
-              Start your first chat
-            </Button>
-          </Empty>
-        }
-      />
+        )}
+
+        {hasUnpinnedChats && (
+          <div className="flex flex-col gap-2">
+            {hasPinnedChats && (
+              <h2 className="text-sm font-medium text-muted-foreground px-1">All Chats</h2>
+            )}
+            <VirtualList
+              query={unpinnedChatsQuery}
+              renderItem={renderChatItem}
+              estimateSize={72}
+              gap={8}
+              getItemKey={(_: number, chat: Chat) => chat._id}
+            />
+          </div>
+        )}
+      </div>
     </div>
   );
 }

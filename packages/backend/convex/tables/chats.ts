@@ -7,6 +7,7 @@ export const chatsZodSchema = {
   organizationId: z.string(),
   userId: z.string(),
   title: z.string(),
+  isPinned: z.boolean(),
   updatedAt: z.number(),
 };
 
@@ -23,7 +24,7 @@ export const chatsWithSystemFields = {
 };
 
 const chatsTable = Chats.table
-  .index("organizationId_userId", ["organizationId", "userId", "updatedAt"])
+  .index("organizationId_userId_isPinned", ["organizationId", "userId", "isPinned", "updatedAt"])
   .index("organizationId", ["organizationId", "updatedAt"])
   .index("userId", ["userId"]);
 

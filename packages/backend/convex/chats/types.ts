@@ -12,7 +12,9 @@ export const ChatWithSystemFields = z.object(chatsWithSystemFields);
 const ChatFilters = z.object({
   userId: z.string(),
   title: z.string(),
-}).partial();
+}).partial().extend({
+  isPinned: z.boolean().default(false),
+});
 
 export const ListArgs = z.object({
   filters: ChatFilters,
@@ -26,7 +28,7 @@ export const CreateArgs = z.object({
 });
 
 export const UpdateArgs = ChatWithSystemFields.pick({ _id: true }).extend({
-  patch: Chat.pick({ title: true }).partial(),
+  patch: Chat.pick({ title: true, isPinned: true }).partial(),
 });
 
 export const DeleteArgs = ChatWithSystemFields.pick({ _id: true });

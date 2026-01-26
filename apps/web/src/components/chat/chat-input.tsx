@@ -4,7 +4,7 @@ import type { useAgentChat } from "@cloudflare/ai-chat/react";
 
 export type ChatSettings = {
   model?: string;
-  reasoningEffort?: "low" | "medium" | "high";
+  reasoningEffort?: "low" | "medium" | "high" | undefined;
 };
 import {
   PromptInput,
@@ -22,6 +22,7 @@ import {
   AttachmentRemove,
 } from "@/components/ai-elements/attachments";
 import { ChatModelSelector } from "./chat-model-selector";
+import { ReasoningEffortSelector } from "./reasoning-effort-selector";
 import { TodosDisplay } from "./todos-display";
 import type { QueueTodo } from "@/components/ai-elements/queue";
 
@@ -35,6 +36,7 @@ export type ChatInputProps = {
   models: OpenRouterModel[];
   selectedModel?: OpenRouterModel;
   todos?: QueueTodo[];
+  messagesLength: number;
 };
 
 export function ChatInput({
@@ -47,7 +49,10 @@ export function ChatInput({
   models,
   selectedModel,
   todos = [],
+  messagesLength,
 }: ChatInputProps) {
+  const supportsReasoning = selectedModel?.supports_reasoning ?? false;
+
   return (
     <div className="pb-1 mx-auto w-4xl">
       <TodosDisplay todos={todos} />
@@ -67,7 +72,14 @@ export function ChatInput({
               selectedModel={selectedModel}
               settings={settings}
               onSettingsChange={setSettings}
+              messagesLength={messagesLength}
             />
+            {supportsReasoning && (
+              <ReasoningEffortSelector
+                currentEffort={settings.reasoningEffort}
+                onSelect={(effort) => setSettings((prev) => ({ ...prev, reasoningEffort: effort }))}
+              />
+            )}
           </PromptInputTools>
           <PromptInputSubmit status={status} onStop={onStop} />
         </PromptInputFooter>

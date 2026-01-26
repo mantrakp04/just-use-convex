@@ -48,3 +48,6 @@ coverage
 .cache
 tmp
 temp
+
+# Auto Claude data directory
+.auto-claude/

@@ -7,3 +7,11 @@ export const favoriteModelsAtom = atomWithStorage<string[]>(
   undefined,
   { getOnInit: true }
 );
+
+// Persisted default model slug
+export const defaultModelAtom = atomWithStorage<string | undefined>(
+  "default-model",
+  undefined,
+  undefined,
+  { getOnInit: true }
+);

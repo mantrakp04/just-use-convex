@@ -54,11 +54,22 @@ export function useChats() {
     [updateMutation]
   );
 
+  const togglePin = useCallback(
+    async (id: Id<"chats">, isPinned: boolean) => {
+      await updateMutation.mutateAsync({
+        _id: id,
+        patch: { isPinned },
+      });
+    },
+    [updateMutation]
+  );
+
   return {
     createChat: createMutation.mutateAsync,
     updateChat: updateMutation.mutateAsync,
     deleteChat: deleteMutation.mutateAsync,
     updateTitle,
+    togglePin,
     isCreating: createMutation.isPending,
     isUpdating: updateMutation.isPending,
     isDeleting: deleteMutation.isPending,
