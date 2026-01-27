@@ -52,7 +52,6 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, ChatState> {
 
   private async _init(request: Request): Promise<void> {
     const headers = request.headers;
-    console.log("headers", JSON.stringify(headers, null, 2));
     const token = headers.get('cookie')?.split(';').find(cookie =>
       cookie.trim().startsWith('better-auth.convex_jwt=')
     )?.split('=')[1];

@@ -1,5 +1,5 @@
 import alchemy from "alchemy";
-import { Worker, DurableObjectNamespace } from "alchemy/cloudflare";
+import { Worker, DurableObjectNamespace, WranglerJson } from "alchemy/cloudflare";
 
 const app = await alchemy("just-use-convex", {
   phase: process.argv.includes("--destroy") ? "destroy" : "up",
@@ -25,7 +25,17 @@ export const worker = await Worker("agent-worker", {
     OPENROUTER_API_KEY: alchemy.secret(process.env.OPENROUTER_API_KEY),
     OPENROUTER_MODEL: alchemy.secret(process.env.OPENROUTER_MODEL || "openai/gpt-5.2-chat"),
   },
-  domains: ["localhost:1337", "just-use-convex.mantrakp.workers.dev"]
+  observability: {
+    logs: {
+      enabled: true,
+      invocationLogs: true,
+    }
+  }
 });
 
 await app.finalize();
+
+await WranglerJson({
+  worker: worker,
+  path: "./wrangler.json",
+});
