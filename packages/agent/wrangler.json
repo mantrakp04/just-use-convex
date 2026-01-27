@@ -1,5 +1,5 @@
 {
-  "name": "just-use-convex",
+  "name": "just-use-convex-agent-worker-barrel",
   "main": "src/index.ts",
   "compatibility_date": "2026-01-20",
   "compatibility_flags": [
@@ -11,7 +11,7 @@
       {
         "name": "agentWorker",
         "class_name": "AgentWorker",
-        "script_name": "just-use-convex"
+        "script_name": "just-use-convex-agent-worker-barrel"
       }
     ]
   },
