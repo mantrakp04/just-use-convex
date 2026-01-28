@@ -15,10 +15,11 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import {
-  Reasoning,
-  ReasoningTrigger,
-  ReasoningContent,
-} from "@/components/ai-elements/reasoning";
+  ChainOfThought,
+  ChainOfThoughtContent,
+  ChainOfThoughtHeader,
+  ChainOfThoughtStep,
+} from "@/components/ai-elements/chain-of-thought";
 import {
   Tool,
   ToolHeader,
@@ -31,6 +32,7 @@ import {
   Attachment,
   AttachmentPreview,
 } from "@/components/ai-elements/attachments";
+import { cn } from "@/lib/utils";
 
 export interface MessageItemProps {
   message: UIMessage;
@@ -54,32 +56,48 @@ function TextPart({ part, role, partKey }: TextPartProps) {
 }
 
 interface ReasoningPartProps {
+  key: number;
   part: Extract<UIMessage["parts"][number], { type: "reasoning" }>;
   isStreaming: boolean;
-  partKey: number;
 }
 
-const ReasoningPart = memo(function ReasoningPart({ part, isStreaming, partKey }: ReasoningPartProps) {
+const ReasoningPart = memo(function ReasoningPart({ key, part, isStreaming }: ReasoningPartProps) {
   return (
-    <Reasoning key={partKey} isStreaming={isStreaming}>
-      <ReasoningTrigger />
-      <ReasoningContent>{part.text}</ReasoningContent>
-    </Reasoning>
+    <ChainOfThoughtStep
+      key={key}
+      label="Reasoning"
+      status={isStreaming ? "active" : "complete"}
+    >
+      <MessageResponse>{part.text}</MessageResponse>
+    </ChainOfThoughtStep>
   );
 });
 
 interface ToolPartProps {
-  part: Extract<UIMessage["parts"][number], { type: "dynamic-tool" }>;
+  part:  Extract<UIMessage["parts"][number], { type: `tool-${string}` }>;
   partKey: number;
 }
 
+// Extract tool name from type: "tool-write_todos" -> "write_todos"
+function getToolName(type: string): string {
+  return type.slice(5); // Remove "tool-" prefix
+}
+function isToolPart(
+  part: UIMessage["parts"][number]
+): part is Extract<UIMessage["parts"][number], { type: `tool-${string}` }> {
+  return part.type.startsWith("tool-");
+}
+
 const ToolPart = memo(function ToolPart({ part, partKey }: ToolPartProps) {
+  const toolPart = part
+  const toolName = getToolName(toolPart.type);
+
   return (
     <Tool key={partKey}>
-      <ToolHeader type="dynamic-tool" state={part.state} toolName={part.toolName} />
+      <ToolHeader type={toolPart.type} state={toolPart.state} toolName={toolName} />
       <ToolContent>
-        <ToolInput input={part.input} />
-        <ToolOutput output={part.output} errorText={part.errorText} />
+        <ToolInput input={toolPart.input} />
+        <ToolOutput output={toolPart.output} errorText={toolPart.errorText} />
       </ToolContent>
     </Tool>
   );
@@ -129,37 +147,97 @@ const CopyButton = memo(function CopyButton({ text }: { text: string }) {
   );
 });
 
+interface ChainOfThoughtPartProps {
+  isStreaming: boolean;
+  chainGroup: { part: UIMessage["parts"][number]; index: number }[];
+}
+
+const isChainOfThoughtPart = (part: UIMessage["parts"][number]): boolean => {
+  return part.type === "reasoning" || isToolPart(part);
+};
+
+const ChainOfThoughtPart = memo(function ChainOfThoughtPart(props: ChainOfThoughtPartProps) {
+  return (
+    <ChainOfThought defaultOpen={false}>
+      <ChainOfThoughtHeader className={cn(props.isStreaming ? "animate-pulse" : "", "w-fit")}>
+        {props.isStreaming ? "Exploring..." : "Explored"}
+      </ChainOfThoughtHeader>
+      <ChainOfThoughtContent>
+        {props.chainGroup.map(({ part: p, index }) => {
+          if (p.type === "reasoning") {
+            return (
+              <ReasoningPart
+                key={index}
+                part={p}
+                isStreaming={props.isStreaming}
+              />
+            );
+          }
+          if (isToolPart(p)) {
+            return <ToolPart key={index} part={p} partKey={index} />;
+          }
+          return null;
+        })}
+      </ChainOfThoughtContent>
+    </ChainOfThought>
+  );
+});
+
 export const MessageItem = memo(function MessageItem({ message, isStreaming }: MessageItemProps) {
   const messageText = message.parts
     .filter((part) => part.type === "text")
     .map((part) => (part as Extract<UIMessage["parts"][number], { type: "text" }>).text)
     .join("\n");
 
+  const excludedTools = ["write_todos"];
+  const isExcludedTool = (part: UIMessage["parts"][number]): boolean => {
+    return excludedTools.includes(getToolName(part.type));
+  };
+
+  const renderParts = () => {
+    const elements: React.ReactNode[] = [];
+    let chainGroup: { part: UIMessage["parts"][number]; index: number }[] = [];
+
+    message.parts.forEach((part, i) => {
+      if (part.type === "step-start" || isExcludedTool(part)) {
+        return;
+      }
+      if (isChainOfThoughtPart(part)) {
+        chainGroup.push({ part, index: i });
+      } else {
+        if (chainGroup.length > 0) {
+          elements.push(
+            <ChainOfThoughtPart key={`chain-${chainGroup[0].index}`} isStreaming={isStreaming} chainGroup={chainGroup} />
+          );
+          chainGroup = [];
+        }
+
+        // Render the non-chain part
+        if (part.type === "text") {
+          elements.push(
+            <TextPart key={i} part={part} role={message.role} partKey={i} />
+          );
+        } else if (part.type === "file") {
+          elements.push(<FilePart key={i} part={part} partKey={i} />);
+        }
+      }
+    });
+
+    // Flush remaining chain group
+    if (chainGroup.length > 0) {
+      elements.push(
+        <ChainOfThoughtPart key={`chain-${chainGroup[0].index}`} isStreaming={isStreaming} chainGroup={chainGroup} />
+      );
+    }
+
+    return elements;
+  };
+
   return (
     <Message from={message.role} className="mx-auto w-4xl px-4">
       <div className="group/message">
         <MessageContent className="group-[.is-user]:max-w-[70%]">
-          {message.parts.map((part, i) => {
-            if (part.type === "text") {
-              return <TextPart key={i} part={part} role={message.role} partKey={i} />;
-            }
-
-            if (part.type === "reasoning") {
-              return (
-                <ReasoningPart key={i} part={part} isStreaming={isStreaming} partKey={i} />
-              );
-            }
-
-            if (part.type === "dynamic-tool") {
-              return <ToolPart key={i} part={part} partKey={i} />;
-            }
-
-            if (part.type === "file") {
-              return <FilePart key={i} part={part} partKey={i} />;
-            }
-
-            return null;
-          })}
+          {renderParts()}
         </MessageContent>
         {messageText && !isStreaming && (
           <MessageActions className="mt-2 opacity-0 transition-opacity group-hover/message:opacity-100 justify-end">

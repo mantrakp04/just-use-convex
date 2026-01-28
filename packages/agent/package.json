@@ -10,18 +10,14 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@ai-sdk/openai-compatible": "^1.0.0",
     "@just-use-convex/backend": "workspace:*",
-    "@ai-sdk/langchain": "^2.0.54",
-    "@langchain/core": "^1.1.16",
-    "@langchain/langgraph-checkpoint": "^1.0.0",
-    "@langchain/openai": "^1.2.3",
-    "@libsql/client": "^0.17.0",
+    "@openrouter/ai-sdk-provider": "^2.1.1",
+    "@voltagent/core": "^2.2.2",
     "agents": "^0.3.6",
     "ai": "^6.0.49",
     "alchemy": "^0.83.1",
     "convex": "^1.31.6",
-    "deepagents": "^1.6.0",
-    "drizzle-orm": "^0.45.1",
     "zod": "^3.24.0"
   },
   "devDependencies": {

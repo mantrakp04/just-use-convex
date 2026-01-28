@@ -82,21 +82,15 @@ function ChatPage() {
     if (lastMsg?.role !== "assistant") return state;
 
     for (const part of lastMsg.parts) {
-      if (part.type !== "dynamic-tool") continue;
-
-      switch (part.toolName) {
-        case "write_todos": {
-          const output = part.input as {
-            todos?: Array<{ content: string; status: string }>;
-          };
-          if (output?.todos) {
-            state.todos = output.todos.map((t, idx) => ({
-              id: `todo-${idx}`,
-              title: t.content,
-              status: t.status as "pending" | "in_progress" | "completed",
-            }));
-          }
-          break;
+      if (part.type === "tool-write_todos") {
+        const toolPart = part as { input?: { todos?: Array<{ content: string; status: string; id?: string }> }; output?: { todos?: Array<{ content: string; status: string; id?: string }> } };
+        const todosData = toolPart.output?.todos ?? toolPart.input?.todos;
+        if (todosData) {
+          state.todos = todosData.map((t) => ({
+            id: t.id!,
+            title: t.content,
+            status: t.status as "pending" | "in_progress" | "done",
+          }));
         }
       }
     }
