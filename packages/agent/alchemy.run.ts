@@ -24,6 +24,7 @@ export const worker = await Worker("agent-worker", {
     SITE_URL: alchemy.secret(process.env.SITE_URL || "http://localhost:3001"),
     OPENROUTER_API_KEY: alchemy.secret(process.env.OPENROUTER_API_KEY),
     OPENROUTER_MODEL: alchemy.secret(process.env.OPENROUTER_MODEL || "openai/gpt-5.2-chat"),
+    COMPOSIO_API_KEY: alchemy.secret(process.env.COMPOSIO_API_KEY || ''),
   },
   observability: {
     logs: {

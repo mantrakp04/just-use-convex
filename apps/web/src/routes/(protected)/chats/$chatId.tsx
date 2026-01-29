@@ -1,9 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { Bot } from "lucide-react";
-import type { UIMessage } from "@ai-sdk/react";
-import { useCallback, useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useOpenRouterModels, type OpenRouterModel } from "@/hooks/use-openrouter-models";
-import { ChatInput, type ChatInputProps } from "@/components/chat";
+import { ChatInput } from "@/components/chat";
 import {
   Conversation,
   ConversationContent,
@@ -11,35 +10,10 @@ import {
   ConversationEmptyState,
 } from "@/components/ai-elements/conversation";
 import { Skeleton } from "@/components/ui/skeleton";
-import { VirtualMessageList } from "@/components/chat/virtual-message-list";
-import type { QueueTodo } from "@/components/ai-elements/queue";
-import type { ConfirmationProps } from "@/components/ai-elements/confirmation";
+import { MessageList, type TodosState } from "@/components/chat/message-list";
 import { useAgentInstance } from "@/providers/agent";
 import { TodosDisplay } from "@/components/chat/todos-display";
-import type { ChatAddToolApproveResponseFunction } from "ai";
-
-// Types
-type TodosArray = Array<{ content: string; status: string; id?: string }>;
-
-type TodosToolPart = {
-  toolCallId?: string;
-  input?: { todos?: TodosArray };
-  output?: { todos?: TodosArray };
-  state?: ConfirmationProps['state'];
-  approval?: ConfirmationProps['approval'];
-};
-
-type TodosState = {
-  todos: QueueTodo[];
-  todosApproval?: ConfirmationProps['approval'];
-  todosState?: ConfirmationProps['state'];
-  todosToolCallId?: string;
-  todosInput?: { todos?: TodosArray };
-};
-
-// Helpers
-const mapTodoStatus = (status: string): "pending" | "in_progress" | "done" =>
-  (status as "pending" | "in_progress" | "done");
+import { useChat } from "@/hooks/use-chat";
 
 export const Route = createFileRoute("/(protected)/chats/$chatId")({
   component: ChatPage,
@@ -66,6 +40,20 @@ function ChatPage() {
     [models, settings.model]
   );
 
+  const [todosState, setTodosState] = useState<TodosState>({ todos: [] });
+
+  const {
+    status,
+    error,
+    stop,
+    messages,
+    isStreaming,
+    handleSubmit,
+    handleToolApprovalResponse,
+    handleRegenerate,
+    handleEditMessage,
+  } = useChat(chat);
+
   if (!isReady || !chat) {
     return (
       <div className="flex flex-col h-full">
@@ -75,74 +63,6 @@ function ChatPage() {
       </div>
     );
   }
-
-
-  // Extract values safely before any conditional returns to maintain hook order
-  const { status, error, stop, messages, sendMessage, addToolApprovalResponse } = chat;
-
-  const handleSubmit: ChatInputProps["onSubmit"] = useCallback(
-    async ({ text, files }: { text: string; files: Array<{ url: string; mediaType: string; filename?: string }> }) => {
-      if (!sendMessage) return;
-      if (!text.trim() && files.length === 0) return;
-
-      const parts: UIMessage["parts"] = [];
-
-      if (text.trim()) {
-        parts.push({ type: "text", text });
-      }
-
-      for (const file of files) {
-        parts.push({
-          type: "file",
-          url: file.url,
-          mediaType: file.mediaType,
-          filename: file.filename,
-        });
-      }
-
-      await sendMessage({
-        role: "user",
-        parts,
-      });
-    },
-    [sendMessage]
-  );
-
-  const handleToolApprovalResponse: ChatAddToolApproveResponseFunction = useCallback((response) => {
-    addToolApprovalResponse(response);
-    sendMessage()
-  }, [addToolApprovalResponse]);
-
-  const derivedState = useMemo(() => {
-    const state: TodosState = {
-      todos: [],
-    };
-
-    const lastMsg = messages[messages.length - 1];
-    if (lastMsg?.role !== "assistant") return state;
-
-    for (const part of lastMsg.parts) {
-      if (part.type === "tool-write_todos") {
-        const toolPart = part as TodosToolPart;
-        const todosData = toolPart.output?.todos ?? toolPart.input?.todos;
-        if (todosData) {
-          state.todos = todosData.map((t) => ({
-            id: t.id!,
-            title: t.content,
-            status: mapTodoStatus(t.status),
-          }));
-        }
-        state.todosApproval = toolPart.approval;
-        state.todosState = toolPart.state;
-        state.todosToolCallId = toolPart.toolCallId;
-        state.todosInput = toolPart.input;
-      }
-    }
-
-    return state;
-  }, [messages]);
-
-  const isStreaming = status === "streaming";
 
   return (
     <div className="flex flex-col h-full w-full">
@@ -155,7 +75,14 @@ function ChatPage() {
               description="Ask me anything or share files to get started"
             />
           ) : (
-            <VirtualMessageList messages={messages} isStreaming={isStreaming} toolApprovalResponse={handleToolApprovalResponse} />
+            <MessageList
+              messages={messages}
+              isStreaming={isStreaming}
+              toolApprovalResponse={handleToolApprovalResponse}
+              onRegenerate={handleRegenerate}
+              onEditMessage={handleEditMessage}
+              onTodosChange={setTodosState}
+            />
           )}
           {error && (
             <div className="text-sm text-destructive bg-destructive/10 rounded-lg px-4 py-3 mx-auto w-4xl">
@@ -168,9 +95,9 @@ function ChatPage() {
 
       <div className="mx-auto w-4xl">
         <TodosDisplay
-          todos={derivedState.todos}
-          approval={derivedState.todosApproval}
-          state={derivedState.todosState}
+          todos={todosState.todos}
+          approval={todosState.todosApproval}
+          state={todosState.todosState}
           toolApprovalResponse={handleToolApprovalResponse}
         />
       </div>

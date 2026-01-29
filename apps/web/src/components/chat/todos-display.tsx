@@ -41,7 +41,7 @@ export const TodosDisplay = memo(function TodosDisplay({ todos, approval, state,
         <QueueSectionContent>
           <QueueList>
             {todos.map((todo, i) => (
-              <QueueItem key={todo.id || i}>
+              <QueueItem key={todo.id || `todo-${i}`}>
                 <div className="flex items-start gap-2">
                   <QueueItemIndicator
                     completed={todo.status === "done"}

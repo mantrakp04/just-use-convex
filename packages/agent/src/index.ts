@@ -1,12 +1,13 @@
 import { routeAgentRequest, type Connection, type ConnectionContext } from "agents";
 import { AIChatAgent, type OnChatMessageOptions } from "agents/ai-chat-agent";
-import type { StreamTextOnFinishCallback, ToolSet } from "ai";
-import { type PlanAgent } from "@voltagent/core";
+import { generateText, type StreamTextOnFinishCallback, type ToolSet, Output } from "ai";
+import { type PlanAgent, NodeFilesystemBackend } from "@voltagent/core";
 import { createAiClient } from "./client";
 import type { worker } from "../alchemy.run";
 import { ConvexHttpClient } from "convex/browser";
 import { api } from "@just-use-convex/backend/convex/_generated/api";
 import type { Id } from "@just-use-convex/backend/convex/_generated/dataModel";
+import { z } from "zod";
 
 // State type for chat settings synced from frontend
 type ChatState = {
@@ -37,6 +38,32 @@ export default {
 export class AgentWorker extends AIChatAgent<typeof worker.Env, ChatState> {
   private convexClient: ConvexHttpClient | null = null;
   private planAgent: PlanAgent | null = null;
+
+  private async generateTitle(userMessage: string): Promise<void> {
+    if (!this.convexClient) return;
+
+    try {
+      const { output } = await generateText({
+        model: createAiClient("openai/gpt-oss-20b"),
+        output: Output.object({
+          schema: z.object({
+            title: z.string().describe("A short, concise title (max 6 words) for a chat conversation based on the user's first message."),
+          }),
+        }),
+        prompt: userMessage,
+      });
+
+      const title = output.title;
+      if (title) {
+        await this.convexClient.mutation(api.chats.index.update, {
+          _id: this.name as Id<"chats">,
+          patch: { title },
+        });
+      }
+    } catch (error) {
+      console.error("Failed to generate title:", error);
+    }
+  }
   
   private async _init(request: Request): Promise<void> {
     const token = (new URL(request.url)).searchParams.get('token');
@@ -59,22 +86,25 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, ChatState> {
   }
 
   private async _prepAgent(): Promise<PlanAgent> {
-    const { PlanAgent, NodeFilesystemBackend } = await import("@voltagent/core");
+    const { PlanAgent } = await import("@voltagent/core");
+    
+    const filesystemBackend = new NodeFilesystemBackend({
+      rootDir: "/tmp/voltagent",
+      virtualMode: true,
+    });
+
     const agent = new PlanAgent({
       name: "Assistant",
       systemPrompt: "You are a helpful assistant.",
       model: createAiClient(this.state?.model || this.env.OPENROUTER_MODEL, this.state?.reasoningEffort),
       filesystem: {
-        backend: new NodeFilesystemBackend({
-          rootDir: process.cwd(),
-          virtualMode: true,
-        }),
+        backend: filesystemBackend,
       },
       toolResultEviction: {
         enabled: true,
         tokenLimit: 20000,
       },
-      maxSteps: 100,
+      maxSteps: 100
     });
     const writeTodos = agent.getTools().find(t => t.name === "write_todos");
     if (writeTodos) {
@@ -118,9 +148,21 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, ChatState> {
     options?: OnChatMessageOptions
   ): Promise<Response> {
     try {
+      // Generate title for first message (fire and forget)
+      if (this.messages.length === 1) {
+        const firstMessage = this.messages[0];
+        const textContent = firstMessage?.parts
+          ?.filter((p): p is { type: "text"; text: string } => p.type === "text")
+          .map((p) => p.text)
+          .join(" ");
+        if (textContent) {
+          this.generateTitle(textContent);
+        }
+      }
+
       const agent = this.planAgent || (await this._prepAgent());
       const stream = await agent?.streamText(this.messages, {
-        abortSignal: options?.abortSignal
+        abortSignal: options?.abortSignal,
       })
 
       return stream.toUIMessageStreamResponse();
