@@ -1,4 +1,4 @@
-import { routeAgentRequest, type Connection, type ConnectionContext } from "agents";
+import { routeAgentRequest, type Connection, type ConnectionContext, callable } from "agents";
 import { AIChatAgent, type OnChatMessageOptions } from "agents/ai-chat-agent";
 import { generateText, type StreamTextOnFinishCallback, type ToolSet, Output } from "ai";
 import { type PlanAgent, NodeFilesystemBackend } from "@voltagent/core";
@@ -141,6 +141,23 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, ChatState> {
   override async onStateUpdate(state: ChatState, source: Connection | "server"): Promise<void> {
     await this._prepAgent();
     await super.onStateUpdate(state, source);
+  }
+
+  @callable()
+  async updateMessages(messages: Parameters<typeof this.persistMessages>[0]) {
+    // Get the IDs of messages to keep
+    const keepIds = new Set(messages.map(m => m.id));
+    
+    // Delete messages that are no longer in the list
+    const existingMessages = this.messages;
+    for (const msg of existingMessages) {
+      if (!keepIds.has(msg.id)) {
+        this.sql`DELETE FROM cf_ai_chat_agent_messages WHERE id = ${msg.id}`;
+      }
+    }
+    
+    // Persist the new message set
+    await this.persistMessages(messages);
   }
 
   override async onChatMessage(

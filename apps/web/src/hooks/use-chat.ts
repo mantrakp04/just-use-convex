@@ -6,6 +6,9 @@ import type { TodosState } from "@/components/chat/message-list";
 import { isToolPart } from "@/components/chat/message-items/tool-part";
 
 type AgentChatInstance = ReturnType<typeof useAgentChat>;
+type AgentConnection = {
+  call: (method: string, args?: unknown[]) => Promise<unknown>;
+} | null;
 
 type TodosArray = Array<{ content: string; status: string; id?: string }>;
 
@@ -59,7 +62,7 @@ export function extractTodosFromMessage(
   return null;
 }
 
-export function useChat(chat: AgentChatInstance | null) {
+export function useChat(chat: AgentChatInstance | null, agent: AgentConnection = null) {
   const status = chat?.status || "ready";
   const error = chat?.error;
   const stop = chat?.stop;
@@ -74,6 +77,14 @@ export function useChat(chat: AgentChatInstance | null) {
   const findMessageIndex = useCallback(
     (messageId: string): number => messages.findIndex((m) => m.id === messageId),
     [messages]
+  );
+
+  const saveMessages = useCallback(
+    async (msgs: UIMessage[]) => {
+      if (!agent) return;
+      await agent.call("updateMessages", [msgs]);
+    },
+    [agent]
   );
 
   const handleSubmit = useCallback(
@@ -126,14 +137,16 @@ export function useChat(chat: AgentChatInstance | null) {
       const messageIndex = findMessageIndex(messageId);
       if (messageIndex === -1) return;
 
-      setMessages(messages.slice(0, messageIndex + 1));
+      const truncatedMessages = messages.slice(0, messageIndex + 1);
+      setMessages(truncatedMessages);
+      await saveMessages(truncatedMessages);
       await regenerate({ messageId });
     },
-    [messages, setMessages, regenerate, findMessageIndex]
+    [messages, setMessages, regenerate, findMessageIndex, saveMessages]
   );
 
   const handleEditMessage = useCallback(
-    (messageId: string, newText: string, files: FileUIPart[]) => {
+    async (messageId: string, newText: string, files: FileUIPart[]) => {
       if (!setMessages || !sendMessage) return;
 
       const messageIndex = findMessageIndex(messageId);
@@ -149,9 +162,10 @@ export function useChat(chat: AgentChatInstance | null) {
       );
 
       setMessages(updatedMessages);
-      sendMessage();
+      await saveMessages(updatedMessages);
+      await sendMessage();
     },
-    [messages, setMessages, sendMessage, findMessageIndex]
+    [messages, setMessages, sendMessage, findMessageIndex, saveMessages]
   );
 
   return {

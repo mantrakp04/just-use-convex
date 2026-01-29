@@ -32,7 +32,7 @@ function ChatLoadingSkeleton() {
 
 function ChatPage() {
   const { chatId } = Route.useParams();
-  const { chat, settings, setSettings, isReady } = useAgentInstance(chatId);
+  const { chat, agent, settings, setSettings, isReady } = useAgentInstance(chatId);
   const { groupedModels, models } = useOpenRouterModels();
 
   const selectedModel = useMemo(
@@ -52,7 +52,7 @@ function ChatPage() {
     handleToolApprovalResponse,
     handleRegenerate,
     handleEditMessage,
-  } = useChat(chat);
+  } = useChat(chat, agent);
 
   if (!isReady || !chat) {
     return (
