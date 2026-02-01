@@ -11,6 +11,9 @@ import { z, type ZodObject, type ZodRawShape } from "zod";
 // Types
 // ============================================================================
 
+// --- Background Task Types ---
+
+/** Status of a background task */
 export type BackgroundTaskStatus =
   | "pending"
   | "running"
@@ -18,14 +21,17 @@ export type BackgroundTaskStatus =
   | "failed"
   | "cancelled";
 
+/** Type of log entry in a background task */
 export type BackgroundTaskLogType = "stdout" | "stderr" | "info" | "error";
 
+/** A single log entry from a background task */
 export type BackgroundTaskLog = {
   timestamp: number;
   type: BackgroundTaskLogType;
   message: string;
 };
 
+/** Internal representation of a background task */
 export type BackgroundTask = {
   id: string;
   toolName: string;
@@ -39,38 +45,62 @@ export type BackgroundTask = {
   abortController?: AbortController;
 };
 
+/** Result returned when a task is started or converted to background */
+export type BackgroundTaskResult = {
+  backgroundTaskId: string;
+  status: "started" | "converted_to_background";
+  toolName: string;
+  message: string;
+};
+
+/** Options for runInBackground helper */
+export type RunInBackgroundOptions = {
+  toolName: string;
+  toolArgs: Record<string, unknown>;
+  executionPromise: Promise<unknown> | unknown;
+  timeoutMs: number;
+  /** If provided, task was converted from foreground (affects status) */
+  initialLog?: string;
+};
+
+// --- Tool Configuration Types ---
+
+/** Configuration for wrapped tool timeout and background behavior */
 export type ToolCallConfig = {
   /** Default timeout in ms (default: 60000ms) */
   duration?: number;
   /** Allow agent to set custom timeout (default: false) */
   allowAgentSetDuration?: boolean;
-  /** Max timeout agent can set in ms (default: 1800000ms = 30m), if allowAgentSetDuration is true and maxAllowedAgentDuration is not set, it will be set to duration*/
+  /** Max timeout agent can set in ms (default: 1800000ms = 30m) */
   maxAllowedAgentDuration?: number;
-  /** Allow agent to run tool in background (default: false), if allowAgentSetDuration is true, make sure to include the args for em */
+  /** Allow agent to run tool in background via background param (default: false) */
   allowBackground?: boolean;
 };
 
+/** Extended execute options passed to wrapped tool handlers */
 export type WrappedExecuteOptions = ToolExecuteOptions & {
   timeout?: number;
   log?: (entry: { type: BackgroundTaskLogType; message: string }) => void;
 };
 
-/** Symbol to mark tools that have background execution enabled */
-export const BACKGROUND_ENABLED: unique symbol = Symbol.for("backgroundEnabled");
+/** Options for createWrappedTool */
+export type WrappedToolOptions = Omit<
+  Parameters<typeof createTool>[0],
+  "execute" | "parameters"
+> & {
+  parameters: ZodObject<ZodRawShape>;
+  toolCallConfig?: ToolCallConfig;
+  execute?: (
+    args: Record<string, unknown>,
+    options?: WrappedExecuteOptions
+  ) => unknown | Promise<unknown>;
+};
 
-/** Tool with background enabled marker */
-interface BackgroundMarkedTool extends BaseTool {
-  [BACKGROUND_ENABLED]?: boolean;
-}
+// --- Utility Types ---
 
-/** Type guard for background-marked tools */
-function isBackgroundMarked(tool: unknown): tool is BackgroundMarkedTool {
-  return (
-    typeof tool === "object" &&
-    tool !== null &&
-    BACKGROUND_ENABLED in tool
-  );
-}
+/** A tool or toolkit that can be passed to withBackgroundTaskTools */
+export type ToolOrToolkit = BaseTool | Toolkit;
+
 
 // ============================================================================
 // BackgroundTaskStore
@@ -217,20 +247,73 @@ async function executeWithTimeout<R>(
 }
 
 // ============================================================================
-// createWrappedTool
+// Background Task Runner
 // ============================================================================
 
-type WrappedToolOptions = Omit<
-  Parameters<typeof createTool>[0],
-  "execute" | "parameters"
-> & {
-  parameters: ZodObject<ZodRawShape>;
-  toolCallConfig?: ToolCallConfig;
-  execute?: (
-    args: Record<string, unknown>,
-    options?: WrappedExecuteOptions
-  ) => unknown | Promise<unknown>;
-};
+/**
+ * Runs a promise as a background task, tracking its progress and result.
+ * Returns immediately with task info.
+ */
+function runInBackground({
+  toolName,
+  toolArgs,
+  executionPromise,
+  timeoutMs,
+  initialLog,
+}: RunInBackgroundOptions): BackgroundTaskResult {
+  const task = backgroundTaskStore.create(toolName, toolArgs);
+  backgroundTaskStore.update(task.id, { status: "running" });
+
+  if (initialLog) {
+    backgroundTaskStore.addLog(task.id, { type: "info", message: initialLog });
+  }
+
+  // Fire-and-forget execution
+  void (async () => {
+    try {
+      const result = await executeWithTimeout(
+        () => executionPromise,
+        timeoutMs,
+        task.abortController?.signal
+      );
+
+      // Auto-capture stdout/stderr from result
+      if (result && typeof result === "object" && result !== null) {
+        if ("stdout" in result && typeof result.stdout === "string" && result.stdout) {
+          backgroundTaskStore.addLog(task.id, { type: "stdout", message: result.stdout });
+        }
+        if ("stderr" in result && typeof result.stderr === "string" && result.stderr) {
+          backgroundTaskStore.addLog(task.id, { type: "stderr", message: result.stderr });
+        }
+      }
+
+      backgroundTaskStore.update(task.id, {
+        status: "completed",
+        completedAt: Date.now(),
+        result,
+      });
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      backgroundTaskStore.addLog(task.id, { type: "error", message: errorMessage });
+      backgroundTaskStore.update(task.id, {
+        status: error instanceof Error && error.name === "AbortError" ? "cancelled" : "failed",
+        completedAt: Date.now(),
+        error: errorMessage,
+      });
+    }
+  })();
+
+  return {
+    backgroundTaskId: task.id,
+    status: initialLog ? "converted_to_background" : "started",
+    toolName,
+    message: `Task running in background. Use get_background_task_logs or wait_for_background_task to check progress.`,
+  };
+}
+
+// ============================================================================
+// createWrappedTool
+// ============================================================================
 
 /**
  * Creates a tool with configurable timeout and background execution capabilities.
@@ -256,7 +339,7 @@ type WrappedToolOptions = Omit<
  * });
  * ```
  */
-export function createWrappedTool(options: WrappedToolOptions): BackgroundMarkedTool {
+export function createWrappedTool(options: WrappedToolOptions): BaseTool {
   const { name, description, toolCallConfig = {}, parameters, execute } = options;
 
   const {
@@ -315,86 +398,50 @@ export function createWrappedTool(options: WrappedToolOptions): BackgroundMarked
         ? Math.min(timeout, maxAllowedAgentDuration)
         : duration;
 
-    // Build execute options with log callback
-    const buildExecOptions = (logCallback?: (entry: { type: BackgroundTaskLogType; message: string }) => void, abortController?: AbortController): WrappedExecuteOptions => ({
-      ...opts,
-      ...(logCallback && { log: logCallback }),
-      ...(abortController && { abortController }),
-    });
-
-    // Handle background execution
+    // Handle explicit background execution
     if (allowBackground && background) {
-      const task = backgroundTaskStore.create(name, toolArgs);
-      backgroundTaskStore.update(task.id, { status: "running" });
-
-      // Log callback for background task
-      const logCallback = (entry: { type: BackgroundTaskLogType; message: string }) => {
-        backgroundTaskStore.addLog(task.id, entry);
-      };
-
-      // Fire-and-forget execution
-      void (async () => {
-        try {
-          const result = await executeWithTimeout(
-            () => execute?.(toolArgs, buildExecOptions(logCallback, task.abortController)),
-            effectiveTimeout,
-            task.abortController?.signal
-          );
-
-          // Auto-capture stdout/stderr from result
-          if (result && typeof result === "object" && result !== null) {
-            if ("stdout" in result && typeof result.stdout === "string" && result.stdout) {
-              backgroundTaskStore.addLog(task.id, { type: "stdout", message: result.stdout });
-            }
-            if ("stderr" in result && typeof result.stderr === "string" && result.stderr) {
-              backgroundTaskStore.addLog(task.id, { type: "stderr", message: result.stderr });
-            }
-          }
-
-          backgroundTaskStore.update(task.id, {
-            status: "completed",
-            completedAt: Date.now(),
-            result,
-          });
-        } catch (error) {
-          const errorMessage = error instanceof Error ? error.message : String(error);
-          backgroundTaskStore.addLog(task.id, { type: "error", message: errorMessage });
-          backgroundTaskStore.update(task.id, {
-            status: error instanceof Error && error.name === "AbortError" ? "cancelled" : "failed",
-            completedAt: Date.now(),
-            error: errorMessage,
-          });
-        }
-      })();
-
-      // Return immediately with task info
-      return {
-        backgroundTaskId: task.id,
-        status: "started",
+      return runInBackground({
         toolName: name,
-        message: `Task started in background. Use get_background_task_logs or wait_for_background_task to check progress.`,
-      };
+        toolArgs,
+        executionPromise: execute?.(toolArgs, opts),
+        timeoutMs: effectiveTimeout,
+      });
     }
 
-    // Foreground execution with timeout
-    return executeWithTimeout(
-      () => execute?.(toolArgs, opts),
-      effectiveTimeout,
-      opts?.toolContext?.abortSignal ?? opts?.abortController?.signal
-    );
+    // Foreground execution with timeout - converts to background task on timeout
+    const executionPromise = execute?.(toolArgs, opts);
+    const abortSignal = opts?.toolContext?.abortSignal ?? opts?.abortController?.signal;
+
+    try {
+      return await executeWithTimeout(
+        () => executionPromise,
+        effectiveTimeout,
+        abortSignal
+      );
+    } catch (error) {
+      // Check if it's a timeout error (not abort or other error)
+      if (error instanceof Error && error.message.includes("timed out")) {
+        // Convert to background task with 30 minute max duration
+        const MAX_BACKGROUND_TIMEOUT = 30 * 60 * 1000; // 30 minutes
+        return runInBackground({
+          toolName: name,
+          toolArgs,
+          executionPromise,
+          timeoutMs: MAX_BACKGROUND_TIMEOUT,
+          initialLog: `Foreground execution timed out after ${effectiveTimeout}ms, converted to background task`,
+        });
+      }
+      // Re-throw non-timeout errors (e.g., AbortError)
+      throw error;
+    }
   };
 
-  const tool: BackgroundMarkedTool = Object.assign(
-    createTool({
-      name,
-      description,
-      parameters: augmentedParameters,
-      execute: wrappedExecute,
-    }),
-    { [BACKGROUND_ENABLED]: allowBackground }
-  );
-
-  return tool;
+  return createTool({
+    name,
+    description,
+    parameters: augmentedParameters,
+    execute: wrappedExecute,
+  });
 }
 
 // ============================================================================
@@ -593,23 +640,13 @@ export const backgroundTaskToolkit = createToolkit({
   ],
 });
 
-type ToolOrToolkit = BaseTool | Toolkit;
-
 /**
- * Checks if a tool has background execution enabled.
- */
-export function hasBackgroundEnabled(tool: unknown): boolean {
-  return isBackgroundMarked(tool) && tool[BACKGROUND_ENABLED] === true;
-}
-
-/**
- * Processes a list of tools/toolkits and automatically adds the background task toolkit
- * if any tool has background execution enabled.
- *
- * Use this at the agent level when combining tools and toolkits.
+ * Adds the background task toolkit to a list of tools/toolkits.
+ * Background task tools are always needed since any wrapped tool can convert to a
+ * background task on timeout.
  *
  * @param tools - Array of tools and/or toolkits
- * @returns The tools array with backgroundTaskToolkit added if needed
+ * @returns The tools array with backgroundTaskToolkit added
  *
  * @example
  * ```ts
@@ -624,18 +661,5 @@ export function hasBackgroundEnabled(tool: unknown): boolean {
 export function withBackgroundTaskTools<T extends ToolOrToolkit>(
   tools: T[]
 ): (T | Toolkit)[] {
-  const hasBackground = tools.some((tool) => {
-    // Check if it's a toolkit with tools
-    if ("tools" in tool && Array.isArray(tool.tools)) {
-      return tool.tools.some(hasBackgroundEnabled);
-    }
-    // Check individual tool
-    return hasBackgroundEnabled(tool);
-  });
-
-  if (hasBackground) {
-    return [...tools, backgroundTaskToolkit];
-  }
-
-  return tools;
+  return [...tools, backgroundTaskToolkit];
 }
