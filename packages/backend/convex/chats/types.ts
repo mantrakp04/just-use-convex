@@ -24,7 +24,7 @@ export const ListArgs = z.object({
 export const GetChatArgs = ChatWithSystemFields.pick({ _id: true });
 
 export const CreateArgs = z.object({
-  data: Chat.pick({ title: true }),
+  data: Chat.pick({ title: true, sandboxId: true }),
 });
 
 export const UpdateArgs = ChatWithSystemFields.pick({ _id: true }).extend({

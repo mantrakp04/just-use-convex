@@ -15,6 +15,7 @@ import type { DataModel } from "./_generated/dataModel";
 import { v, type Infer } from "convex/values";
 import { allTodoAggregates } from "./todos/aggregates";
 import { allChatAggregates } from "./chats/aggregates";
+import { allSandboxAggregates } from "./sandboxes/aggregates";
 
 const triggers = new Triggers<DataModel>();
 
@@ -26,6 +27,11 @@ for (const aggregate of allTodoAggregates) {
 // Register all aggregate triggers for chats table
 for (const aggregate of allChatAggregates) {
   triggers.register("chats", aggregate.trigger());
+}
+
+// Register all aggregate triggers for sandboxes table
+for (const aggregate of allSandboxAggregates) {
+  triggers.register("sandboxes", aggregate.trigger());
 }
 
 // Wrap base mutations with triggers

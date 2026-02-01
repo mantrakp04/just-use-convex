@@ -2,6 +2,7 @@ import { z } from "zod";
 import { defineEntFromTable } from "convex-ents";
 import { Table } from "convex-helpers/server";
 import { convexToZodFields, zodToConvexFields } from "convex-helpers/server/zod4";
+import { sandboxesWithSystemFields } from "./sandboxes";
 
 export const chatsZodSchema = {
   organizationId: z.string(),
@@ -9,9 +10,12 @@ export const chatsZodSchema = {
   title: z.string(),
   isPinned: z.boolean(),
   updatedAt: z.number(),
+  sandboxId: sandboxesWithSystemFields._id.optional(),
 };
 
-export const chatsFields = zodToConvexFields(chatsZodSchema);
+export const chatsFields = {
+  ...zodToConvexFields(chatsZodSchema),
+};
 
 export const Chats = Table("chats", chatsFields);
 
@@ -28,4 +32,6 @@ const chatsTable = Chats.table
   .index("organizationId", ["organizationId", "updatedAt"])
   .index("userId", ["userId"]);
 
-export const chatsEnt = defineEntFromTable(chatsTable);
+// Many chats belong to one sandbox (optional relationship)
+export const chatsEnt = defineEntFromTable(chatsTable)
+  .edge("sandbox", { to: "sandboxes", field: "sandboxId", optional: true });

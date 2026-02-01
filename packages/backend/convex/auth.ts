@@ -6,7 +6,7 @@ import type { GenericActionCtx, GenericMutationCtx } from "convex/server";
 
 import type { DataModel } from "./_generated/dataModel";
 import { ac, roles } from "./shared/auth_shared";
-import { components } from "./_generated/api";
+import { components, internal } from "./_generated/api";
 import { internalAction, query } from "./_generated/server";
 import authConfig from "./auth.config";
 import authSchema from "./betterAuth/schema";
@@ -189,6 +189,22 @@ export const createAuthOptions = (ctx: GenericCtx<DataModel>) => {
                     activeTeamId: team._id,
                     updatedAt: now,
                   },
+                },
+              }
+            );
+
+            // Create a default sandbox for the user
+            await ctx.runMutation(
+              internal.sandboxes.index.createInternal,
+              {
+                // Identity fields required by zInternalMutation
+                userId: user.id,
+                activeOrganizationId: org._id,
+                organizationRole: "owner",
+                // Sandbox data
+                data: {
+                  name: "Default Sandbox",
+                  description: "Your personal development sandbox",
                 },
               }
             );

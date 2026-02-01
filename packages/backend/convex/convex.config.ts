@@ -24,4 +24,8 @@ app.use(aggregate, { name: "todosByCreatorStatus" });
 app.use(aggregate, { name: "chatsByOrg" });
 app.use(aggregate, { name: "chatsByUser" });
 
+// Sandbox aggregates
+app.use(aggregate, { name: "sandboxesByOrg" });
+app.use(aggregate, { name: "sandboxesByUser" });
+
 export default app;

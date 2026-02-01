@@ -59,8 +59,21 @@ export async function GetChat(ctx: zQueryCtx, args: z.infer<typeof types.GetChat
 
 export async function CreateChat(ctx: zMutationCtx, args: z.infer<typeof types.CreateArgs>) {
   const now = Date.now();
+
+  // Validate sandboxId if provided
+  if (args.data.sandboxId) {
+    const sandbox = await ctx.table("sandboxes").getX(args.data.sandboxId);
+    if (sandbox.organizationId !== ctx.identity.activeOrganizationId) {
+      throw new Error("Sandbox does not belong to your organization");
+    }
+    if (sandbox.userId !== ctx.identity.userId) {
+      throw new Error("Sandbox does not belong to you");
+    }
+  }
+
   const chat = await ctx.table("chats").insert({
-    ...args.data,
+    title: args.data.title,
+    sandboxId: args.data.sandboxId,
     organizationId: ctx.identity.activeOrganizationId,
     userId: ctx.identity.userId,
     isPinned: false,
