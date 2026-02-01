@@ -308,6 +308,90 @@ function runInBackground({
 }
 
 // ============================================================================
+// Shared Wrapped Execute Logic
+// ============================================================================
+
+const MAX_BACKGROUND_TIMEOUT = 30 * 60 * 1000; // 30 minutes
+
+type ResolvedConfig = {
+  duration: number;
+  allowAgentSetDuration: boolean;
+  allowBackground: boolean;
+  maxAllowedAgentDuration: number;
+};
+
+function resolveConfig(config: ToolCallConfig): ResolvedConfig {
+  const {
+    duration = 60000,
+    allowAgentSetDuration = false,
+    allowBackground = false,
+  } = config;
+  const maxAllowedAgentDuration = config.maxAllowedAgentDuration
+    ?? (allowAgentSetDuration ? duration : 1800000);
+  return {
+    duration,
+    allowAgentSetDuration: allowAgentSetDuration || allowBackground,
+    allowBackground,
+    maxAllowedAgentDuration,
+  };
+}
+
+function createWrappedExecute(
+  toolName: string,
+  originalExecute: (args: Record<string, unknown>, opts?: ToolExecuteOptions) => unknown | Promise<unknown>,
+  config: ResolvedConfig
+) {
+  const { duration, allowAgentSetDuration, allowBackground, maxAllowedAgentDuration } = config;
+
+  return async (
+    args: Record<string, unknown>,
+    opts?: ToolExecuteOptions
+  ): Promise<unknown> => {
+    const timeout = typeof args.timeout === "number" ? args.timeout : undefined;
+    const background = typeof args.background === "boolean" ? args.background : undefined;
+    const { timeout: _t, background: _b, ...toolArgs } = args;
+    void _t;
+    void _b;
+
+    const effectiveTimeout =
+      allowAgentSetDuration && timeout !== undefined
+        ? Math.min(timeout, maxAllowedAgentDuration)
+        : duration;
+
+    if (allowBackground && background) {
+      return runInBackground({
+        toolName,
+        toolArgs,
+        executionPromise: originalExecute(toolArgs, opts),
+        timeoutMs: effectiveTimeout,
+      });
+    }
+
+    const executionPromise = originalExecute(toolArgs, opts);
+    const abortSignal = opts?.toolContext?.abortSignal ?? opts?.abortController?.signal;
+
+    try {
+      return await executeWithTimeout(
+        () => executionPromise,
+        effectiveTimeout,
+        abortSignal
+      );
+    } catch (error) {
+      if (error instanceof Error && error.message.includes("timed out")) {
+        return runInBackground({
+          toolName,
+          toolArgs,
+          executionPromise,
+          timeoutMs: MAX_BACKGROUND_TIMEOUT,
+          initialLog: `Foreground execution timed out after ${effectiveTimeout}ms, converted to background task`,
+        });
+      }
+      throw error;
+    }
+  };
+}
+
+// ============================================================================
 // createWrappedTool
 // ============================================================================
 
@@ -337,33 +421,21 @@ function runInBackground({
  */
 export function createWrappedTool(options: WrappedToolOptions): BaseTool {
   const { name, description, toolCallConfig = {}, parameters, execute } = options;
-
-  const {
-    duration = 60000,
-    allowAgentSetDuration = false,
-    allowBackground = false,
-  } = toolCallConfig;
-
-  // If allowAgentSetDuration is true and maxAllowedAgentDuration is not set, default to duration
-  const maxAllowedAgentDuration = toolCallConfig.maxAllowedAgentDuration
-    ?? (allowAgentSetDuration ? duration : 1800000);
-
-  // If allowBackground is true, also enable agent timeout control
-  const effectiveAllowAgentSetDuration = allowAgentSetDuration || allowBackground;
+  const config = resolveConfig(toolCallConfig);
 
   // Build augmented schema
   const augmentedShape: ZodRawShape = { ...parameters.shape };
 
-  if (effectiveAllowAgentSetDuration) {
+  if (config.allowAgentSetDuration) {
     augmentedShape.timeout = z
       .number()
       .optional()
       .describe(
-        `Optional timeout in milliseconds (max: ${maxAllowedAgentDuration}ms). Default: ${duration}ms`
+        `Optional timeout in milliseconds (max: ${config.maxAllowedAgentDuration}ms). Default: ${config.duration}ms`
       );
   }
 
-  if (allowBackground) {
+  if (config.allowBackground) {
     augmentedShape.background = z
       .boolean()
       .optional()
@@ -374,69 +446,11 @@ export function createWrappedTool(options: WrappedToolOptions): BaseTool {
 
   const augmentedParameters = z.object(augmentedShape);
 
-  // Wrapped execute function
-  const wrappedExecute = async (
-    args: Record<string, unknown>,
-    opts?: ToolExecuteOptions
-  ): Promise<unknown> => {
-    // Extract control params
-    const timeout = typeof args.timeout === "number" ? args.timeout : undefined;
-    const background = typeof args.background === "boolean" ? args.background : undefined;
-    const { timeout: _t, background: _b, ...toolArgs } = args;
-    void _t;
-    void _b;
-
-    // Calculate effective timeout:
-    // - If agent can set duration AND provides a timeout → use it (capped by max)
-    // - Otherwise → fallback to default duration
-    const effectiveTimeout =
-      effectiveAllowAgentSetDuration && timeout !== undefined
-        ? Math.min(timeout, maxAllowedAgentDuration)
-        : duration;
-
-    // Handle explicit background execution
-    if (allowBackground && background) {
-      return runInBackground({
-        toolName: name,
-        toolArgs,
-        executionPromise: execute?.(toolArgs, opts),
-        timeoutMs: effectiveTimeout,
-      });
-    }
-
-    // Foreground execution with timeout - converts to background task on timeout
-    const executionPromise = execute?.(toolArgs, opts);
-    const abortSignal = opts?.toolContext?.abortSignal ?? opts?.abortController?.signal;
-
-    try {
-      return await executeWithTimeout(
-        () => executionPromise,
-        effectiveTimeout,
-        abortSignal
-      );
-    } catch (error) {
-      // Check if it's a timeout error (not abort or other error)
-      if (error instanceof Error && error.message.includes("timed out")) {
-        // Convert to background task with 30 minute max duration
-        const MAX_BACKGROUND_TIMEOUT = 30 * 60 * 1000; // 30 minutes
-        return runInBackground({
-          toolName: name,
-          toolArgs,
-          executionPromise,
-          timeoutMs: MAX_BACKGROUND_TIMEOUT,
-          initialLog: `Foreground execution timed out after ${effectiveTimeout}ms, converted to background task`,
-        });
-      }
-      // Re-throw non-timeout errors (e.g., AbortError)
-      throw error;
-    }
-  };
-
   return createTool({
     name,
     description,
     parameters: augmentedParameters,
-    execute: wrappedExecute,
+    execute: createWrappedExecute(name, execute ?? (() => undefined), config),
   });
 }
 
@@ -632,4 +646,33 @@ export function withBackgroundTaskTools<T extends ToolOrToolkit>(
   tools: T[]
 ): (T | Toolkit)[] {
   return [...tools, backgroundTaskToolkit];
+}
+
+/**
+ * Patches an existing tool's execute function to add background task support.
+ * Uses Object.defineProperty to modify the tool in-place.
+ *
+ * @param tool - The tool to patch
+ * @param config - Optional configuration for timeout and background behavior
+ *
+ * @example
+ * ```ts
+ * const writeTodos = agent.getTools().find(t => t.name === "write_todos");
+ * if (writeTodos) {
+ *   patchToolWithBackgroundSupport(writeTodos, { duration: 30000 });
+ * }
+ * ```
+ */
+export function patchToolWithBackgroundSupport(
+  tool: BaseTool,
+  config: ToolCallConfig = {}
+): void {
+  const originalExecute = tool.execute;
+  if (!originalExecute) return;
+
+  Object.defineProperty(tool, "execute", {
+    value: createWrappedExecute(tool.name, originalExecute, resolveConfig(config)),
+    writable: true,
+    configurable: true,
+  });
 }

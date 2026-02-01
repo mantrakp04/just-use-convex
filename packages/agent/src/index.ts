@@ -7,7 +7,7 @@ import { createAiClient } from "./client";
 import { SYSTEM_PROMPT, TASK_PROMPT } from "./prompt";
 import { SandboxFilesystemBackend, createSandboxToolkit } from "./tools/sandbox";
 import { createWebSearchToolkit } from "./tools/websearch";
-import { withBackgroundTaskTools } from "./tools/utils";
+import { withBackgroundTaskTools, patchToolWithBackgroundSupport } from "./tools/utils";
 import type { worker } from "../alchemy.run";
 import { ConvexHttpClient } from "convex/browser";
 import { api } from "@just-use-convex/backend/convex/_generated/api";
@@ -170,17 +170,28 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, ChatState> {
     if (!agent) return;
 
     const writeTodos = agent.getTools().find(t => t.name === "write_todos");
-    if (writeTodos && !this.state?.yolo) {
-      Object.defineProperty(writeTodos, 'needsApproval', {
-        value: async ({ todos }: { todos: Array<{ content: string; status: 'pending' | 'in_progress' | 'done'; id?: string }> }) => {
-          if (todos.every(t => t.status === "pending")) {
-            return true;
-          }
-          return false;
-        },
-        writable: true,
-        configurable: true,
+    if (writeTodos) {
+      // Wrap with background task support (30 second timeout, 30 minute max duration)
+      patchToolWithBackgroundSupport(writeTodos, {
+        duration: 30000,
+        allowAgentSetDuration: true,
+        maxAllowedAgentDuration: 1800000, // 30 minutes
+        allowBackground: true,
       });
+
+      // Add approval requirement when not in yolo mode
+      if (!this.state?.yolo) {
+        Object.defineProperty(writeTodos, 'needsApproval', {
+          value: async ({ todos }: { todos: Array<{ content: string; status: 'pending' | 'in_progress' | 'done'; id?: string }> }) => {
+            if (todos.every(t => t.status === "pending")) {
+              return true;
+            }
+            return false;
+          },
+          writable: true,
+          configurable: true,
+        });
+      }
     }
 
     const model = this.state.model;
