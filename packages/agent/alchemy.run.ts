@@ -93,6 +93,20 @@ await WranglerJson({
           }
         }
       }
+      // Fix migrations: Sandbox is a container, not a sqlite class
+      if (spec.migrations) {
+        for (const migration of spec.migrations) {
+          if (migration.new_sqlite_classes?.includes("Sandbox")) {
+            migration.new_sqlite_classes = migration.new_sqlite_classes.filter(
+              (c: string) => c !== "Sandbox"
+            );
+            migration.new_classes = migration.new_classes || [];
+            if (!migration.new_classes.includes("Sandbox")) {
+              migration.new_classes.push("Sandbox");
+            }
+          }
+        }
+      }
       return spec;
     },
   },

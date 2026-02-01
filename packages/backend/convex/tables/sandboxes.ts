@@ -26,7 +26,11 @@ export const sandboxesWithSystemFields = {
 const sandboxesTable = Sandboxes.table
   .index("organizationId_userId", ["organizationId", "userId", "updatedAt"])
   .index("organizationId", ["organizationId", "updatedAt"])
-  .index("userId", ["userId"]);
+  .index("userId", ["userId"])
+  .searchIndex("name", {
+    searchField: "name",
+    filterFields: ["organizationId", "userId"],
+  });
 
 // 1:many relationship - one sandbox has many chats
 export const sandboxesEnt = defineEntFromTable(sandboxesTable)

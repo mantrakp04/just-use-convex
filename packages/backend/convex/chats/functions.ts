@@ -114,3 +114,15 @@ export async function DeleteChat(ctx: zMutationCtx, args: z.infer<typeof types.D
   await chat.delete();
   return true;
 }
+
+export async function SearchChats(ctx: zQueryCtx, args: z.infer<typeof types.SearchArgs>) {
+  return ctx.db
+    .query("chats")
+    .withSearchIndex("title", (q) =>
+      q.search("title", args.query)
+        .eq("organizationId", ctx.identity.activeOrganizationId)
+        .eq("userId", ctx.identity.userId)
+        .eq("isPinned", args.isPinned)
+    )
+    .paginate(args.paginationOpts);
+}

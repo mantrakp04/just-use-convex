@@ -51,6 +51,13 @@ export const getChats = zQuery({
   },
 });
 
+export const search = zQuery({
+  args: types.SearchArgs,
+  handler: async (ctx, args): Promise<ReturnType<typeof functions.SearchSandboxes>> => {
+    return await functions.SearchSandboxes(ctx, args);
+  },
+});
+
 // ═══════════════════════════════════════════════════════════════════
 // STATS QUERIES
 // ═══════════════════════════════════════════════════════════════════

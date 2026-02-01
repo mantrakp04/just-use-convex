@@ -30,7 +30,11 @@ export const chatsWithSystemFields = {
 const chatsTable = Chats.table
   .index("organizationId_userId_isPinned", ["organizationId", "userId", "isPinned", "updatedAt"])
   .index("organizationId", ["organizationId", "updatedAt"])
-  .index("userId", ["userId"]);
+  .index("userId", ["userId"])
+  .searchIndex("title", {
+    searchField: "title",
+    filterFields: ["organizationId", "userId", "isPinned"],
+  });
 
 // Many chats belong to one sandbox (optional relationship)
 export const chatsEnt = defineEntFromTable(chatsTable)

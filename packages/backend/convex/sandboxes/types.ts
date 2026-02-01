@@ -34,3 +34,9 @@ export const DeleteArgs = SandboxWithSystemFields.pick({ _id: true });
 export const GetChatsArgs = SandboxWithSystemFields.pick({ _id: true }).extend({
   paginationOpts: zPaginationOpts,
 });
+
+// Search args
+export const SearchArgs = z.object({
+  query: z.string(),
+  paginationOpts: zPaginationOpts,
+});

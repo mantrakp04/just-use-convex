@@ -38,6 +38,13 @@ export const deleteChat = zMutation({
   },
 });
 
+export const search = zQuery({
+  args: types.SearchArgs,
+  handler: async (ctx, args): Promise<ReturnType<typeof functions.SearchChats>> => {
+    return await functions.SearchChats(ctx, args);
+  },
+});
+
 // ═══════════════════════════════════════════════════════════════════
 // STATS QUERIES
 // ═══════════════════════════════════════════════════════════════════

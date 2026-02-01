@@ -32,3 +32,10 @@ export const UpdateArgs = ChatWithSystemFields.pick({ _id: true }).extend({
 });
 
 export const DeleteArgs = ChatWithSystemFields.pick({ _id: true });
+
+// Search args
+export const SearchArgs = z.object({
+  query: z.string(),
+  isPinned: z.boolean().default(false),
+  paginationOpts: zPaginationOpts,
+});

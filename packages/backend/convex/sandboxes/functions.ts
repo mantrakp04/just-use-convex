@@ -100,6 +100,17 @@ export async function DeleteSandbox(ctx: zMutationCtx, args: z.infer<typeof type
   return true;
 }
 
+export async function SearchSandboxes(ctx: zQueryCtx, args: z.infer<typeof types.SearchArgs>) {
+  return ctx.db
+    .query("sandboxes")
+    .withSearchIndex("name", (q) =>
+      q.search("name", args.query)
+        .eq("organizationId", ctx.identity.activeOrganizationId)
+        .eq("userId", ctx.identity.userId)
+    )
+    .paginate(args.paginationOpts);
+}
+
 export async function GetSandboxChats(ctx: zQueryCtx, args: z.infer<typeof types.GetChatsArgs>) {
   const sandbox = await ctx.table("sandboxes").getX(args._id);
   if (sandbox.organizationId !== ctx.identity.activeOrganizationId) {
