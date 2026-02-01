@@ -27,6 +27,7 @@ export const TodosDisplay = memo(function TodosDisplay({ todos, approval, state,
   if (todos.length === 0) return null;
 
   const activeCount = todos.filter((t) => t.status !== "done").length;
+  const showApproval = state && approval?.approved !== true;
 
   return (
     <Queue className="mb-2">
@@ -60,7 +61,7 @@ export const TodosDisplay = memo(function TodosDisplay({ todos, approval, state,
           </QueueList>
         </QueueSectionContent>
       </QueueSection>
-      {state && (
+      {showApproval && (
         <ToolApprovalConfirmation
           approval={approval}
           state={state}

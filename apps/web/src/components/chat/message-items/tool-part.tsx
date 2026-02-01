@@ -8,6 +8,14 @@ import {
   ToolInput,
   ToolOutput,
 } from "@/components/ai-elements/tool";
+import {
+  WebSearch,
+  WebSearchHeader,
+  WebSearchContent,
+  WebSearchResults,
+  WebSearchError,
+  type WebSearchOutput,
+} from "@/components/ai-elements/web-search";
 import type { ConfirmationProps } from "@/components/ai-elements/confirmation";
 import { ToolApprovalConfirmation } from "../tool-approval-confirmation";
 
@@ -29,12 +37,60 @@ export function isToolPart(
   return part.type.startsWith("tool-");
 }
 
+const WebSearchPart = memo(function WebSearchPart({
+  part,
+  partKey,
+  toolApprovalResponse,
+}: ToolPartProps) {
+  const approval = 'approval' in part
+    ? (part.approval as ConfirmationProps['approval'])
+    : undefined;
+
+  const output = part.output as WebSearchOutput | undefined;
+  const input = part.input as { query?: string } | undefined;
+
+  return (
+    <WebSearch key={partKey}>
+      <WebSearchHeader
+        query={output?.query ?? input?.query}
+        numResults={output?.numResults}
+        state={part.state}
+      />
+      <WebSearchContent>
+        <WebSearchError errorText={part.errorText} />
+        {output?.results && output.results.length > 0 && (
+          <WebSearchResults results={output.results} />
+        )}
+      </WebSearchContent>
+      <ToolApprovalConfirmation
+        approval={approval}
+        state={part.state}
+        toolApprovalResponse={toolApprovalResponse}
+        requestTitle="This tool requires your approval to run."
+        acceptedTitle="Tool execution approved."
+        rejectedTitle="Tool execution rejected"
+      />
+    </WebSearch>
+  );
+});
+
 export const ToolPart = memo(function ToolPart({
   part,
   partKey,
   toolApprovalResponse,
 }: ToolPartProps) {
   const toolName = getToolName(part.type);
+
+  if (toolName === "web_search") {
+    return (
+      <WebSearchPart
+        part={part}
+        partKey={partKey}
+        toolApprovalResponse={toolApprovalResponse}
+      />
+    );
+  }
+
   const approval = 'approval' in part
     ? (part.approval as ConfirmationProps['approval'])
     : undefined;

@@ -1,6 +1,6 @@
 "use client";
 
-import { memo } from "react";
+import { memo, useMemo } from "react";
 import type { UIMessage } from "@ai-sdk/react";
 import type { ChatAddToolApproveResponseFunction, FileUIPart } from "ai";
 import { Check, X, PaperclipIcon } from "lucide-react";
@@ -15,6 +15,7 @@ import {
   AttachmentPreview,
   AttachmentRemove,
 } from "@/components/ai-elements/attachments";
+import { SourcesList } from "@/components/ai-elements/sources";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { TextPart } from "./text-part";
@@ -31,6 +32,7 @@ import {
   extractMessageFiles,
   extractTodosFromMessage,
 } from "@/hooks/use-chat";
+import { extractSourcesFromMessage } from "@/lib/citations";
 
 export interface MessageItemProps {
   message: UIMessage;
@@ -61,6 +63,7 @@ export const MessageItem = memo(function MessageItem({
 }: MessageItemProps) {
   const messageText = extractMessageText(message);
   const messageFiles = extractMessageFiles(message);
+  const sources = useMemo(() => extractSourcesFromMessage(message), [message]);
 
   const isUser = message.role === "user";
   const isAssistant = message.role === "assistant";
@@ -106,7 +109,7 @@ export const MessageItem = memo(function MessageItem({
 
         if (part.type === "text") {
           elements.push(
-            <TextPart key={`${message.id}-text-${i}`} part={part} role={message.role} partKey={i} />
+            <TextPart key={`${message.id}-text-${i}`} part={part} role={message.role} partKey={i} sources={sources} />
           );
         } else if (part.type === "file") {
           elements.push(<FilePart key={`${message.id}-file-${i}`} part={part} partKey={i} />);
@@ -228,12 +231,15 @@ export const MessageItem = memo(function MessageItem({
         <MessageContent className="group-[.is-user]:max-w-[70%]">
           {renderParts()}
         </MessageContent>
+        {isAssistant && sources.length > 0 && (
+          <SourcesList sources={sources} className="mt-4" />
+        )}
         {!isStreaming && (
           <MessageActions className="mt-2 opacity-0 transition-opacity group-hover/message:opacity-100 justify-end">
             {isUser && (messageText || messageFiles.length > 0) && onEditMessage && (
               <EditMessageButton onStartEdit={handleStartEdit} />
             )}
-            {isAssistant && isLastAssistantMessage && onRegenerate && (
+            {isAssistant && onRegenerate && (
               <RegenerateButton onRegenerate={handleRegenerate} />
             )}
             {messageText && <CopyButton text={messageText} />}
