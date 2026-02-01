@@ -1,28 +1,36 @@
-import { getSandbox, type Sandbox } from "@cloudflare/sandbox";
+import { getSandbox } from "@cloudflare/sandbox";
 import {
   createTool,
+  createToolkit,
   type FileInfo,
   type FileData,
   type GrepMatch,
   type WriteResult,
   type EditResult,
   type FilesystemBackend,
+  type Toolkit,
 } from "@voltagent/core";
 import { z } from "zod";
-
-type SandboxNamespace = DurableObjectNamespace<Sandbox>;
+import type { worker } from "../../alchemy.run";
 
 export class SandboxFilesystemBackend implements FilesystemBackend {
   private sandbox: ReturnType<typeof getSandbox>;
   private rootDir: string;
 
-  constructor(options: {
-    sandboxNamespace: SandboxNamespace;
-    sandboxId: string;
-    rootDir?: string;
-  }) {
-    this.sandbox = getSandbox(options.sandboxNamespace, options.sandboxId);
-    this.rootDir = options.rootDir || "/workspace";
+  constructor(env: typeof worker.Env, sandboxName: string) {
+    this.sandbox = getSandbox(env.Sandbox, sandboxName);
+    this.rootDir = env.SANDBOX_ROOT_DIR;
+
+    // Mount the R2 bucket for persistent storage
+    this.sandbox.mountBucket(env.SANDBOX_BUCKET_NAME, this.rootDir, {
+      endpoint: env.SANDBOX_BUCKET_ENDPOINT,
+      provider: "r2",
+      credentials: {
+        accessKeyId: env.SANDBOX_BUCKET_ACCESS_KEY_ID,
+        secretAccessKey: env.SANDBOX_BUCKET_SECRET_ACCESS_KEY,
+      },
+      prefix: sandboxName, // Each sandbox gets its own prefix for isolation
+    });
   }
 
   private resolvePath(path: string): string {
@@ -305,16 +313,37 @@ export class SandboxFilesystemBackend implements FilesystemBackend {
   }
 }
 
-export interface BashToolOptions {
+const SANDBOX_INSTRUCTIONS = `You have access to an isolated sandbox environment with a virtual filesystem.
+
+## Sandbox Tools
+
+- bash: Execute shell commands (npm, yarn, bun, cargo, git, etc.)
+- ls: List files in a directory (requires absolute path)
+- read_file: Read a file from the filesystem
+- write_file: Write to a file in the filesystem
+- edit_file: Edit a file by replacing a specific string
+- glob: Find files matching a pattern (e.g., "**/*.ts")
+- grep: Search for text within files
+
+All file paths must start with a /. The working directory is /workspace by default.`;
+
+export interface SandboxToolkitOptions {
   maxOutputChars?: number;
   logDir?: string;
 }
 
-export function createBashTool(backend: SandboxFilesystemBackend, options: BashToolOptions = {}) {
+/**
+ * Creates a toolkit with all sandbox tools (bash + filesystem).
+ * Uses simplified Zod schemas that are compatible with all providers.
+ */
+export function createSandboxToolkit(
+  backend: SandboxFilesystemBackend,
+  options: SandboxToolkitOptions = {}
+): Toolkit {
   const maxOutputChars = options.maxOutputChars ?? 30000;
   const logDir = options.logDir ?? "/workspace/.logs";
 
-  return createTool({
+  const bashTool = createTool({
     name: "bash",
     description: `Execute bash commands in the sandbox environment.
 
@@ -390,5 +419,89 @@ Important:
         truncated: false,
       };
     },
+  });
+
+  const lsTool = createTool({
+    name: "ls",
+    description: "List files and directories in a directory",
+    parameters: z.object({
+      path: z.string().default("/").describe("Directory path to list (default: /)"),
+    }),
+    execute: async ({ path }) => {
+      return backend.lsInfo(path);
+    },
+  });
+
+  const readFileTool = createTool({
+    name: "read_file",
+    description: "Read the contents of a file",
+    parameters: z.object({
+      file_path: z.string().describe("Absolute path to the file to read"),
+      offset: z.number().default(0).describe("Line offset to start reading from (0-indexed)"),
+      limit: z.number().default(2000).describe("Maximum number of lines to read"),
+    }),
+    execute: async ({ file_path, offset, limit }) => {
+      return backend.read(file_path, offset, limit);
+    },
+  });
+
+  const writeFileTool = createTool({
+    name: "write_file",
+    description: "Write content to a new file. Returns an error if the file already exists",
+    parameters: z.object({
+      file_path: z.string().describe("Absolute path to the file to write"),
+      content: z.string().describe("Content to write to the file"),
+    }),
+    execute: async ({ file_path, content }) => {
+      return backend.write(file_path, content);
+    },
+  });
+
+  const editFileTool = createTool({
+    name: "edit_file",
+    description: "Edit a file by replacing a specific string with a new string",
+    parameters: z.object({
+      file_path: z.string().describe("Absolute path to the file to edit"),
+      old_string: z.string().describe("String to be replaced (must match exactly)"),
+      new_string: z.string().describe("String to replace with"),
+      replace_all: z.boolean().default(false).describe("Whether to replace all occurrences"),
+    }),
+    execute: async ({ file_path, old_string, new_string, replace_all }) => {
+      return backend.edit(file_path, old_string, new_string, replace_all);
+    },
+  });
+
+  const globTool = createTool({
+    name: "glob",
+    description: "Find files matching a glob pattern (e.g., '**/*.ts' for all TypeScript files)",
+    parameters: z.object({
+      pattern: z.string().describe("Glob pattern (e.g., '*.ts', '**/*.ts')"),
+      path: z.string().default("/").describe("Base path to search from (default: /)"),
+    }),
+    execute: async ({ pattern, path }) => {
+      return backend.globInfo(pattern, path);
+    },
+  });
+
+  // Use z.string().optional() instead of z.string().optional().nullable()
+  // to avoid the {"not": {}} schema pattern that some providers don't support
+  const grepTool = createTool({
+    name: "grep",
+    description: "Search for a regex pattern in files. Returns matching files and line numbers",
+    parameters: z.object({
+      pattern: z.string().describe("Regex pattern to search for"),
+      path: z.string().default("/").describe("Base path to search from (default: /)"),
+      glob: z.string().optional().describe("Optional glob pattern to filter files (e.g., '*.ts')"),
+    }),
+    execute: async ({ pattern, path, glob }) => {
+      return backend.grepRaw(pattern, path, glob ?? null);
+    },
+  });
+
+  return createToolkit({
+    name: "sandbox",
+    description: "Sandbox tools for executing commands and managing files in an isolated environment",
+    instructions: SANDBOX_INSTRUCTIONS,
+    tools: [bashTool, lsTool, readFileTool, writeFileTool, editFileTool, globTool, grepTool],
   });
 }

@@ -71,9 +71,12 @@ function AgentInstanceInner({ chatId, token }: { chatId: string, token: string |
 
   const setSettings = useCallback(
     (settingsOrFn: ChatSettings | ((prev: ChatSettings) => ChatSettings)) => {
-      setSettingsState((prev: ChatSettings) =>
-        typeof settingsOrFn === "function" ? settingsOrFn(prev) : settingsOrFn
-      );
+      setSettingsState((prev: ChatSettings) => {
+        const next = typeof settingsOrFn === "function" ? settingsOrFn(prev) : settingsOrFn;
+        // Sync to agent when user explicitly changes settings
+        agentRef.current?.setState(next);
+        return next;
+      });
     },
     []
   );
@@ -117,11 +120,6 @@ function AgentInstanceInner({ chatId, token }: { chatId: string, token: string |
   useEffect(() => {
     updateInstanceData(chatId, { chat, agent, settings, setSettings });
   }, [chatId, chat, agent, settings, setSettings]);
-
-  // Sync settings to agent only when settings actually changes
-  useEffect(() => {
-    agent.setState(settings);
-  }, [agent, settings]);
 
   return null;
 }

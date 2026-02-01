@@ -1,7 +1,9 @@
-import { PaperclipIcon } from "lucide-react";
+import { PaperclipIcon, Zap } from "lucide-react";
 import type { OpenRouterModel } from "@/hooks/use-openrouter-models";
 import type { useAgentChat } from "@cloudflare/ai-chat/react";
 import { memo } from "react";
+import { useAtom } from "jotai";
+import { yoloModeAtom } from "@/store/models";
 
 export type ChatSettings = {
   model?: string;
@@ -49,6 +51,7 @@ export const ChatInput = memo(function ChatInput({
   hasMessages,
 }: ChatInputProps) {
   const supportsReasoning = selectedModel?.supports_reasoning ?? false;
+  const [yoloMode, setYoloMode] = useAtom(yoloModeAtom);
 
   return (
     <div className="pb-1 mx-auto w-4xl">
@@ -76,6 +79,7 @@ export const ChatInput = memo(function ChatInput({
                 onSelect={(effort) => setSettings((prev) => ({ ...prev, reasoningEffort: effort }))}
               />
             )}
+            <YoloModeButton active={yoloMode} onToggle={() => setYoloMode(!yoloMode)} />
           </PromptInputTools>
           <PromptInputSubmit status={status} onStop={onStop} />
         </PromptInputFooter>
@@ -90,6 +94,18 @@ function AttachmentButton() {
   return (
     <PromptInputButton onClick={() => attachments.openFileDialog()}>
       <PaperclipIcon className="size-4" />
+    </PromptInputButton>
+  );
+}
+
+function YoloModeButton({ active, onToggle }: { active: boolean; onToggle: () => void }) {
+  return (
+    <PromptInputButton
+      onClick={onToggle}
+      className={active ? "bg-amber-500/20 text-amber-500 hover:bg-amber-500/30 hover:text-amber-500" : ""}
+    >
+      <Zap className="size-4" />
+      {active && <span className="text-xs font-medium">YOLO</span>}
     </PromptInputButton>
   );
 }

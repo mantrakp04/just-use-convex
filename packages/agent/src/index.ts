@@ -5,18 +5,19 @@ import { generateText, type StreamTextOnFinishCallback, type ToolSet, Output } f
 import type { PlanAgent } from "@voltagent/core";
 import { createAiClient } from "./client";
 import { SYSTEM_PROMPT } from "./prompt";
-import { SandboxFilesystemBackend, createBashTool } from "./sandbox";
+import { SandboxFilesystemBackend, createSandboxToolkit } from "./tools/sandbox";
+import { createWebSearchTool } from "./tools/websearch";
 import type { worker } from "../alchemy.run";
 import { ConvexHttpClient } from "convex/browser";
 import { api } from "@just-use-convex/backend/convex/_generated/api";
 import type { Id } from "@just-use-convex/backend/convex/_generated/dataModel";
 import { z } from "zod";
-import { webSearch } from '@exalabs/ai-sdk';
 
 // State type for chat settings synced from frontend
 type ChatState = {
-  model?: string;
+  model: string;
   reasoningEffort?: "low" | "medium" | "high";
+  yolo?: boolean;
 };
 
 export default {
@@ -42,6 +43,7 @@ export default {
 export class AgentWorker extends AIChatAgent<typeof worker.Env, ChatState> {
   private convexClient: ConvexHttpClient | null = null;
   private planAgent: PlanAgent | null = null;
+  private sandboxId: string | null = null;
 
   private async generateTitle(userMessage: string): Promise<void> {
     if (!this.convexClient) return;
@@ -71,6 +73,16 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, ChatState> {
   
   private async _init(request: Request): Promise<void> {
     const token = (new URL(request.url)).searchParams.get('token');
+    const sandboxId = (new URL(request.url)).searchParams.get('sandboxId');
+    const model = (new URL(request.url)).searchParams.get('model');
+    const reasoningEffort = (new URL(request.url)).searchParams.get('reasoningEffort') as "low" | "medium" | "high" | undefined;
+    const yolo = (new URL(request.url)).searchParams.get('yolo') === 'true';
+    this.sandboxId = sandboxId;
+    if (!model) {
+      throw new Error("Model not provided");
+    }
+    this.setState({ ...this.state, model, reasoningEffort, yolo });
+
     if (!token) {
       throw new Error("Unauthorized: No token provided");
     }
@@ -92,23 +104,16 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, ChatState> {
   private async _prepAgent(): Promise<PlanAgent> {
     const { PlanAgent, createVoltAgentObservability } = await import("@voltagent/core");
 
-    const filesystemBackend = new SandboxFilesystemBackend({
-      sandboxNamespace: this.env.Sandbox,
-      sandboxId: this.name, // Use chat ID as sandbox ID for isolation
-      rootDir: "/workspace",
-    });
-
-    // Create bash tool for sandbox command execution
-    const bashTool = createBashTool(filesystemBackend);
+    const filesystemBackend = this.sandboxId ? new SandboxFilesystemBackend(this.env, this.sandboxId) : undefined;
 
     const agent = new PlanAgent({
       name: "Assistant",
       systemPrompt: SYSTEM_PROMPT,
-      model: createAiClient(this.state?.model || this.env.OPENROUTER_MODEL, this.state?.reasoningEffort),
-      tools: [bashTool, { webSearch: webSearch()}],
-      filesystem: {
-        backend: filesystemBackend,
-      },
+      model: createAiClient(this.state.model, this.state.reasoningEffort),
+      tools: [
+        ...(filesystemBackend ? [createSandboxToolkit(filesystemBackend)] : []),
+        createWebSearchTool()
+      ],
       toolResultEviction: {
         enabled: true,
         tokenLimit: 20000,
@@ -130,8 +135,17 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, ChatState> {
         }),
       } : {}),
     });
+    await this._patchAgent();
+    this.planAgent = agent;
+    return agent;
+  }
+
+  private async _patchAgent(): Promise<void> {
+    const agent = this.planAgent;
+    if (!agent) return;
+
     const writeTodos = agent.getTools().find(t => t.name === "write_todos");
-    if (writeTodos) {
+    if (writeTodos && !this.state?.yolo) {
       Object.defineProperty(writeTodos, 'needsApproval', {
         value: async ({ todos }: { todos: Array<{ content: string; status: 'pending' | 'in_progress' | 'done'; id?: string }> }) => {
           if (todos.every(t => t.status === "pending")) {
@@ -143,8 +157,16 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, ChatState> {
         configurable: true,
       });
     }
-    this.planAgent = agent;
-    return agent;
+
+    const model = this.state.model
+    const reasoningEffort = this.state.reasoningEffort;
+    if (model) {
+      Object.defineProperty(agent, 'model', {
+        value: createAiClient(model, reasoningEffort),
+        writable: true,
+        configurable: true,
+      });
+    }
   }
 
   override async onStart(props?: Record<string, unknown> | undefined): Promise<void> {
@@ -163,7 +185,7 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, ChatState> {
   }
 
   override async onStateUpdate(state: ChatState, source: Connection | "server"): Promise<void> {
-    await this._prepAgent();
+    await this._patchAgent();
     await super.onStateUpdate(state, source);
   }
 
@@ -203,7 +225,7 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, ChatState> {
 
       const agent = this.planAgent || (await this._prepAgent());
       const stream = await agent?.streamText(this.messages, {
-        abortSignal: options?.abortSignal,
+        abortSignal: options?.abortSignal
       })
 
       return stream.toUIMessageStreamResponse();
