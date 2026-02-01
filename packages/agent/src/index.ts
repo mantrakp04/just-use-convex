@@ -44,7 +44,6 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, ChatState> {
   private convexClient: ConvexHttpClient | null = null;
   private planAgent: PlanAgent | null = null;
   private sandboxId: string | null = null;
-  // Track last applied model settings to avoid unnecessary patches
   private lastAppliedModel: string | null = null;
   private lastAppliedReasoningEffort: "low" | "medium" | "high" | undefined = undefined;
 
@@ -203,7 +202,7 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, ChatState> {
 
   override async onConnect(connection: Connection, ctx: ConnectionContext): Promise<void> {
     await this._init(ctx.request);
-    await this._patchAgent();
+    await this._prepAgent();
     return await super.onConnect(connection, ctx);
   }
 

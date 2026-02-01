@@ -7,11 +7,6 @@
     "nodejs_compat_populate_process_env"
   ],
   "vars": {
-    "NODE_ENV": "development",
-    "SANDBOX_BUCKET_NAME": "sandboxes",
-    "SANDBOX_BUCKET_ENDPOINT": "http://localhost:9000",
-    "SANDBOX_BUCKET_ACCESS_KEY_ID": "minioadmin",
-    "SANDBOX_BUCKET_SECRET_ACCESS_KEY": "minioadmin",
     "SANDBOX_ROOT_DIR": "/workspace"
   },
   "durable_objects": {
@@ -27,13 +22,6 @@
       }
     ]
   },
-  "r2_buckets": [
-    {
-      "binding": "SandboxBucket",
-      "bucket_name": "just-use-convex-sandboxes",
-      "preview_bucket_name": "just-use-convex-sandboxes"
-    }
-  ],
   "migrations": [
     {
       "tag": "v1",

@@ -1,5 +1,5 @@
-import alchemy, { Scope } from "alchemy";
-import { Worker, DurableObjectNamespace, Container, WranglerJson, R2Bucket, AccountApiToken } from "alchemy/cloudflare";
+import alchemy from "alchemy";
+import { Worker, DurableObjectNamespace, Container, WranglerJson } from "alchemy/cloudflare";
 
 const app = await alchemy("just-use-convex", {
   phase: process.argv.includes("--destroy") ? "destroy" : "up",
@@ -18,29 +18,6 @@ const sandboxContainer = await Container<import("@cloudflare/sandbox").Sandbox>(
   image: SANDBOX_IMAGE,
 });
 
-const sandboxBucket = await R2Bucket("just-use-convex-sandboxes", {
-  name: "just-use-convex-sandboxes",
-});
-
-// S3 credentials: MinIO for local dev, R2 API token for production
-const isLocalDev = Scope.current.local;
-
-// Only create API token in production (requires admin-level API access)
-const sandboxBucketToken = isLocalDev
-  ? null
-  : await AccountApiToken("sandbox-bucket-token", {
-      name: "just-use-convex-sandbox-bucket-token",
-      policies: [
-        {
-          effect: "allow",
-          permissionGroups: ["Workers R2 Storage Write"],
-          resources: {
-            [`com.cloudflare.edge.r2.bucket.${sandboxBucket.accountId}_default_${sandboxBucket.name}`]: "*",
-          },
-        },
-      ],
-    });
-
 export const worker = await Worker("agent-worker", {
   entrypoint: "./src/index.ts",
   url: false,
@@ -48,18 +25,6 @@ export const worker = await Worker("agent-worker", {
   bindings: {
     agentWorker: agentWorkerNamespace,
     Sandbox: sandboxContainer,
-    SandboxBucket: sandboxBucket,
-    NODE_ENV: isLocalDev ? 'development' : 'production',
-    SANDBOX_BUCKET_NAME: isLocalDev ? 'sandboxes' : sandboxBucket.name,
-    SANDBOX_BUCKET_ENDPOINT: isLocalDev
-      ? 'http://localhost:9000'
-      : `https://${sandboxBucket.accountId}.r2.cloudflarestorage.com`,
-    SANDBOX_BUCKET_ACCESS_KEY_ID: isLocalDev
-      ? 'minioadmin'
-      : sandboxBucketToken!.accessKeyId,
-    SANDBOX_BUCKET_SECRET_ACCESS_KEY: isLocalDev
-      ? 'minioadmin'
-      : sandboxBucketToken!.secretAccessKey,
     SANDBOX_ROOT_DIR: '/workspace',
     CONVEX_URL: alchemy.secret(process.env.CONVEX_URL),
     CONVEX_SITE_URL: alchemy.secret(process.env.CONVEX_SITE_URL),

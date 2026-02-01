@@ -28,17 +28,6 @@ export class SandboxFilesystemBackend implements FilesystemBackend {
   constructor(env: typeof worker.Env, sandboxName: string) {
     this.sandbox = getSandbox(env.Sandbox, sandboxName);
     this.rootDir = env.SANDBOX_ROOT_DIR;
-
-    // Mount the R2 bucket for persistent storage
-    this.sandbox.mountBucket(env.SANDBOX_BUCKET_NAME, this.rootDir, {
-      endpoint: env.SANDBOX_BUCKET_ENDPOINT,
-      provider: "r2",
-      credentials: {
-        accessKeyId: env.SANDBOX_BUCKET_ACCESS_KEY_ID,
-        secretAccessKey: env.SANDBOX_BUCKET_SECRET_ACCESS_KEY,
-      },
-      prefix: sandboxName, // Each sandbox gets its own prefix for isolation
-    });
   }
 
   private resolvePath(path: string): string {
@@ -235,8 +224,6 @@ export class SandboxFilesystemBackend implements FilesystemBackend {
         resolvedPath.lastIndexOf("/")
       );
       await this.sandbox.exec(`mkdir -p ${this.escapeShellArg(parentDir)}`);
-
-      // Write file using sandbox's writeFile if available, otherwise use heredoc
       await this.sandbox.writeFile(resolvedPath, content);
 
       const fileData = await this.readRaw(filePath);
