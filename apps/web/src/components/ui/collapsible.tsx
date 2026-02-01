@@ -3,7 +3,6 @@ import { AnimatePresence, motion } from "motion/react"
 import type React from "react"
 
 import { collapseVariants } from "@/lib/motion"
-import { cn } from "@/lib/utils"
 
 function Collapsible({ ...props }: CollapsiblePrimitive.Root.Props) {
   return <CollapsiblePrimitive.Root data-slot="collapsible" {...props} />
@@ -23,23 +22,27 @@ function CollapsibleContent({
   return (
     <CollapsiblePrimitive.Panel
       data-slot="collapsible-content"
-      keepMounted
-      render={(renderProps, state) => (
-        <AnimatePresence initial={false}>
-          {state.open && (
-            <motion.div
-              {...(renderProps as React.ComponentProps<typeof motion.div>)}
-              initial="collapsed"
-              animate="expanded"
-              exit="collapsed"
-              variants={collapseVariants}
-              className={cn("overflow-hidden", className)}
-            >
-              {children}
-            </motion.div>
-          )}
-        </AnimatePresence>
-      )}
+      render={(renderProps, state) => {
+        const resolvedClassName =
+          typeof className === "function" ? className(state) : className
+        return (
+          <AnimatePresence initial={false}>
+            {state.open && (
+              <motion.div
+                {...(renderProps as React.ComponentProps<typeof motion.div>)}
+                key="collapsible-content"
+                initial="collapsed"
+                animate="expanded"
+                exit="collapsed"
+                variants={collapseVariants}
+                className={resolvedClassName}
+              >
+                {children}
+              </motion.div>
+            )}
+          </AnimatePresence>
+        )
+      }}
       {...props}
     />
   )

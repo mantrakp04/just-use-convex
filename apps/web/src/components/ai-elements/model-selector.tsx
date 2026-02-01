@@ -311,17 +311,25 @@ export const ModelSelectorProviderButton = ({
   <Tooltip>
     <TooltipTrigger
       render={
-        <Button variant="ghost" size="icon-lg" className={cn(isSelected ? "bg-primary/20 ring-1 ring-primary/50" : "hover:bg-muted/80", "cursor-pointer", className)} onClick={onClick} />
+        <Button
+          variant="ghost"
+          size="icon-lg"
+          className={cn(
+            isSelected && "bg-primary/20 ring-1 ring-primary/50",
+            className
+          )}
+          onClick={onClick}
+        >
+          {provider === "all" ? (
+            <Grid2X2 className="size-4 text-muted-foreground" />
+          ) : provider === "favorites" ? (
+            <Star className="size-4 text-amber-500" />
+          ) : (
+            <ModelSelectorLogo provider={provider} className="size-4" />
+          )}
+        </Button>
       }
-    >
-      {provider === "all" ? (
-        <Grid2X2 className="size-4 text-muted-foreground" />
-      ) : provider === "favorites" ? (
-        <Star className="size-4 text-amber-500" />
-      ) : (
-        <ModelSelectorLogo provider={provider} className="size-4" />
-      )}
-    </TooltipTrigger>
+    />
     <TooltipContent side="right">
       {provider === "all"
         ? "All providers"

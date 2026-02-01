@@ -1,7 +1,7 @@
 import { Accordion as AccordionPrimitive } from "@base-ui/react/accordion"
 import { motion } from "motion/react"
 
-import { springSnappy } from "@/lib/motion"
+import { springExpand } from "@/lib/motion"
 import { cn } from "@/lib/utils"
 import { ChevronDownIcon } from "lucide-react"
 
@@ -44,9 +44,9 @@ function AccordionTrigger({
             <motion.span
               data-slot="accordion-trigger-icon"
               animate={{ rotate: state.open ? 180 : 0 }}
-              transition={springSnappy}
+              transition={springExpand}
             >
-              <ChevronDownIcon className="size-4 pointer-events-none shrink-0" />
+              <ChevronDownIcon className="pointer-events-none shrink-0" />
             </motion.span>
           </button>
         )}

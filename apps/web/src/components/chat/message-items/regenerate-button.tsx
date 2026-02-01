@@ -24,14 +24,13 @@ export const RegenerateButton = memo(function RegenerateButton({
           onClick={onRegenerate}
           disabled={isRegenerating}
           aria-label="Regenerate response"
+          render={<Button variant="ghost" size="icon" />}
         >
-          <Button variant="ghost" size="icon">
-            {isRegenerating ? (
-              <Loader2 size={16} className="animate-spin" />
-            ) : (
-              <RotateCcw size={16} />
-            )}
-          </Button>
+          {isRegenerating ? (
+            <Loader2 size={16} className="animate-spin" />
+          ) : (
+            <RotateCcw size={16} />
+          )}
         </TooltipTrigger>
         <TooltipContent>
           <p>{isRegenerating ? "Regenerating..." : "Regenerate response"}</p>

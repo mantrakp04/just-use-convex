@@ -54,7 +54,8 @@ export async function GetChat(ctx: zQueryCtx, args: z.infer<typeof types.GetChat
   if (chat.userId !== ctx.identity.userId) {
     throw new Error("You are not authorized to view this chat");
   }
-  return chat;
+  const sandbox = await chat.edge("sandbox");
+  return { ...chat.doc(), sandbox };
 }
 
 export async function CreateChat(ctx: zMutationCtx, args: z.infer<typeof types.CreateArgs>) {

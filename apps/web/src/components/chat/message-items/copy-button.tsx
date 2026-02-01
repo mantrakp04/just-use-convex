@@ -18,10 +18,9 @@ export const CopyButton = memo(function CopyButton({ text }: { text: string }) {
         <TooltipTrigger
           onClick={handleCopy}
           aria-label={copied ? "Copied" : "Copy message"}
+          render={<Button variant="ghost" size="icon" />}
         >
-          <Button variant="ghost" size="icon">
-            {copied ? <Check size={16} /> : <Copy size={16} />}
-          </Button>
+          {copied ? <Check size={16} /> : <Copy size={16} />}
         </TooltipTrigger>
         <TooltipContent>
           <p>{copied ? "Copied!" : "Copy message"}</p>

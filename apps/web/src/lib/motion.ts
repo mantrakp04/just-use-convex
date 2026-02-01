@@ -131,16 +131,22 @@ export const springExpand = {
 /**
  * Variants for collapsible content with height animation
  * Use with AnimatePresence and motion.div
+ * Overflow is hidden during animation, visible when fully expanded
  */
 export const collapseVariants: Variants = {
   collapsed: {
     height: 0,
     opacity: 0,
+    overflow: "hidden",
     transition: { duration: 0.2, ease: easeIOS },
   },
   expanded: {
     height: "auto",
     opacity: 1,
-    transition: springExpand,
+    overflow: "visible",
+    transition: {
+      ...springExpand,
+      overflow: { delay: 0.2 }, // delay overflow:visible until height animation settles
+    },
   },
 }

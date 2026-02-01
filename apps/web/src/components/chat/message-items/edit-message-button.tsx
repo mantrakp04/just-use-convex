@@ -19,13 +19,12 @@ export const EditMessageButton = memo(function EditMessageButton({
     <TooltipProvider>
       <Tooltip>
         <TooltipTrigger
-          onClick={onStartEdit}
-          aria-label="Edit message"
-        >
-          <Button variant="ghost" size="icon">
-            <Pencil size={16} />
-          </Button>
-        </TooltipTrigger>
+          render={(props) => (
+            <Button {...props} variant="ghost" size="icon" onClick={onStartEdit} aria-label="Edit message">
+              <Pencil size={16} />
+            </Button>
+          )}
+        />
         <TooltipContent>
           <span>Edit message</span>
         </TooltipContent>

@@ -72,31 +72,42 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, ChatState> {
   }
   
   private async _init(request: Request): Promise<void> {
-    const token = (new URL(request.url)).searchParams.get('token');
-    const sandboxId = (new URL(request.url)).searchParams.get('sandboxId');
-    const model = (new URL(request.url)).searchParams.get('model');
-    const reasoningEffort = (new URL(request.url)).searchParams.get('reasoningEffort') as "low" | "medium" | "high" | undefined;
-    const yolo = (new URL(request.url)).searchParams.get('yolo') === 'true';
-    this.sandboxId = sandboxId;
-    if (!model) {
-      throw new Error("Model not provided");
-    }
-    this.setState({ ...this.state, model, reasoningEffort, yolo });
+    const url = new URL(request.url);
+    const token = url.searchParams.get('token');
+    const model = url.searchParams.get('model');
+    const reasoningEffort = url.searchParams.get('reasoningEffort') as "low" | "medium" | "high" | undefined;
+    const yolo = url.searchParams.get('yolo') === 'true';
 
-    if (!token) {
-      throw new Error("Unauthorized: No token provided");
+    // Model can come from query params or existing state (synced via setState later)
+    const effectiveModel = model || this.state?.model;
+
+    // Only update state if we have new values
+    if (effectiveModel || reasoningEffort || yolo) {
+      this.setState({
+        ...this.state,
+        ...(effectiveModel && { model: effectiveModel }),
+        ...(reasoningEffort && { reasoningEffort }),
+        ...(yolo && { yolo }),
+      });
     }
 
+    // Only require token on first connection
     if (!this.convexClient) {
+      if (!token) {
+        throw new Error("Unauthorized: No token provided");
+      }
       this.convexClient = new ConvexHttpClient(this.env.CONVEX_URL);
       this.convexClient.setAuth(token);
 
-      // get the chat
       const chat = await this.convexClient.query(api.chats.index.get, {
         _id: this.name as Id<"chats">
       });
       if (!chat) {
         throw new Error("Unauthorized: No chat found");
+      }
+      // Derive sandboxId from chat data
+      if (chat.sandbox) {
+        this.sandboxId = chat.sandbox._id;
       }
     }
   }
@@ -118,6 +129,7 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, ChatState> {
         enabled: true,
         tokenLimit: 20000,
       },
+      filesystem: false,
       maxSteps: 100,
       ...(this.env.VOLTAGENT_OBSERVABILITY_ENABLED === 'true' ? {
         observability: createVoltAgentObservability({
@@ -169,11 +181,6 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, ChatState> {
     }
   }
 
-  override async onStart(props?: Record<string, unknown> | undefined): Promise<void> {
-    await this._prepAgent();
-    return await super.onStart(props);
-  }
-
   override async onRequest(request: Request): Promise<Response> {
     await this._init(request);
     return await super.onRequest(request);
@@ -181,19 +188,12 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, ChatState> {
 
   override async onConnect(connection: Connection, ctx: ConnectionContext): Promise<void> {
     await this._init(ctx.request);
+    await this._patchAgent();
     return await super.onConnect(connection, ctx);
   }
 
   override async onStateUpdate(state: ChatState, source: Connection | "server"): Promise<void> {
-    // Only patch agent if model settings actually changed to avoid unnecessary recreation
-    const modelChanged =
-      state.model !== this.state?.model ||
-      state.reasoningEffort !== this.state?.reasoningEffort ||
-      state.yolo !== this.state?.yolo;
-
-    if (modelChanged && this.planAgent) {
-      await this._patchAgent();
-    }
+    await this._patchAgent();
     await super.onStateUpdate(state, source);
   }
 
@@ -218,6 +218,10 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, ChatState> {
     _onFinish: StreamTextOnFinishCallback<ToolSet>,
     options?: OnChatMessageOptions
   ): Promise<Response> {
+    if (!this.state?.model) {
+      return new Response("Model not configured. Please select a model.", { status: 400 });
+    }
+
     try {
       // Generate title for first message (fire and forget)
       if (this.messages.length === 1) {

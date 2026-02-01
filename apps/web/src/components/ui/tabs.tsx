@@ -85,14 +85,15 @@ function TabsTrigger({
         className
       )}
       render={(props, state) => {
+        // Don't show indicator for disabled tabs even if active
+        const showIndicator = indicator && state.active && !state.disabled
         return (
           <button {...props}>
-            <span className="relative z-10">{children}</span>
-            {indicator && state.active && (
+            {showIndicator && (
               <motion.span
                 layoutId={indicator.id}
                 className={cn(
-                  "absolute",
+                  "pointer-events-none absolute -z-10",
                   indicator.variant === "line"
                     ? "bg-foreground group-data-[orientation=horizontal]/tabs:inset-x-0 group-data-[orientation=horizontal]/tabs:bottom-[-5px] group-data-[orientation=horizontal]/tabs:h-0.5 group-data-[orientation=vertical]/tabs:inset-y-0 group-data-[orientation=vertical]/tabs:-right-1 group-data-[orientation=vertical]/tabs:w-0.5"
                     : "inset-0 rounded-md bg-background dark:border-input dark:bg-input/30 border"
@@ -100,6 +101,7 @@ function TabsTrigger({
                 transition={springSnappy}
               />
             )}
+            {children}
           </button>
         )
       }}
