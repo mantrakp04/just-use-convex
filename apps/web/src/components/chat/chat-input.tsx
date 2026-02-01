@@ -1,13 +1,14 @@
 import { PaperclipIcon, Zap } from "lucide-react";
 import type { OpenRouterModel } from "@/hooks/use-openrouter-models";
 import type { useAgentChat } from "@cloudflare/ai-chat/react";
-import { memo } from "react";
-import { useAtom } from "jotai";
-import { yoloModeAtom } from "@/store/models";
+import { memo, useCallback } from "react";
+import { useSetAtom } from "jotai";
+import { defaultChatSettingsAtom } from "@/store/models";
 
 export type ChatSettings = {
   model?: string;
-  reasoningEffort?: "low" | "medium" | "high" | undefined;
+  reasoningEffort?: "low" | "medium" | "high";
+  yolo?: boolean;
 };
 import {
   PromptInput,
@@ -51,7 +52,27 @@ export const ChatInput = memo(function ChatInput({
   hasMessages,
 }: ChatInputProps) {
   const supportsReasoning = selectedModel?.supports_reasoning ?? false;
-  const [yoloMode, setYoloMode] = useAtom(yoloModeAtom);
+  const setDefaultSettings = useSetAtom(defaultChatSettingsAtom);
+
+  const handleReasoningChange = useCallback(
+    (effort: ChatSettings["reasoningEffort"]) => {
+      setSettings((prev) => ({ ...prev, reasoningEffort: effort }));
+      if (!hasMessages) {
+        setDefaultSettings((prev) => ({ ...prev, reasoningEffort: effort }));
+      }
+    },
+    [setSettings, setDefaultSettings, hasMessages]
+  );
+
+  const handleYoloToggle = useCallback(() => {
+    setSettings((prev) => {
+      const newYolo = !prev.yolo;
+      if (!hasMessages) {
+        setDefaultSettings((p) => ({ ...p, yolo: newYolo }));
+      }
+      return { ...prev, yolo: newYolo };
+    });
+  }, [setSettings, setDefaultSettings, hasMessages]);
 
   return (
     <div className="pb-1 mx-auto w-4xl">
@@ -69,17 +90,16 @@ export const ChatInput = memo(function ChatInput({
               groupedModels={groupedModels}
               models={models}
               selectedModel={selectedModel}
-              settings={settings}
               onSettingsChange={setSettings}
               hasMessages={hasMessages}
             />
             {supportsReasoning && (
               <ReasoningEffortSelector
                 currentEffort={settings.reasoningEffort}
-                onSelect={(effort) => setSettings((prev) => ({ ...prev, reasoningEffort: effort }))}
+                onSelect={handleReasoningChange}
               />
             )}
-            <YoloModeButton active={yoloMode} onToggle={() => setYoloMode(!yoloMode)} />
+            <YoloModeButton active={settings.yolo ?? false} onToggle={handleYoloToggle} />
           </PromptInputTools>
           <PromptInputSubmit status={status} onStop={onStop} />
         </PromptInputFooter>

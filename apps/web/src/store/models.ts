@@ -8,18 +8,16 @@ export const favoriteModelsAtom = atomWithStorage<string[]>(
   { getOnInit: true }
 );
 
-// Persisted default model slug
-export const defaultModelAtom = atomWithStorage<{ model: string; reasoningEffort?: "low" | "medium" | "high" }>(
-  "default-model",
-  { model: "openai/gpt-5.2-chat" },
-  undefined,
-  { getOnInit: true }
-);
+export type DefaultChatSettings = {
+  model: string;
+  reasoningEffort?: "low" | "medium" | "high";
+  yolo?: boolean;
+};
 
-// YOLO mode - when enabled, skips confirmations and goes full send
-export const yoloModeAtom = atomWithStorage<boolean>(
-  "yolo-mode",
-  false,
+// Persisted default chat settings (model, reasoning, yolo)
+export const defaultChatSettingsAtom = atomWithStorage<DefaultChatSettings>(
+  "default-chat-settings",
+  { model: "openai/gpt-5.2-chat" },
   undefined,
   { getOnInit: true }
 );

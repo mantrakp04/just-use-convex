@@ -44,6 +44,9 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, ChatState> {
   private convexClient: ConvexHttpClient | null = null;
   private planAgent: PlanAgent | null = null;
   private sandboxId: string | null = null;
+  // Track last applied model settings to avoid unnecessary patches
+  private lastAppliedModel: string | null = null;
+  private lastAppliedReasoningEffort: "low" | "medium" | "high" | undefined = undefined;
 
   private async generateTitle(userMessage: string): Promise<void> {
     if (!this.convexClient) return;
@@ -78,14 +81,16 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, ChatState> {
     const reasoningEffort = url.searchParams.get('reasoningEffort') as "low" | "medium" | "high" | undefined;
     const yolo = url.searchParams.get('yolo') === 'true';
 
-    // Model can come from query params or existing state (synced via setState later)
-    const effectiveModel = model || this.state?.model;
-
-    // Only update state if we have new values
-    if (effectiveModel || reasoningEffort || yolo) {
+    // Only update state if we have new values and state doesn't exist yet
+    const state = this.state ?? {};
+    if (
+      (!state.model && model) ||
+      (!state.reasoningEffort && reasoningEffort) ||
+      (!state.yolo && yolo)
+    ) {
       this.setState({
-        ...this.state,
-        ...(effectiveModel && { model: effectiveModel }),
+        ...state,
+        ...(model && { model }),
         ...(reasoningEffort && { reasoningEffort }),
         ...(yolo && { yolo }),
       });
@@ -147,8 +152,13 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, ChatState> {
         }),
       } : {}),
     });
-    await this._patchAgent();
+
+    // Track the initial model settings
+    this.lastAppliedModel = this.state.model;
+    this.lastAppliedReasoningEffort = this.state.reasoningEffort;
+
     this.planAgent = agent;
+    await this._patchAgent();
     return agent;
   }
 
@@ -170,14 +180,19 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, ChatState> {
       });
     }
 
-    const model = this.state.model
+    const model = this.state.model;
     const reasoningEffort = this.state.reasoningEffort;
-    if (model) {
+
+    // Only recreate model if settings actually changed
+    const modelChanged = model !== this.lastAppliedModel || reasoningEffort !== this.lastAppliedReasoningEffort;
+    if (model && modelChanged) {
       Object.defineProperty(agent, 'model', {
         value: createAiClient(model, reasoningEffort),
         writable: true,
         configurable: true,
       });
+      this.lastAppliedModel = model;
+      this.lastAppliedReasoningEffort = reasoningEffort;
     }
   }
 
@@ -219,7 +234,7 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, ChatState> {
     options?: OnChatMessageOptions
   ): Promise<Response> {
     if (!this.state?.model) {
-      return new Response("Model not configured. Please select a model.", { status: 400 });
+      return new Response("Model not configured. Use the model selector in the chat header or pass 'model' as a query parameter when connecting.", { status: 400 });
     }
 
     try {

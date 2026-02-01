@@ -13,9 +13,17 @@ import {
 import { z } from "zod";
 import type { worker } from "../../alchemy.run";
 
+/**
+ * Escape a string for safe use in shell commands with single quotes.
+ * Handles embedded single quotes by ending the quote, adding escaped quote, and resuming.
+ */
+function escapeShellArg(arg: string): string {
+  return `'${arg.replace(/'/g, "'\\''")}'`;
+}
+
 export class SandboxFilesystemBackend implements FilesystemBackend {
-  private sandbox: ReturnType<typeof getSandbox>;
-  private rootDir: string;
+  public sandbox: ReturnType<typeof getSandbox>;
+  public rootDir: string;
 
   constructor(env: typeof worker.Env, sandboxName: string) {
     this.sandbox = getSandbox(env.Sandbox, sandboxName);
@@ -42,10 +50,10 @@ export class SandboxFilesystemBackend implements FilesystemBackend {
 
   /**
    * Escape a string for safe use in shell commands with single quotes.
-   * Handles embedded single quotes by ending the quote, adding escaped quote, and resuming.
+   * Delegates to the module-level escapeShellArg function.
    */
   private escapeShellArg(arg: string): string {
-    return `'${arg.replace(/'/g, "'\\''")}'`;
+    return escapeShellArg(arg);
   }
 
   async lsInfo(path: string): Promise<FileInfo[]> {
@@ -102,14 +110,14 @@ export class SandboxFilesystemBackend implements FilesystemBackend {
   ): Promise<string> {
     const resolvedPath = this.resolvePath(filePath);
 
-    let cmd = `cat "${resolvedPath}"`;
+    let cmd = `cat ${this.escapeShellArg(resolvedPath)}`;
     if (offset !== undefined || limit !== undefined) {
       const start = (offset || 0) + 1; // sed is 1-indexed
       if (limit !== undefined) {
         const end = start + limit - 1;
-        cmd = `sed -n '${start},${end}p' "${resolvedPath}"`;
+        cmd = `sed -n '${start},${end}p' ${this.escapeShellArg(resolvedPath)}`;
       } else {
-        cmd = `sed -n '${start},$p' "${resolvedPath}"`;
+        cmd = `sed -n '${start},$p' ${this.escapeShellArg(resolvedPath)}`;
       }
     }
 
@@ -126,9 +134,9 @@ export class SandboxFilesystemBackend implements FilesystemBackend {
     const resolvedPath = this.resolvePath(filePath);
 
     const [contentResult, statResult] = await Promise.all([
-      this.sandbox.exec(`cat "${resolvedPath}"`),
+      this.sandbox.exec(`cat ${this.escapeShellArg(resolvedPath)}`),
       this.sandbox.exec(
-        `stat -c '%Y' "${resolvedPath}" 2>/dev/null || echo "0"`
+        `stat -c '%Y' ${this.escapeShellArg(resolvedPath)} 2>/dev/null || echo "0"`
       ),
     ]);
 
@@ -226,7 +234,7 @@ export class SandboxFilesystemBackend implements FilesystemBackend {
         0,
         resolvedPath.lastIndexOf("/")
       );
-      await this.sandbox.exec(`mkdir -p "${parentDir}"`);
+      await this.sandbox.exec(`mkdir -p ${this.escapeShellArg(parentDir)}`);
 
       // Write file using sandbox's writeFile if available, otherwise use heredoc
       await this.sandbox.writeFile(resolvedPath, content);
@@ -308,7 +316,7 @@ export class SandboxFilesystemBackend implements FilesystemBackend {
     exitCode: number;
   }> {
     const cwd = options?.cwd ? this.resolvePath(options.cwd) : this.rootDir;
-    const cmd = `cd "${cwd}" && ${command}`;
+    const cmd = `cd ${this.escapeShellArg(cwd)} && ${command}`;
 
     const result = await this.sandbox.exec(cmd);
 
@@ -321,29 +329,47 @@ export class SandboxFilesystemBackend implements FilesystemBackend {
   }
 }
 
-const SANDBOX_INSTRUCTIONS = `You have access to an isolated sandbox environment with a virtual filesystem.
+const SANDBOX_INSTRUCTIONS = (rootDir: string) => `You have access to an isolated sandbox environment with a virtual filesystem in ${rootDir}.
 
-## Sandbox Tools
+## Tool Usage
 
-- bash: Execute shell commands (npm, yarn, bun, cargo, git, etc.)
-- ls: List files in a directory (requires absolute path)
-- read_file: Read a file from the filesystem
-- write_file: Write to a file in the filesystem
-- edit_file: Edit a file by replacing a specific string
-- glob: Find files matching a pattern (e.g., "**/*.ts")
-- grep: Search for text within files
+You have access to filesystem tools (read_file, write_file, edit_file, ls, glob, grep) and can delegate complex subtasks to specialized subagents via the task tool.
 
-All file paths must start with a /. The working directory is /workspace by default.`;
+Guidelines:
+- Read files before modifying them to understand existing code
+- Use grep/glob to locate relevant files before diving in
+- Prefer editing existing files over creating new ones
+- Make minimal, focused changes that solve the specific problem
+
+## Code Execution (Sandbox)
+
+You can execute code in isolated Cloudflare Sandbox containers. This provides a secure environment for:
+- Running shell commands and scripts
+- Installing dependencies (npm, pip, etc.)
+- Executing code in various languages (Python, Node.js, etc.)
+- Testing code before committing changes
+
+Sandbox guidelines:
+- Use sandboxes for any code that needs to run, not just for viewing
+- Prefer streaming output for long-running commands to provide real-time feedback
+- Clean up resources when done (delete files, stop processes)
+- Handle command failures gracefully and report errors clearly
+- Never execute untrusted code without sandboxing it first
+
+## Code Quality
+
+When writing or modifying code:
+- Follow existing patterns and conventions in the codebase
+- Keep changes focused and avoid scope creep
+- Don't add unnecessary abstractions, comments, or "improvements" beyond what's requested
+- Consider edge cases and error handling where appropriate
+`;
 
 export interface SandboxToolkitOptions {
   maxOutputChars?: number;
   logDir?: string;
 }
 
-/**
- * Creates a toolkit with all sandbox tools (bash + filesystem).
- * Uses simplified Zod schemas that are compatible with all providers.
- */
 export function createSandboxToolkit(
   backend: SandboxFilesystemBackend,
   options: SandboxToolkitOptions = {}
@@ -402,7 +428,7 @@ Important:
         const logFile = `${logDir}/bash_${timestamp}_${commandSlug}.log`;
 
         // Ensure log directory exists and write the full output
-        await backend.exec(`mkdir -p "${logDir}"`);
+        await backend.exec(`mkdir -p ${escapeShellArg(logDir)}`);
         await backend.write(logFile, fullOutput);
 
         // Return truncated output with pointer to log file
@@ -506,10 +532,11 @@ Important:
     },
   });
 
-  return createToolkit({
+  const toolkit = createToolkit({
     name: "sandbox",
     description: "Sandbox tools for executing commands and managing files in an isolated environment",
-    instructions: SANDBOX_INSTRUCTIONS,
+    instructions: SANDBOX_INSTRUCTIONS(backend.rootDir),
     tools: [bashTool, lsTool, readFileTool, writeFileTool, editFileTool, globTool, grepTool],
   });
+  return toolkit;
 }

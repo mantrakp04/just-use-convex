@@ -58,6 +58,7 @@ User uses casual language ("bro", "dawg", "ugh"). Keep responses terse and actio
 - **Use skeleton loaders**, not spinners
 - **Match Tailwind patterns exactly** — don't modify unrelated classes
 - **DRY the code** — reuse existing utilities
+- **Ask clarifying questions** if requirements are unclear
 
 ## DON'T
 

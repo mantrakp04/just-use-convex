@@ -20,7 +20,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Box, ChevronDown, Plus, Loader2, Info, Check } from "lucide-react";
+import { Box, ChevronDown, Plus, Loader2, Info, Check, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const ITEM_HEIGHT = 28;
@@ -29,9 +29,11 @@ const MAX_LIST_HEIGHT = ITEM_HEIGHT * MAX_VISIBLE_ITEMS;
 
 export function SandboxSelector() {
   const sandboxesQuery = useSandboxesList();
-  const { createSandbox, isCreating } = useSandboxes();
+  const { createSandbox, isCreating, deleteSandbox, isDeleting } = useSandboxes();
   const scrollRef = useRef<HTMLDivElement>(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [sandboxToDelete, setSandboxToDelete] = useState<Sandbox | null>(null);
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [selectedSandboxId, setSelectedSandboxId] = useAtom(selectedSandboxIdAtom);
@@ -58,6 +60,22 @@ export function SandboxSelector() {
     setDescription("");
     setIsDialogOpen(true);
   }, []);
+
+  const handleDeleteClick = useCallback((e: React.MouseEvent, sandbox: Sandbox) => {
+    e.stopPropagation();
+    setSandboxToDelete(sandbox);
+    setIsDeleteDialogOpen(true);
+  }, []);
+
+  const handleConfirmDelete = useCallback(async () => {
+    if (!sandboxToDelete) return;
+    await deleteSandbox({ _id: sandboxToDelete._id });
+    if (selectedSandboxId === sandboxToDelete._id) {
+      setSelectedSandboxId(null);
+    }
+    setIsDeleteDialogOpen(false);
+    setSandboxToDelete(null);
+  }, [deleteSandbox, sandboxToDelete, selectedSandboxId, setSelectedSandboxId]);
 
   const handleCreateSandbox = useCallback(async () => {
     if (!name.trim()) return;
@@ -107,12 +125,21 @@ export function SandboxSelector() {
                     key={sandbox._id}
                     onClick={() => setSelectedSandboxId(sandbox._id)}
                     className={cn(
-                      "cursor-pointer justify-between",
+                      "cursor-pointer justify-between group",
                       selectedSandboxId === sandbox._id && "bg-accent"
                     )}
                   >
                     <span className="truncate">{sandbox.name}</span>
-                    {selectedSandboxId === sandbox._id && <Check className="size-4 shrink-0" />}
+                    <div className="flex items-center gap-1 shrink-0">
+                      {selectedSandboxId === sandbox._id && <Check className="size-4" />}
+                      <button
+                        type="button"
+                        onClick={(e) => handleDeleteClick(e, sandbox)}
+                        className="opacity-0 group-hover:opacity-100 p-0.5 hover:bg-destructive/20 rounded transition-opacity"
+                      >
+                        <Trash2 className="size-3.5 text-destructive" />
+                      </button>
+                    </div>
                   </DropdownMenuItem>
                 ))}
                 {isLoadingMore && (
@@ -194,6 +221,40 @@ export function SandboxSelector() {
                 </>
               ) : (
                 "Create Sandbox"
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete Sandbox</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to delete "{sandboxToDelete?.name}"? This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setIsDeleteDialogOpen(false)}
+              disabled={isDeleting}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleConfirmDelete}
+              disabled={isDeleting}
+            >
+              {isDeleting ? (
+                <>
+                  <Loader2 className="size-4 animate-spin" />
+                  Deleting...
+                </>
+              ) : (
+                "Delete"
               )}
             </Button>
           </DialogFooter>
