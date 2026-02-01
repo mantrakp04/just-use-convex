@@ -11,9 +11,11 @@ const agentWorkerNamespace = DurableObjectNamespace("agent-worker", {
   sqlite: true,
 });
 
+const SANDBOX_IMAGE = "docker.io/cloudflare/sandbox:0.7.0";
+
 const sandboxContainer = await Container<import("@cloudflare/sandbox").Sandbox>("sandbox", {
   className: "Sandbox",
-  image: "docker.io/cloudflare/sandbox:0.7.0",
+  image: SANDBOX_IMAGE,
 });
 
 const sandboxBucket = await R2Bucket("just-use-convex-sandboxes", {
@@ -82,4 +84,16 @@ await app.finalize();
 await WranglerJson({
   worker: worker,
   path: "./wrangler.json",
+  transform: {
+    wrangler: (spec) => {
+      if (spec.containers) {
+        for (const container of spec.containers) {
+          if (container.class_name === "Sandbox") {
+            container.image = SANDBOX_IMAGE;
+          }
+        }
+      }
+      return spec;
+    },
+  },
 });

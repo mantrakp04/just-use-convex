@@ -47,7 +47,7 @@
   "containers": [
     {
       "class_name": "Sandbox",
-      "image": "/home/barrel/just-use-convex/packages/agent/Dockerfile"
+      "image": "docker.io/cloudflare/sandbox:0.7.0"
     }
   ]
 }
