@@ -15,6 +15,7 @@ import {
   useRef,
   type ReactNode,
   createElement,
+  useLayoutEffect,
 } from "react";
 import { createRoot, type Root } from "react-dom/client";
 
@@ -136,8 +137,10 @@ function AgentInstanceInner({
     autoContinueAfterToolResult: true,
   });
 
-  chatRef.current = chat;
-  agentRef.current = agent;
+  useLayoutEffect(() => {
+    chatRef.current = chat;
+    agentRef.current = agent;
+  }, [chat, agent]);
 
   // Update instance data on mount
   useEffect(() => {
@@ -157,9 +160,11 @@ function createIsolatedInstance(
   token: string | null | undefined,
   defaultSettings: DefaultChatSettings
 ): void {
-  if (isolatedInstances.has(chatId)) return;
-
-  // Create a hidden container for this instance
+  const existing = isolatedInstances.get(chatId);
+  if (existing) {
+    existing.root.render(createElement(AgentInstanceInner, { chatId, token, defaultSettings }));
+    return;
+  }
   const container = document.createElement("div");
   container.style.display = "none";
   container.dataset.agentInstance = chatId;

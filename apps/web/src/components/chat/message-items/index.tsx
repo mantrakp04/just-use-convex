@@ -1,6 +1,6 @@
 "use client";
 
-import { memo, useMemo } from "react";
+import { memo, useMemo, useEffect } from "react";
 import type { UIMessage } from "@ai-sdk/react";
 import type { ChatAddToolApproveResponseFunction, FileUIPart } from "ai";
 import { Check, X, PaperclipIcon } from "lucide-react";
@@ -147,15 +147,18 @@ export const MessageItem = memo(function MessageItem({
 
     flushChainGroup();
 
+    return elements;
+  };
+
+  // Extract todos in an effect, not during render
+  useEffect(() => {
     if (isLastAssistantMessage && onTodosChange) {
-      const todosState = extractTodosFromMessage(message, isLastAssistantMessage);
+      const todosState = extractTodosFromMessage(message, true);
       if (todosState) {
         onTodosChange(todosState);
       }
     }
-
-    return elements;
-  };
+  }, [message, isLastAssistantMessage, onTodosChange]);
 
   const handleRegenerate = () => {
     if (onRegenerate) {

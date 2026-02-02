@@ -57,8 +57,6 @@ export function MessageList({
     syncTodosToParent(onTodosChange);
   });
 
-  console.log(messages);
-
   return (
     <div className="flex flex-col gap-1">
       {messages.map((message, index) => {
