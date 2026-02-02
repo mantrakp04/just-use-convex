@@ -50,6 +50,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
                   createdAt: number;
                   expiresAt: number;
                   ipAddress?: null | string;
+                  memberId?: null | string;
                   organizationRole?: null | string;
                   token: string;
                   updatedAt: number;
@@ -205,6 +206,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
                     | "activeOrganizationId"
                     | "activeTeamId"
                     | "organizationRole"
+                    | "memberId"
                     | "_id";
                   operator?:
                     | "lt"
@@ -553,6 +555,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
                     | "activeOrganizationId"
                     | "activeTeamId"
                     | "organizationRole"
+                    | "memberId"
                     | "_id";
                   operator?:
                     | "lt"
@@ -995,6 +998,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
                   createdAt?: number;
                   expiresAt?: number;
                   ipAddress?: null | string;
+                  memberId?: null | string;
                   organizationRole?: null | string;
                   token?: string;
                   updatedAt?: number;
@@ -1014,6 +1018,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
                     | "activeOrganizationId"
                     | "activeTeamId"
                     | "organizationRole"
+                    | "memberId"
                     | "_id";
                   operator?:
                     | "lt"
@@ -1427,6 +1432,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
                   createdAt?: number;
                   expiresAt?: number;
                   ipAddress?: null | string;
+                  memberId?: null | string;
                   organizationRole?: null | string;
                   token?: string;
                   updatedAt?: number;
@@ -1446,6 +1452,7 @@ export type ComponentApi<Name extends string | undefined = string | undefined> =
                     | "activeOrganizationId"
                     | "activeTeamId"
                     | "organizationRole"
+                    | "memberId"
                     | "_id";
                   operator?:
                     | "lt"

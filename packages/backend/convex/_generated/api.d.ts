@@ -127,6 +127,7 @@ export declare const components: {
                   createdAt: number;
                   expiresAt: number;
                   ipAddress?: null | string;
+                  memberId?: null | string;
                   organizationRole?: null | string;
                   token: string;
                   updatedAt: number;
@@ -281,6 +282,7 @@ export declare const components: {
                     | "activeOrganizationId"
                     | "activeTeamId"
                     | "organizationRole"
+                    | "memberId"
                     | "_id";
                   operator?:
                     | "lt"
@@ -628,6 +630,7 @@ export declare const components: {
                     | "activeOrganizationId"
                     | "activeTeamId"
                     | "organizationRole"
+                    | "memberId"
                     | "_id";
                   operator?:
                     | "lt"
@@ -1067,6 +1070,7 @@ export declare const components: {
                   createdAt?: number;
                   expiresAt?: number;
                   ipAddress?: null | string;
+                  memberId?: null | string;
                   organizationRole?: null | string;
                   token?: string;
                   updatedAt?: number;
@@ -1086,6 +1090,7 @@ export declare const components: {
                     | "activeOrganizationId"
                     | "activeTeamId"
                     | "organizationRole"
+                    | "memberId"
                     | "_id";
                   operator?:
                     | "lt"
@@ -1498,6 +1503,7 @@ export declare const components: {
                   createdAt?: number;
                   expiresAt?: number;
                   ipAddress?: null | string;
+                  memberId?: null | string;
                   organizationRole?: null | string;
                   token?: string;
                   updatedAt?: number;
@@ -1517,6 +1523,7 @@ export declare const components: {
                     | "activeOrganizationId"
                     | "activeTeamId"
                     | "organizationRole"
+                    | "memberId"
                     | "_id";
                   operator?:
                     | "lt"

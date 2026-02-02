@@ -37,6 +37,7 @@ export const tables = {
     activeOrganizationId: v.optional(v.union(v.null(), v.string())),
     activeTeamId: v.optional(v.union(v.null(), v.string())),
     organizationRole: v.optional(v.union(v.null(), v.string())),
+    memberId: v.optional(v.union(v.null(), v.string())),
   })
     .index("expiresAt", ["expiresAt"])
     .index("expiresAt_userId", ["expiresAt","userId"])

@@ -1,7 +1,7 @@
 import * as functions from "./functions";
 import * as stats from "./stats";
 import * as types from "./types";
-import { zMutation, zQuery } from "../functions";
+import { zExternalMutation, zExternalQuery, zMutation, zQuery } from "../functions";
 
 export const list = zQuery({
   args: types.ListArgs,
@@ -16,6 +16,12 @@ export const get = zQuery({
     return await functions.GetChat(ctx, args);
   },
 });
+export const getExt = zExternalQuery({
+  args: types.GetChatArgs,
+  handler: async (ctx, args): Promise<ReturnType<typeof functions.GetChat>> => {
+    return await functions.GetChat(ctx, args);
+  },
+});
 
 export const create = zMutation({
   args: types.CreateArgs,
@@ -25,6 +31,12 @@ export const create = zMutation({
 });
 
 export const update = zMutation({
+  args: types.UpdateArgs,
+  handler: async (ctx, args): Promise<ReturnType<typeof functions.UpdateChat>> => {
+    return await functions.UpdateChat(ctx, args);
+  },
+});
+export const updateExt = zExternalMutation({
   args: types.UpdateArgs,
   handler: async (ctx, args): Promise<ReturnType<typeof functions.UpdateChat>> => {
     return await functions.UpdateChat(ctx, args);
