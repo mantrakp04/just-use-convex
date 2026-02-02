@@ -1,7 +1,7 @@
 import { routeAgentRequest, type Connection, type ConnectionContext, callable } from "agents";
 export { Sandbox } from "@cloudflare/sandbox";
 import { AIChatAgent, type OnChatMessageOptions } from "agents/ai-chat-agent";
-import { generateText, type StreamTextOnFinishCallback, type ToolSet, Output } from "ai";
+import { generateText, type StreamTextOnFinishCallback, type ToolSet, Output, type UIMessage, isFileUIPart } from "ai";
 import type { PlanAgent } from "@voltagent/core";
 import { createAiClient } from "./client";
 import { SYSTEM_PROMPT, TASK_PROMPT } from "./prompt";
@@ -23,7 +23,43 @@ type ChatState = {
   model: string;
   reasoningEffort?: "low" | "medium" | "high";
   yolo?: boolean;
+  inputModalities?: string[];
 };
+
+// Map MIME type prefixes to OpenRouter modality names
+function getMimeModality(mimeType: string): string | null {
+  if (mimeType.startsWith("image/")) return "image";
+  if (mimeType.startsWith("video/")) return "video";
+  if (mimeType.startsWith("audio/")) return "audio";
+  if (mimeType.startsWith("application/pdf")) return "file"; // PDFs often treated as "file" modality
+  if (mimeType.startsWith("text/")) return "text";
+  return null;
+}
+
+// Check if a MIME type is supported by the model's input modalities
+function isMimeTypeSupported(mimeType: string, inputModalities?: string[]): boolean {
+  // Default to supporting everything if no modalities specified
+  if (!inputModalities || inputModalities.length === 0) return true;
+
+  const modality = getMimeModality(mimeType);
+  if (!modality) return false;
+
+  // Most models that support "image" also handle PDFs through vision
+  if (modality === "file" && inputModalities.includes("image")) return true;
+
+  return inputModalities.includes(modality);
+}
+
+// Filter message parts to only include supported file types
+function filterMessageParts(messages: UIMessage[], inputModalities?: string[]): UIMessage[] {
+  return messages.map((msg) => ({
+    ...msg,
+    parts: msg.parts.filter((part) => {
+      if (!isFileUIPart(part)) return true;
+      return isMimeTypeSupported(part.mediaType, inputModalities);
+    }),
+  }));
+}
 
 export default {
   async fetch(request: Request, env: typeof worker.Env): Promise<Response> {
@@ -49,8 +85,41 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, ChatState> {
   private convexAdapter: ConvexAdapter | null = null;
   private planAgent: PlanAgent | null = null;
   private sandboxId: string | null = null;
+  private sandboxBackend: SandboxFilesystemBackend | null = null;
   private lastAppliedModel: string | null = null;
   private lastAppliedReasoningEffort: "low" | "medium" | "high" | undefined = undefined;
+
+  private async saveFilesToSandbox(messages: UIMessage[]): Promise<void> {
+    if (!this.sandboxBackend) return;
+
+    const uploadDir = "/workspace/uploads";
+
+    for (const msg of messages) {
+      for (const part of msg.parts) {
+        if (!isFileUIPart(part)) continue;
+
+        const { url, filename } = part;
+        if (!filename) continue;
+
+        try {
+          // Handle data URLs (base64 encoded)
+          if (url.startsWith("data:")) {
+            const base64Match = url.match(/^data:[^;]+;base64,(.+)$/);
+            if (base64Match?.[1]) {
+              const binaryContent = atob(base64Match[1]);
+              const filePath = `${uploadDir}/${filename}`;
+              await this.sandboxBackend.write(filePath, binaryContent);
+              console.log(`Saved file to sandbox: ${filePath}`);
+            }
+          }
+          // Handle blob URLs or external URLs - skip for now as they require fetch
+          // In the future, we could fetch these and save them
+        } catch (error) {
+          console.error(`Failed to save file ${filename} to sandbox:`, error);
+        }
+      }
+    }
+  }
 
   private async generateTitle(userMessage: string): Promise<void> {
     if (!this.convexAdapter) return;
@@ -132,6 +201,7 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, ChatState> {
     const { PlanAgent, createVoltAgentObservability } = await import("@voltagent/core");
 
     const filesystemBackend = this.sandboxId ? new SandboxFilesystemBackend(this.env, this.sandboxId) : undefined;
+    this.sandboxBackend = filesystemBackend ?? null;
 
     const agent = new PlanAgent({
       name: "Assistant",
@@ -311,8 +381,17 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, ChatState> {
         }
       }
 
+      // Save uploaded files to sandbox (fire and forget)
+      this.saveFilesToSandbox(this.messages);
+
+      // Filter file parts based on model's supported input modalities
+      const filteredMessages = filterMessageParts(
+        this.messages,
+        this.state.inputModalities
+      );
+
       const agent = this.planAgent || (await this._prepAgent());
-      const stream = await agent?.streamText(this.messages, {
+      const stream = await agent?.streamText(filteredMessages, {
         abortSignal: options?.abortSignal
       })
 

@@ -9,6 +9,8 @@ export type OpenRouterModel = {
   context_length: number;
   supports_reasoning: boolean;
   created_at: string;
+  input_modalities?: string[];
+  output_modalities?: string[];
   reasoning_config?: {
     supports_reasoning_effort?: boolean;
     supported_reasoning_efforts?: string[];

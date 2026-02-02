@@ -59,6 +59,7 @@ export function ChatModelSelector({
       ...prev,
       model: model.slug,
       reasoningEffort: model.supports_reasoning ? prev.reasoningEffort : undefined,
+      inputModalities: model.input_modalities,
     }));
 
     // Update default settings only if there are no messages yet
@@ -185,6 +186,7 @@ function ModelItem({ model, isFavorite, onSelect, onToggleFavorite, selectedAuth
           />
           <div className="flex items-center gap-1 ml-auto">
             {model.supports_reasoning && <ModelSelectorBadge type="reasoning" />}
+            {model.input_modalities?.includes("image") && <ModelSelectorBadge type="vision" />}
             {model.context_length > 100000 && <ModelSelectorBadge type="large-context" />}
           </div>
         </div>

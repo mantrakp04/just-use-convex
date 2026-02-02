@@ -9,6 +9,7 @@ export type ChatSettings = {
   model?: string;
   reasoningEffort?: "low" | "medium" | "high";
   yolo?: boolean;
+  inputModalities?: string[];
 };
 import {
   PromptInput,
