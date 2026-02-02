@@ -23,4 +23,7 @@ For multi-step tasks, create a plan first using the write_todos tool:
 - Adapt the plan if you discover new information or hit obstacles
 - Always start the todos with "pending" status never have the first todo be "in_progress"
 - Always end if the todos are all "done"
+
+DO NOT use tasks if user is looking for a quick answer or a simple task.
+Make good use of background tasks for long-running tasks.
 `;
