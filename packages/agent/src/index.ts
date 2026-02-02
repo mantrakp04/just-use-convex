@@ -7,6 +7,7 @@ import { createAiClient } from "./client";
 import { SYSTEM_PROMPT, TASK_PROMPT } from "./prompt";
 import { SandboxFilesystemBackend, createSandboxToolkit } from "./tools/sandbox";
 import { createWebSearchToolkit } from "./tools/websearch";
+import { createAskUserToolkit } from "./tools/ask-user";
 import { withBackgroundTaskTools, patchToolWithBackgroundSupport } from "./tools/utils";
 import type { worker } from "../alchemy.run";
 import {
@@ -210,6 +211,7 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, ChatState> {
       tools: withBackgroundTaskTools([
         ...(filesystemBackend ? [createSandboxToolkit(filesystemBackend)] : []),
         createWebSearchToolkit(),
+        createAskUserToolkit(),
       ]),
       toolResultEviction: {
         enabled: true,

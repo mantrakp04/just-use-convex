@@ -16,8 +16,9 @@ import {
   WebSearchError,
   type WebSearchOutput,
 } from "@/components/ai-elements/web-search";
-import type { ConfirmationProps } from "@/components/ai-elements/confirmation";
+import type { AskUserInput } from "@/components/ai-elements/ask-user";
 import { ToolApprovalConfirmation } from "../tool-approval-confirmation";
+import { AskUserDisplay } from "../ask-user-display";
 
 export type ToolPartType = Extract<UIMessage["parts"][number], { type: `tool-${string}` }>;
 
@@ -37,15 +38,32 @@ export function isToolPart(
   return part.type.startsWith("tool-");
 }
 
+const AskUserPart = memo(function AskUserPart({
+  part,
+  toolApprovalResponse,
+}: Omit<ToolPartProps, "partKey">) {
+  const approval = "approval" in part ? part.approval : undefined;
+
+  const input = part.input as AskUserInput | undefined;
+
+  if (!input?.questions) return null;
+
+  return (
+    <AskUserDisplay
+      input={input}
+      approval={approval}
+      state={part.state}
+      toolApprovalResponse={toolApprovalResponse}
+    />
+  );
+});
+
 const WebSearchPart = memo(function WebSearchPart({
   part,
   partKey,
   toolApprovalResponse,
 }: ToolPartProps) {
-  const approval = 'approval' in part
-    ? (part.approval as ConfirmationProps['approval'])
-    : undefined;
-
+  const approval = 'approval' in part ? part.approval : undefined;
   const output = part.output as WebSearchOutput | undefined;
   const input = part.input as { query?: string } | undefined;
 
@@ -81,6 +99,15 @@ export const ToolPart = memo(function ToolPart({
 }: ToolPartProps) {
   const toolName = getToolName(part.type);
 
+  if (toolName === "ask_user") {
+    return (
+      <AskUserPart
+        part={part}
+        toolApprovalResponse={toolApprovalResponse}
+      />
+    );
+  }
+
   if (toolName === "web_search") {
     return (
       <WebSearchPart
@@ -91,9 +118,7 @@ export const ToolPart = memo(function ToolPart({
     );
   }
 
-  const approval = 'approval' in part
-    ? (part.approval as ConfirmationProps['approval'])
-    : undefined;
+  const approval = 'approval' in part ? part.approval : undefined;
 
   return (
     <Tool key={partKey}>

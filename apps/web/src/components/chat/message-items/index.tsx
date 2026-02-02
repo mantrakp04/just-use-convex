@@ -1,6 +1,6 @@
 "use client";
 
-import { memo, useMemo, useEffect } from "react";
+import { memo, useMemo } from "react";
 import type { UIMessage } from "@ai-sdk/react";
 import type { ChatAddToolApproveResponseFunction, FileUIPart } from "ai";
 import { Check, X, PaperclipIcon } from "lucide-react";
@@ -24,7 +24,7 @@ import { CopyButton } from "./copy-button";
 import { RegenerateButton } from "./regenerate-button";
 import { EditMessageButton } from "./edit-message-button";
 import { ChainOfThoughtPart, isChainOfThoughtPart } from "./chain-of-thought-part";
-import { getToolName } from "./tool-part";
+import { ToolPart, getToolName, isToolPart, type ToolPartType } from "./tool-part";
 import type { TodosState } from "../message-list";
 import {
   useMessageEditing,
@@ -45,10 +45,17 @@ export interface MessageItemProps {
   onTodosChange?: (todosState: TodosState) => void;
 }
 
-const EXCLUDED_TOOLS = ["write_todos"];
+// Tools completely hidden from message (rendered elsewhere or extracted)
+const HIDDEN_TOOLS = ["write_todos"];
+// Tools rendered outside chain of thought but still shown inline
+const INLINE_TOOLS = ["ask_user"];
 
-function isExcludedTool(part: UIMessage["parts"][number]): boolean {
-  return EXCLUDED_TOOLS.includes(getToolName(part.type));
+function isHiddenTool(part: UIMessage["parts"][number]): boolean {
+  return HIDDEN_TOOLS.includes(getToolName(part.type));
+}
+
+function isInlineTool(part: UIMessage["parts"][number]): boolean {
+  return INLINE_TOOLS.includes(getToolName(part.type));
 }
 
 export const MessageItem = memo(function MessageItem({
@@ -88,24 +95,45 @@ export const MessageItem = memo(function MessageItem({
     const elements: React.ReactNode[] = [];
     let chainGroup: { part: UIMessage["parts"][number]; index: number }[] = [];
 
+    const flushChainGroup = () => {
+      if (chainGroup.length > 0) {
+        elements.push(
+          <ChainOfThoughtPart
+            key={`${message.id}-chain-${chainGroup[0].index}`}
+            isStreaming={isStreaming}
+            chainGroup={chainGroup}
+            toolApprovalResponse={toolApprovalResponse}
+          />
+        );
+        chainGroup = [];
+      }
+    };
+
     message.parts.forEach((part, i) => {
-      if (part.type === "step-start" || isExcludedTool(part)) {
+      // Skip step-start and hidden tools (rendered elsewhere)
+      if (part.type === "step-start" || isHiddenTool(part)) {
         return;
       }
+
+      // Inline tools (like ask_user) - render directly, not in chain
+      if (isInlineTool(part) && isToolPart(part)) {
+        flushChainGroup();
+        elements.push(
+          <ToolPart
+            key={`${message.id}-tool-${i}`}
+            part={part as ToolPartType}
+            partKey={i}
+            toolApprovalResponse={toolApprovalResponse}
+          />
+        );
+        return;
+      }
+
+      // Chain of thought parts (reasoning, tool calls, etc.)
       if (isChainOfThoughtPart(part)) {
         chainGroup.push({ part, index: i });
       } else {
-        if (chainGroup.length > 0) {
-          elements.push(
-            <ChainOfThoughtPart
-              key={`${message.id}-chain-${chainGroup[0].index}`}
-              isStreaming={isStreaming}
-              chainGroup={chainGroup}
-              toolApprovalResponse={toolApprovalResponse}
-            />
-          );
-          chainGroup = [];
-        }
+        flushChainGroup();
 
         if (part.type === "text") {
           elements.push(
@@ -117,16 +145,7 @@ export const MessageItem = memo(function MessageItem({
       }
     });
 
-    if (chainGroup.length > 0) {
-      elements.push(
-        <ChainOfThoughtPart
-          key={`${message.id}-chain-${chainGroup[0].index}`}
-          isStreaming={isStreaming}
-          chainGroup={chainGroup}
-          toolApprovalResponse={toolApprovalResponse}
-        />
-      );
-    }
+    flushChainGroup();
 
     if (isLastAssistantMessage && onTodosChange) {
       const todosState = extractTodosFromMessage(message, isLastAssistantMessage);
