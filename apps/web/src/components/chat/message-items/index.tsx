@@ -1,6 +1,6 @@
 "use client";
 
-import { memo, useMemo } from "react";
+import { memo, useMemo, useEffect } from "react";
 import type { UIMessage } from "@ai-sdk/react";
 import type { ChatAddToolApproveResponseFunction, FileUIPart } from "ai";
 import { Check, X, PaperclipIcon } from "lucide-react";
@@ -248,4 +248,14 @@ export const MessageItem = memo(function MessageItem({
       </div>
     </Message>
   );
+}, (prev, next) => {
+  // For completed messages (not streaming), skip re-render if ID matches
+  if (!prev.isStreaming && !next.isStreaming) {
+    if (prev.message.id !== next.message.id) return false;
+    if (prev.isLastAssistantMessage !== next.isLastAssistantMessage) return false;
+    // Same completed message, no need to re-render
+    return true;
+  }
+  // Streaming message needs updates
+  return false;
 });

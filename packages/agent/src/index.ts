@@ -139,6 +139,29 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, ChatState> {
       },
       filesystem: false,
       maxSteps: 100,
+      hooks: {
+        // Remove forced tool choice - make planning optional
+        onPrepareMessages: async (args) => {
+          for (const key of args.context.systemContext.keys()) {
+            if (typeof key === "symbol" && key.description === "forcedToolChoice") {
+              args.context.systemContext.delete(key);
+              break;
+            }
+          }
+          return { messages: args.messages };
+        },
+        // Bypass "Planning required" error by marking plan as written
+        onToolStart: async (args) => {
+          if (args.tool.name !== "write_todos") {
+            for (const key of args.context.systemContext.keys()) {
+              if (typeof key === "symbol" && key.description === "planagentPlanWritten") {
+                args.context.systemContext.set(key, true);
+                break;
+              }
+            }
+          }
+        },
+      },
       ...(this.env.VOLTAGENT_PUBLIC_KEY && this.env.VOLTAGENT_SECRET_KEY ? {
         observability: createVoltAgentObservability({
           serviceName: "just-use-convex-agent",
