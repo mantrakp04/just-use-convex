@@ -58,12 +58,12 @@ async function getTeamStatusCounts(
   return { todo: counts[0], inProgress: counts[1], done: counts[2] };
 }
 
-async function getUserStatusCounts(
+async function getMemberStatusCounts(
   ctx: zQueryCtx,
   orgId: string,
-  userId: string
+  memberId: string
 ) {
-  const namespace = `${orgId}:${userId}`;
+  const namespace = `${orgId}:${memberId}`;
   const counts = await Promise.all(
     STATUS_VALUES.map((s) =>
       todosByCreatorStatus.count(ctx, { namespace, ...exactBounds(s) })
@@ -108,13 +108,13 @@ export async function GetTeamStats(ctx: zQueryCtx, args: { teamId?: string }) {
 // USER STATS
 // ═══════════════════════════════════════════════════════════════════
 
-export async function GetUserStats(ctx: zQueryCtx, args: { userId?: string }) {
+export async function GetUserStats(ctx: zQueryCtx, args: { memberId?: string }) {
   const orgId = ctx.identity.activeOrganizationId;
-  const userId = args.userId ?? ctx.identity.userId;
+  const memberId = args.memberId ?? ctx.identity.memberId;
 
   const [total, byStatus] = await Promise.all([
-    todosByCreator.count(ctx, { namespace: orgId, ...exactBounds(userId) }),
-    getUserStatusCounts(ctx, orgId, userId),
+    todosByCreator.count(ctx, { namespace: orgId, ...exactBounds(memberId) }),
+    getMemberStatusCounts(ctx, orgId, memberId),
   ]);
 
   return { total, byStatus };

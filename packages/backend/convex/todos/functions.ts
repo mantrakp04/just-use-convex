@@ -14,8 +14,8 @@ async function runTodosQuery(ctx: zQueryCtx, args: z.infer<typeof types.ListArgs
       if (args.filters.priority !== undefined) {
         conditions.push(q.eq(q.field("priority"), args.filters.priority));
       }
-      if (args.filters.userId !== undefined) {
-        conditions.push(q.eq(q.field("userId"), args.filters.userId));
+      if (args.filters.memberId !== undefined) {
+        conditions.push(q.eq(q.field("memberId"), args.filters.memberId));
       }
       if (args.filters.teamId !== undefined) {
         conditions.push(q.eq(q.field("teamId"), args.filters.teamId));
@@ -45,11 +45,11 @@ async function runTodosQuery(ctx: zQueryCtx, args: z.infer<typeof types.ListArgs
 }
 
 export async function ListTodos(ctx: zQueryCtx, args: z.infer<typeof types.ListArgs>) {
-  // If filtering by assigned user, get the set of todo IDs first
+  // If filtering by assigned member, get the set of todo IDs first
   let assignedTodoIds: Set<string> | null = null;
-  if (args.filters.assignedUserId !== undefined) {
-    const assignments = await ctx.table("todoAssignedUsers", "userId", (q) =>
-      q.eq("userId", args.filters.assignedUserId!)
+  if (args.filters.assignedMemberId !== undefined) {
+    const assignments = await ctx.table("todoAssignedMembers", "memberId", (q) =>
+      q.eq("memberId", args.filters.assignedMemberId!)
     );
     assignedTodoIds = new Set(assignments.map((a) => a.todoId));
   }
@@ -86,11 +86,11 @@ export async function GetTodo(ctx: zQueryCtx, args: z.infer<typeof types.GetTodo
   if (todo.organizationId !== ctx.identity.activeOrganizationId) {
     throw new Error("You are not authorized to get this todo");
   }
-  const assignedUsers = await todo.edge("assignedUsers").order('desc')
+  const assignedMembers = await todo.edge("assignedMembers").order('desc')
 
   return {
     ...todo,
-    assignedUsers,
+    assignedMembers,
   };
 }
 
@@ -98,7 +98,7 @@ export async function CreateTodo(ctx: zMutationCtx, args: z.infer<typeof types.C
   const todo = await ctx.table("todos").insert({
     ...args.data,
     organizationId: ctx.identity.activeOrganizationId,
-    userId: ctx.identity.userId,
+    memberId: ctx.identity.memberId,
     updatedAt: Date.now(),
   });
   return todo;
@@ -146,40 +146,40 @@ export async function DeleteTodo(ctx: zMutationCtx, args: z.infer<typeof types.D
   return true;
 }
 
-export async function AssignUser(ctx: zMutationCtx, args: z.infer<typeof types.AssignUserArgs>) {
+export async function AssignMember(ctx: zMutationCtx, args: z.infer<typeof types.AssignMemberArgs>) {
   const todo = await ctx.table("todos").getX(args.todoId);
   if (todo.organizationId !== ctx.identity.activeOrganizationId) {
-    throw new Error("You are not authorized to assign users to this todo");
+    throw new Error("You are not authorized to assign members to this todo");
   }
 
-  const existing = await ctx.table("todoAssignedUsers", "todoId_userId", (q) =>
-    q.eq("todoId", args.todoId).eq("userId", args.userId)
+  const existing = await ctx.table("todoAssignedMembers", "todoId_memberId", (q) =>
+    q.eq("todoId", args.todoId).eq("memberId", args.memberId)
   ).unique();
 
   if (existing) {
-    throw new Error("User is already assigned to this todo");
+    throw new Error("Member is already assigned to this todo");
   }
 
-  const assignment = await ctx.table("todoAssignedUsers").insert({
+  const assignment = await ctx.table("todoAssignedMembers").insert({
     todoId: args.todoId,
-    userId: args.userId,
-    assignedBy: ctx.identity.userId,
+    memberId: args.memberId,
+    assignedByMemberId: ctx.identity.memberId,
   });
   return assignment;
 }
 
-export async function UnassignUser(ctx: zMutationCtx, args: z.infer<typeof types.UnassignUserArgs>) {
+export async function UnassignMember(ctx: zMutationCtx, args: z.infer<typeof types.UnassignMemberArgs>) {
   const todo = await ctx.table("todos").getX(args.todoId);
   if (todo.organizationId !== ctx.identity.activeOrganizationId) {
-    throw new Error("You are not authorized to unassign users from this todo");
+    throw new Error("You are not authorized to unassign members from this todo");
   }
 
-  const assignment = await ctx.table("todoAssignedUsers", "todoId_userId", (q) =>
-    q.eq("todoId", args.todoId).eq("userId", args.userId)
+  const assignment = await ctx.table("todoAssignedMembers", "todoId_memberId", (q) =>
+    q.eq("todoId", args.todoId).eq("memberId", args.memberId)
   ).unique();
 
   if (!assignment) {
-    throw new Error("User is not assigned to this todo");
+    throw new Error("Member is not assigned to this todo");
   }
 
   await assignment.delete();
@@ -187,10 +187,10 @@ export async function UnassignUser(ctx: zMutationCtx, args: z.infer<typeof types
 }
 
 export async function ListAssignedTodos(ctx: zQueryCtx, args: z.infer<typeof types.ListAssignedTodosArgs>) {
-  const userId = args.userId ?? ctx.identity.userId;
+  const memberId = args.memberId ?? ctx.identity.memberId;
 
-  const assignments = await ctx.table("todoAssignedUsers", "userId", (q) =>
-    q.eq("userId", userId)
+  const assignments = await ctx.table("todoAssignedMembers", "memberId", (q) =>
+    q.eq("memberId", memberId)
   ).paginate(args.paginationOpts);
 
   const todos = await Promise.all(

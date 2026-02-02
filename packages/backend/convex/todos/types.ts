@@ -1,9 +1,9 @@
 import { z } from "zod";
 import { todosZodSchema, todosWithSystemFields } from "../tables/todos";
 import {
-  todoAssignedUsersZodSchema,
-  todoAssignedUsersWithSystemFields,
-} from "../tables/todoAssignedUsers";
+  todoAssignedMembersZodSchema,
+  todoAssignedMembersWithSystemFields,
+} from "../tables/todoAssignedMembers";
 import { paginationOptsValidator } from "convex/server";
 import { convexToZod } from "convex-helpers/server/zod4";
 
@@ -18,12 +18,12 @@ export const statusSchema = todosZodSchema.status;
 export type Priority = z.infer<typeof prioritySchema>;
 export type TodoStatus = z.infer<typeof statusSchema>;
 
-export const TodoAssignedUser = z.object(todoAssignedUsersZodSchema);
-export const TodoAssignedUserWithSystemFields = z.object(todoAssignedUsersWithSystemFields);
+export const TodoAssignedMember = z.object(todoAssignedMembersZodSchema);
+export const TodoAssignedMemberWithSystemFields = z.object(todoAssignedMembersWithSystemFields);
 
 // Filter schema - explicit definition for proper type inference
 const TodoFilters = z.object({
-  userId: z.string(),
+  memberId: z.string(),
   teamId: z.string(),
   title: z.string(),
   description: z.string(),
@@ -33,7 +33,7 @@ const TodoFilters = z.object({
   dueDateTo: z.number(),
   priority: z.enum(["low", "medium", "high"]),
   updatedAt: z.number(),
-  assignedUserId: z.string(),
+  assignedMemberId: z.string(),
 }).partial();
 
 export const ListArgs = z.object({
@@ -44,26 +44,26 @@ export const ListArgs = z.object({
 export const GetTodoArgs = TodoWithSystemFields.pick({ _id: true });
 
 export const CreateArgs = z.object({
-  data: Todo.omit({ organizationId: true, userId: true, updatedAt: true }),
+  data: Todo.omit({ organizationId: true, memberId: true, updatedAt: true }),
 });
 
 export const UpdateArgs = TodoWithSystemFields.pick({ _id: true }).extend({
-  patch: Todo.omit({ organizationId: true, userId: true, updatedAt: true }).partial(),
+  patch: Todo.omit({ organizationId: true, memberId: true, updatedAt: true }).partial(),
 });
 
 export const DeleteArgs = TodoWithSystemFields.pick({ _id: true });
 
-export const AssignUserArgs = z.object({
+export const AssignMemberArgs = z.object({
   todoId: TodoWithSystemFields.shape._id,
-  userId: z.string(),
+  memberId: z.string(),
 });
 
-export const UnassignUserArgs = z.object({
+export const UnassignMemberArgs = z.object({
   todoId: TodoWithSystemFields.shape._id,
-  userId: z.string(),
+  memberId: z.string(),
 });
 
 export const ListAssignedTodosArgs = z.object({
-  userId: z.string().optional(),
+  memberId: z.string().optional(),
   paginationOpts: zPaginationOpts,
 });

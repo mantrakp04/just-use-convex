@@ -12,25 +12,25 @@ import { ChevronDown, X } from "lucide-react";
 
 interface TodoMemberSelectProps {
   members: Member[];
-  selectedUserIds: string[];
-  onSelectionChange: (userIds: string[]) => void;
+  selectedMemberIds: string[];
+  onSelectionChange: (memberIds: string[]) => void;
 }
 
 export function TodoMemberSelect({
   members,
-  selectedUserIds,
+  selectedMemberIds,
   onSelectionChange,
 }: TodoMemberSelectProps) {
-  const selectedMembers = selectedUserIds
-    .map((userId) => members.find((m) => m.userId === userId))
+  const selectedMembers = selectedMemberIds
+    .map((memberId) => members.find((m) => m.id === memberId))
     .filter(Boolean) as Member[];
 
-  const handleToggleMember = (userId: string) => {
-    const isSelected = selectedUserIds.includes(userId);
+  const handleToggleMember = (memberId: string) => {
+    const isSelected = selectedMemberIds.includes(memberId);
     onSelectionChange(
       isSelected
-        ? selectedUserIds.filter((id) => id !== userId)
-        : [...selectedUserIds, userId]
+        ? selectedMemberIds.filter((id) => id !== memberId)
+        : [...selectedMemberIds, memberId]
     );
   };
 
@@ -38,7 +38,7 @@ export function TodoMemberSelect({
     <Popover>
       <PopoverTrigger className="flex h-9 w-full items-center justify-between whitespace-nowrap rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs ring-offset-background placeholder:text-muted-foreground focus:outline-hidden focus:ring-1 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50 [&>span]:line-clamp-1">
         <span className="flex items-center gap-2 overflow-hidden">
-          {selectedUserIds.length === 0 ? (
+          {selectedMemberIds.length === 0 ? (
             <span className="text-muted-foreground">Select members...</span>
           ) : (
             <AvatarGroup>
@@ -48,9 +48,9 @@ export function TodoMemberSelect({
                   <AvatarFallback>{getInitials(member.user.name)}</AvatarFallback>
                 </Avatar>
               ))}
-              {selectedUserIds.length > 3 && (
+              {selectedMemberIds.length > 3 && (
                 <span className="text-xs text-muted-foreground ml-1">
-                  +{selectedUserIds.length - 3}
+                  +{selectedMemberIds.length - 3}
                 </span>
               )}
             </AvatarGroup>
@@ -66,12 +66,12 @@ export function TodoMemberSelect({
             </div>
           ) : (
             members.map((member) => {
-              const isSelected = selectedUserIds.includes(member.userId);
+              const isSelected = selectedMemberIds.includes(member.id);
               return (
                 <div
                   key={member.id}
                   className="flex items-center gap-2 rounded-md px-2 py-1.5 cursor-pointer hover:bg-accent"
-                  onClick={() => handleToggleMember(member.userId)}
+                  onClick={() => handleToggleMember(member.id)}
                 >
                   <Checkbox checked={isSelected} />
                   <Avatar size="sm">
@@ -86,7 +86,7 @@ export function TodoMemberSelect({
             })
           )}
         </div>
-        {selectedUserIds.length > 0 && (
+        {selectedMemberIds.length > 0 && (
           <div className="border-t">
             <Button
               variant="ghost"

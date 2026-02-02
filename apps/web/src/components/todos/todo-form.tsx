@@ -31,8 +31,8 @@ interface TodoFormProps {
   onEndTimeChange: (value: string) => void;
   teamId: string | undefined;
   onTeamIdChange: (value: string | undefined) => void;
-  assignedUserIds: string[];
-  onAssignedUserIdsChange: (userIds: string[]) => void;
+  assignedMemberIds: string[];
+  onAssignedMemberIdsChange: (memberIds: string[]) => void;
   teams: Team[];
   members: Member[];
 }
@@ -54,8 +54,8 @@ export function TodoForm({
   onEndTimeChange,
   teamId,
   onTeamIdChange,
-  assignedUserIds,
-  onAssignedUserIdsChange,
+  assignedMemberIds,
+  onAssignedMemberIdsChange,
   teams,
   members,
 }: TodoFormProps) {
@@ -180,8 +180,8 @@ export function TodoForm({
         <Label>Assign Members</Label>
         <TodoMemberSelect
           members={members}
-          selectedUserIds={assignedUserIds}
-          onSelectionChange={onAssignedUserIdsChange}
+          selectedMemberIds={assignedMemberIds}
+          onSelectionChange={onAssignedMemberIdsChange}
         />
       </div>
     </>
