@@ -277,6 +277,12 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, ChatState> {
     }
 
     try {
+      // Update chat timestamp (fire and forget)
+      this.convexClient?.mutation(api.chats.index.update, {
+        _id: this.name as Id<"chats">,
+        patch: {},
+      });
+
       // Generate title for first message (fire and forget)
       if (this.messages.length === 1) {
         const firstMessage = this.messages[0];

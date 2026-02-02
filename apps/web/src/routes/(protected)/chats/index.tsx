@@ -2,6 +2,7 @@ import { useCallback } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useAtomValue } from "jotai";
 import { useChats, useChatsList, useChatStats, type Chat } from "@/hooks/use-chats";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Empty, EmptyHeader, EmptyMedia, EmptyTitle, EmptyDescription } from "@/components/ui/empty";
@@ -14,7 +15,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { SandboxSelector, selectedSandboxIdAtom } from "@/components/sandboxes/sandbox-selector";
-import { MessageSquare, Plus, MoreVertical, Trash2, Pin } from "lucide-react";
+import { MessageSquare, Plus, MoreVertical, Trash2, Pin, Box } from "lucide-react";
 
 export const Route = createFileRoute("/(protected)/chats/")({
   component: ChatsListPage,
@@ -93,10 +94,18 @@ function ChatsListPage() {
             </div>
             <div>
               <CardTitle>{chat.title}</CardTitle>
-              <CardDescription>
-                {chat.updatedAt
-                  ? `Last message ${formatDate(chat.updatedAt)}`
-                  : `Created ${formatDate(chat._creationTime)}`}
+              <CardDescription className="flex items-center gap-2">
+                <span>
+                  {chat.updatedAt
+                    ? `Last message ${formatDate(chat.updatedAt)}`
+                    : `Created ${formatDate(chat._creationTime)}`}
+                </span>
+                {chat.sandbox && (
+                  <Badge variant="outline">
+                    <Box />
+                    {chat.sandbox.name}
+                  </Badge>
+                )}
               </CardDescription>
             </div>
           </div>

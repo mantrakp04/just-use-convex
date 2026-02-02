@@ -37,6 +37,11 @@ bun run build      # Production build
 turbo dev          # Turborepo dev
 ```
 
+### Type Checking
+```
+# for eg: you made changes to the agent
+cd packages/agent && bunx tsc --noEmit
+# do not run bunx tsc --noEmit in the base dir
 ---
 
 ## Communication Style
@@ -135,7 +140,7 @@ File-based TanStack Router:
 - Shadow preference: `inset 0 3px 0 0 rgb(0 0 0 / 0.2)`
 - Don't use base UI wrappers — modify raw components directly
 - If animation feels slow, it is
-
+- Always prefer using existing shadcn components, i have added em all
 ---
 
 ## Common Issues

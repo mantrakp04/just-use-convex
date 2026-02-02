@@ -43,7 +43,18 @@ export async function ListChats(ctx: zQueryCtx, args: z.infer<typeof types.ListA
     }
   }
 
-  return chats;
+  // Map over paginated results to include sandbox data
+  const chatsWithSandbox = await Promise.all(
+    chats.page.map(async (chat) => ({
+      ...chat.doc(),
+      sandbox: await chat.edge("sandbox"),
+    }))
+  );
+
+  return {
+    ...chats,
+    page: chatsWithSandbox,
+  };
 }
 
 export async function GetChat(ctx: zQueryCtx, args: z.infer<typeof types.GetChatArgs>) {
@@ -117,13 +128,24 @@ export async function DeleteChat(ctx: zMutationCtx, args: z.infer<typeof types.D
 }
 
 export async function SearchChats(ctx: zQueryCtx, args: z.infer<typeof types.SearchArgs>) {
-  return ctx.db
-    .query("chats")
-    .withSearchIndex("title", (q) =>
+  const results = await ctx.table("chats")
+    .search("title", (q) =>
       q.search("title", args.query)
         .eq("organizationId", ctx.identity.activeOrganizationId)
         .eq("userId", ctx.identity.userId)
         .eq("isPinned", args.isPinned)
     )
     .paginate(args.paginationOpts);
+
+  const chatsWithSandbox = await Promise.all(
+    results.page.map(async (chat) => ({
+      ...chat.doc(),
+      sandbox: await chat.edge("sandbox"),
+    }))
+  );
+
+  return {
+    ...results,
+    page: chatsWithSandbox,
+  };
 }

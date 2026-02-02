@@ -20,7 +20,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Box, ChevronDown, Plus, Loader2, Info, Check, Trash2 } from "lucide-react";
+import { Box, ChevronDown, Plus, Loader2, Info, Check, Trash2, Pencil } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const ITEM_HEIGHT = 28;
@@ -29,11 +29,10 @@ const MAX_LIST_HEIGHT = ITEM_HEIGHT * MAX_VISIBLE_ITEMS;
 
 export function SandboxSelector() {
   const sandboxesQuery = useSandboxesList();
-  const { createSandbox, isCreating, deleteSandbox, isDeleting } = useSandboxes();
+  const { createSandbox, isCreating, updateSandbox, isUpdating, deleteSandbox, isDeleting } = useSandboxes();
   const scrollRef = useRef<HTMLDivElement>(null);
-  const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
-  const [sandboxToDelete, setSandboxToDelete] = useState<Sandbox | null>(null);
+  const [editState, setEditState] = useState<{ mode: "create" | "edit"; sandbox?: Sandbox } | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<Sandbox | null>(null);
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [selectedSandboxId, setSelectedSandboxId] = useAtom(selectedSandboxIdAtom);
@@ -55,39 +54,48 @@ export function SandboxSelector() {
     }
   }, [canLoadMore, isLoadingMore, sandboxesQuery]);
 
-  const handleOpenDialog = useCallback(() => {
+  const openCreate = useCallback(() => {
     setName("");
     setDescription("");
-    setIsDialogOpen(true);
+    setEditState({ mode: "create" });
   }, []);
 
-  const handleDeleteClick = useCallback((e: React.MouseEvent, sandbox: Sandbox) => {
+  const openEdit = useCallback((e: React.MouseEvent, sandbox: Sandbox) => {
     e.stopPropagation();
-    setSandboxToDelete(sandbox);
-    setIsDeleteDialogOpen(true);
+    setName(sandbox.name);
+    setDescription(sandbox.description ?? "");
+    setEditState({ mode: "edit", sandbox });
+  }, []);
+
+  const openDelete = useCallback((e: React.MouseEvent, sandbox: Sandbox) => {
+    e.stopPropagation();
+    setDeleteTarget(sandbox);
   }, []);
 
   const handleConfirmDelete = useCallback(async () => {
-    if (!sandboxToDelete) return;
-    await deleteSandbox({ _id: sandboxToDelete._id });
-    if (selectedSandboxId === sandboxToDelete._id) {
+    if (!deleteTarget) return;
+    await deleteSandbox({ _id: deleteTarget._id });
+    if (selectedSandboxId === deleteTarget._id) {
       setSelectedSandboxId(null);
     }
-    setIsDeleteDialogOpen(false);
-    setSandboxToDelete(null);
-  }, [deleteSandbox, sandboxToDelete, selectedSandboxId, setSelectedSandboxId]);
+    setDeleteTarget(null);
+  }, [deleteSandbox, deleteTarget, selectedSandboxId, setSelectedSandboxId]);
 
-  const handleCreateSandbox = useCallback(async () => {
-    if (!name.trim()) return;
-    const sandboxId = await createSandbox({
-      data: {
-        name: name.trim(),
-        description: description.trim() || undefined,
-      },
-    });
-    setIsDialogOpen(false);
-    setSelectedSandboxId(sandboxId);
-  }, [createSandbox, setSelectedSandboxId, name, description]);
+  const handleSave = useCallback(async () => {
+    if (!name.trim() || !editState) return;
+    if (editState.mode === "create") {
+      const sandboxId = await createSandbox({
+        data: { name: name.trim(), description: description.trim() || undefined },
+      });
+      setSelectedSandboxId(sandboxId);
+    } else if (editState.sandbox) {
+      await updateSandbox({
+        _id: editState.sandbox._id,
+        patch: { name: name.trim(), description: description.trim() || undefined },
+      });
+    }
+    setEditState(null);
+  }, [createSandbox, updateSandbox, setSelectedSandboxId, name, description, editState]);
 
   const hasSandboxes =
     sandboxesQuery.results && sandboxesQuery.results.length > 0;
@@ -107,8 +115,8 @@ export function SandboxSelector() {
             onClick={() => setSelectedSandboxId(null)}
             className={cn("cursor-pointer justify-between", !selectedSandboxId && "bg-accent")}
           >
-            No Sandbox
-            {!selectedSandboxId && <Check className="size-4" />}
+            <span className="text-muted-foreground">No Sandbox</span>
+            {!selectedSandboxId && <Check className="size-4 text-primary" />}
           </DropdownMenuItem>
 
           {hasSandboxes && (
@@ -120,28 +128,42 @@ export function SandboxSelector() {
                 className="overflow-y-auto"
                 style={{ maxHeight: MAX_LIST_HEIGHT }}
               >
-                {sandboxesQuery.results.map((sandbox: Sandbox) => (
-                  <DropdownMenuItem
-                    key={sandbox._id}
-                    onClick={() => setSelectedSandboxId(sandbox._id)}
-                    className={cn(
-                      "cursor-pointer justify-between group",
-                      selectedSandboxId === sandbox._id && "bg-accent"
-                    )}
-                  >
-                    <span className="truncate">{sandbox.name}</span>
-                    <div className="flex items-center gap-1 shrink-0">
-                      {selectedSandboxId === sandbox._id && <Check className="size-4" />}
-                      <button
-                        type="button"
-                        onClick={(e) => handleDeleteClick(e, sandbox)}
-                        className="opacity-0 group-hover:opacity-100 p-0.5 hover:bg-destructive/20 rounded transition-opacity"
-                      >
-                        <Trash2 className="size-3.5 text-destructive" />
-                      </button>
-                    </div>
-                  </DropdownMenuItem>
-                ))}
+                {sandboxesQuery.results.map((sandbox: Sandbox) => {
+                  const isSelected = selectedSandboxId === sandbox._id;
+                  return (
+                    <DropdownMenuItem
+                      key={sandbox._id}
+                      onClick={() => setSelectedSandboxId(sandbox._id)}
+                      className={cn(
+                        "cursor-pointer justify-between group",
+                        isSelected && "bg-accent"
+                      )}
+                    >
+                      <span className="truncate">{sandbox.name}</span>
+                      <div className="flex items-center gap-1 shrink-0">
+                        {isSelected && <Check className="size-4 text-primary" />}
+                        <Button
+                          variant="ghost"
+                          size="icon-xs"
+                          onClick={(e) => openEdit(e, sandbox)}
+                          className="hidden group-hover:flex cursor-pointer"
+                          aria-label={`Edit ${sandbox.name}`}
+                        >
+                          <Pencil className="size-3.5" />
+                        </Button>
+                        <Button
+                          variant="destructive"
+                          size="icon-xs"
+                          onClick={(e) => openDelete(e, sandbox)}
+                          className="hidden group-hover:flex cursor-pointer"
+                          aria-label={`Delete ${sandbox.name}`}
+                        >
+                          <Trash2 className="size-3.5" />
+                        </Button>
+                      </div>
+                    </DropdownMenuItem>
+                  );
+                })}
                 {isLoadingMore && (
                   <div className="flex justify-center py-2">
                     <Loader2 className="size-4 animate-spin text-muted-foreground" />
@@ -152,19 +174,21 @@ export function SandboxSelector() {
           )}
 
           <DropdownMenuSeparator />
-          <DropdownMenuItem onClick={handleOpenDialog} className="cursor-pointer">
+          <DropdownMenuItem onClick={openCreate} className="cursor-pointer">
             <Plus className="size-4" />
             New Sandbox
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
 
-      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+      <Dialog open={!!editState} onOpenChange={(open) => !open && setEditState(null)}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Create Sandbox</DialogTitle>
+            <DialogTitle>{editState?.mode === "edit" ? "Edit Sandbox" : "Create Sandbox"}</DialogTitle>
             <DialogDescription>
-              Create a new sandbox to organize your chats.
+              {editState?.mode === "edit"
+                ? "Update your sandbox configuration."
+                : "Create a new sandbox to organize your chats."}
             </DialogDescription>
           </DialogHeader>
 
@@ -205,40 +229,40 @@ export function SandboxSelector() {
           <DialogFooter>
             <Button
               variant="outline"
-              onClick={() => setIsDialogOpen(false)}
-              disabled={isCreating}
+              onClick={() => setEditState(null)}
+              disabled={isCreating || isUpdating}
             >
               Cancel
             </Button>
             <Button
-              onClick={handleCreateSandbox}
-              disabled={isCreating || !name.trim()}
+              onClick={handleSave}
+              disabled={isCreating || isUpdating || !name.trim()}
             >
-              {isCreating ? (
+              {(isCreating || isUpdating) ? (
                 <>
                   <Loader2 className="size-4 animate-spin" />
-                  Creating...
+                  {editState?.mode === "edit" ? "Saving..." : "Creating..."}
                 </>
               ) : (
-                "Create Sandbox"
+                editState?.mode === "edit" ? "Save" : "Create"
               )}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+      <Dialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Delete Sandbox</DialogTitle>
             <DialogDescription>
-              Are you sure you want to delete "{sandboxToDelete?.name}"? This action cannot be undone.
+              Are you sure you want to delete "{deleteTarget?.name}"? This action cannot be undone.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
             <Button
               variant="outline"
-              onClick={() => setIsDeleteDialogOpen(false)}
+              onClick={() => setDeleteTarget(null)}
               disabled={isDeleting}
             >
               Cancel
