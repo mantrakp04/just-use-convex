@@ -2,7 +2,7 @@ import { useCallback, useState, useRef, useEffect } from "react";
 import type { UIMessage } from "@ai-sdk/react";
 import type { ChatAddToolApproveResponseFunction, FileUIPart } from "ai";
 import type { useAgentChat } from "@cloudflare/ai-chat/react";
-import type { AskUserState, TodosState } from "@/components/chat/message-list";
+import type { AskUserState, TodosState } from "@/components/chat/types";
 import type { QueueTodo } from "@/components/ai-elements/queue";
 import type { AskUserInput } from "@/components/ai-elements/ask-user";
 import { isToolPart } from "@/components/chat/message-items/tool-part";

@@ -10,7 +10,8 @@ import {
   ConversationEmptyState,
 } from "@/components/ai-elements/conversation";
 import { Skeleton } from "@/components/ui/skeleton";
-import { MessageList, type AskUserState, type TodosState } from "@/components/chat/message-list";
+import { MessageList } from "@/components/chat/message-list";
+import type { AskUserState, TodosState } from "@/components/chat/types";
 import { useAgentInstance } from "@/providers/agent";
 import { TodosDisplay } from "@/components/chat/todos-display";
 import { useChat } from "@/hooks/use-chat";

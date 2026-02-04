@@ -25,7 +25,7 @@ import { RegenerateButton } from "./regenerate-button";
 import { EditMessageButton } from "./edit-message-button";
 import { ChainOfThoughtPart, isChainOfThoughtPart } from "./chain-of-thought-part";
 import { ToolPart, getToolName, isToolPart, type ToolPartType } from "./tool-part";
-import type { AskUserState, TodosState } from "../message-list";
+import type { AskUserState, TodosState } from "@/components/chat/types";
 import {
   useMessageEditing,
   extractMessageText,
