@@ -3,7 +3,7 @@ import { convex } from "@convex-dev/better-auth/plugins";
 import { betterAuth, type BetterAuthOptions } from "better-auth/minimal";
 import { organization } from "better-auth/plugins";
 import type { GenericActionCtx, GenericMutationCtx } from "convex/server";
-import { baseIdentity } from "./functions";
+import { baseIdentity, zQuery } from "./functions";
 import type { DataModel } from "./_generated/dataModel";
 import { ac, roles } from "./shared/auth_shared";
 import { components, internal } from "./_generated/api";
@@ -372,6 +372,13 @@ export const getCurrentUser = query({
   args: {},
   handler: async (ctx) => {
     return await authComponent.safeGetAuthUser(ctx);
+  },
+});
+
+export const getIdentity = zQuery({
+  args: {},
+  handler: async (ctx) => {
+    return ctx.identity;
   },
 });
 

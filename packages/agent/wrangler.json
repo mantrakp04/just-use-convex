@@ -7,7 +7,8 @@
     "nodejs_compat_populate_process_env"
   ],
   "vars": {
-    "SANDBOX_ROOT_DIR": "/workspace"
+    "SANDBOX_ROOT_DIR": "/workspace",
+    "NODE_ENV": "production"
   },
   "durable_objects": {
     "bindings": [
@@ -22,6 +23,13 @@
       }
     ]
   },
+  "vectorize": [
+    {
+      "binding": "VECTORIZE_CHAT_MESSAGES",
+      "index_name": "chat-messages",
+      "remote": true
+    }
+  ],
   "migrations": [
     {
       "tag": "v1",

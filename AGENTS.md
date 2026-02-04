@@ -1,4 +1,4 @@
-# CLAUDE.md
+# AGENTS.md
 
 ## Project Overview
 AI-powered chat SaaS template — multi-tenant, real-time, with org/team support. Cloudflare Agents for WebSocket chat state, Convex for reactive backend, TanStack Start for SSR.

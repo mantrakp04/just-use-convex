@@ -1,5 +1,5 @@
 import alchemy from "alchemy";
-import { Worker, DurableObjectNamespace, Container, WranglerJson } from "alchemy/cloudflare";
+import { Worker, DurableObjectNamespace, Container, WranglerJson, VectorizeIndex } from "alchemy/cloudflare";
 
 const app = await alchemy("just-use-convex", {
   phase: process.argv.includes("--destroy") ? "destroy" : "up",
@@ -18,6 +18,14 @@ const sandboxContainer = await Container<import("@cloudflare/sandbox").Sandbox>(
   image: SANDBOX_IMAGE,
 });
 
+const chatMessagesIndex = await VectorizeIndex("chat-messages", {
+  name: "chat-messages",
+  description: "Embeddings for chat messages",
+  dimensions: 1536,
+  metric: "cosine",
+  adopt: true,
+});
+
 export const worker = await Worker("agent-worker", {
   entrypoint: "./src/index.ts",
   url: false,
@@ -25,7 +33,9 @@ export const worker = await Worker("agent-worker", {
   bindings: {
     agentWorker: agentWorkerNamespace,
     Sandbox: sandboxContainer,
+    VECTORIZE_CHAT_MESSAGES: chatMessagesIndex,
     SANDBOX_ROOT_DIR: '/workspace',
+    NODE_ENV: "production",
     CONVEX_URL: alchemy.secret(process.env.CONVEX_URL),
     CONVEX_SITE_URL: alchemy.secret(process.env.CONVEX_SITE_URL),
     SITE_URL: alchemy.secret(process.env.SITE_URL || "http://localhost:3001"),
