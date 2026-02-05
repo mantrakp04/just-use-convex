@@ -12,7 +12,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { MessageSquare, Plus, MoreVertical, Trash2, Pencil, Pin } from "lucide-react";
+import { MessageSquare, Plus, MoreVertical, Trash2, Pin } from "lucide-react";
 
 export const Route = createFileRoute("/(protected)/chats/")({
   component: ChatsListPage,
