@@ -8,13 +8,15 @@ import { Card, CardHeader, CardTitle, CardDescription } from "@/components/ui/ca
 import { Empty, EmptyHeader, EmptyMedia, EmptyTitle, EmptyDescription } from "@/components/ui/empty";
 import { Skeleton } from "@/components/ui/skeleton";
 import { VirtualList } from "@/components/ui/virtual-list";
+import { SandboxSelector } from "@/components/sandboxes/sandbox-selector";
+import { selectedSandboxIdAtom } from "@/store/sandbox";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { MessageSquare, Plus, MoreVertical, Trash2, Pin } from "lucide-react";
+import { Box, MessageSquare, Plus, MoreVertical, Trash2, Pin } from "lucide-react";
 
 export const Route = createFileRoute("/(protected)/chats/")({
   component: ChatsListPage,
