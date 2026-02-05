@@ -118,6 +118,8 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, ChatState> {
     if (!this.sandboxBackend) return;
 
     const uploadDir = "/workspace/uploads";
+    const bufferToBinaryString = (buffer: ArrayBuffer): string =>
+      String.fromCharCode(...new Uint8Array(buffer));
 
     for (const msg of messages) {
       for (const part of msg.parts) {
@@ -134,10 +136,19 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, ChatState> {
               const binaryContent = atob(base64Match[1]);
               const filePath = `${uploadDir}/${filename}`;
               await this.sandboxBackend.write(filePath, binaryContent);
+              continue;
             }
           }
-          // Handle blob URLs or external URLs - skip for now as they require fetch
-          // In the future, we could fetch these and save them
+          if (url.startsWith("http://") || url.startsWith("https://")) {
+            const response = await fetch(url);
+            if (!response.ok) {
+              throw new Error(`Failed to fetch ${url}: ${response.status}`);
+            }
+            const buffer = await response.arrayBuffer();
+            const filePath = `${uploadDir}/${filename}`;
+            await this.sandboxBackend.write(filePath, bufferToBinaryString(buffer));
+          }
+          // Blob URLs are not accessible server-side; skip.
         } catch (error) {
           console.error(`Failed to save file ${filename} to sandbox:`, error);
         }
