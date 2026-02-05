@@ -20,7 +20,9 @@ import type { UIMessage } from "ai";
 import { ChevronLeftIcon, ChevronRightIcon } from "lucide-react";
 import type { ComponentProps, HTMLAttributes, ReactElement } from "react";
 import { createContext, useContext, useEffect, useState } from "react";
-import { Streamdown } from "streamdown";
+import { Streamdown, type CodeHighlighterPlugin } from "streamdown";
+
+const codePlugin = code as unknown as CodeHighlighterPlugin;
 
 export type MessageProps = HTMLAttributes<HTMLDivElement> & {
   from: UIMessage["role"];
@@ -311,7 +313,7 @@ export const MessageResponse = ({ className, ...props }: MessageResponseProps) =
       "size-full [&>*:first-child]:mt-0 [&>*:last-child]:mb-0",
       className
     )}
-    plugins={{ code, mermaid, math, cjk }}
+    plugins={{ code: codePlugin, mermaid, math, cjk }}
     shikiTheme={["github-light", "github-dark"]}
     {...props}
   />

@@ -10,7 +10,7 @@ import { createWebSearchToolkit } from "./tools/websearch";
 import { createAskUserToolkit } from "./tools/ask-user";
 import { BackgroundTaskStore, withBackgroundTaskTools } from "./utils/toolWBackground";
 import { patchToolWithBackgroundSupport } from "./utils/toolWTimeout";
-import type { worker } from "../alchemy.run";
+import type { Bindings } from "alchemy/cloudflare";
 import {
   createConvexAdapter,
   parseTokenFromUrl,
@@ -73,7 +73,7 @@ function filterMessageParts(messages: UIMessage[], inputModalities?: string[]): 
 }
 
 export default {
-  async fetch(request: Request, env: typeof worker.Env): Promise<Response> {
+  async fetch(request: Request, env: Bindings.Runtime<Bindings>): Promise<Response> {
     // Get origin for CORS (credentials require specific origin, not *)
     const origin = env.SITE_URL;
 
@@ -92,7 +92,7 @@ export default {
   },
 };
 
-export class AgentWorker extends AIChatAgent<typeof worker.Env, ChatState> {
+export class AgentWorker extends AIChatAgent<Bindings.Runtime<Bindings>, ChatState> {
   private convexAdapter: ConvexAdapter | null = null;
   private planAgent: PlanAgent | null = null;
   private sandboxId: string | null = null;
@@ -216,7 +216,7 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, ChatState> {
 
     if (!results.matches.length) return null;
 
-    const contextLines = results.matches.map((match, index) => {
+    const contextLines = results.matches.map((match: (typeof results.matches)[number], index: number) => {
       const role = typeof match.metadata?.role === "string" ? match.metadata.role : "unknown";
       const text = typeof match.metadata?.text === "string" ? match.metadata.text : "";
       const score = Number.isFinite(match.score) ? match.score.toFixed(4) : "n/a";

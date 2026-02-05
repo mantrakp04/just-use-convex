@@ -49,10 +49,10 @@ npx wrangler secret put CONVEX_URL
 
 ## Alchemy Configuration
 
-The agent deployment is configured in `alchemy.run.ts`:
+The agent deployment is configured in `alchemy.run.ts` at the repo root:
 
 ```ts
-// packages/agent/alchemy.run.ts
+// alchemy.run.ts
 import alchemy from "alchemy";
 import { Worker, DurableObjectNamespace } from "alchemy/cloudflare";
 

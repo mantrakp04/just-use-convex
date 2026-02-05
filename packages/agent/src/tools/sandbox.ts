@@ -11,7 +11,7 @@ import {
   type Toolkit,
 } from "@voltagent/core";
 import { z } from "zod";
-import type { worker } from "../../alchemy.run";
+import type { Bindings } from "alchemy/cloudflare";
 import { type WrappedExecuteOptions, createWrappedTool } from "../utils/toolWTimeout";
 import { type BackgroundTaskStore } from "../utils/toolWBackground";
 
@@ -27,7 +27,7 @@ export class SandboxFilesystemBackend implements FilesystemBackend {
   public sandbox: ReturnType<typeof getSandbox>;
   public rootDir: string;
 
-  constructor(env: typeof worker.Env, sandboxName: string) {
+  constructor(env: Bindings.Runtime<Bindings>, sandboxName: string) {
     this.sandbox = getSandbox(env.Sandbox, sandboxName);
     this.rootDir = env.SANDBOX_ROOT_DIR;
   }

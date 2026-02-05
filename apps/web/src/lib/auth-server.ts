@@ -1,4 +1,4 @@
-import { env } from "@just-use-convex/env/web";
+import { env } from "@/lib/env";
 import { convexBetterAuthReactStart } from "@convex-dev/better-auth/react-start";
 import { isAuthError } from "@/lib/utils";
 

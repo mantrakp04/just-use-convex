@@ -14,7 +14,7 @@ import { mermaid } from "@streamdown/mermaid";
 import { BrainIcon, ChevronDownIcon } from "lucide-react";
 import type { ComponentProps, ReactNode } from "react";
 import { createContext, memo, useContext, useEffect, useState } from "react";
-import { Streamdown } from "streamdown";
+import { Streamdown, type CodeHighlighterPlugin } from "streamdown";
 import { Shimmer } from "./shimmer";
 
 interface ReasoningContextValue {
@@ -25,6 +25,7 @@ interface ReasoningContextValue {
 }
 
 const ReasoningContext = createContext<ReasoningContextValue | null>(null);
+const codePlugin = code as unknown as CodeHighlighterPlugin;
 
 export const useReasoning = () => {
   const context = useContext(ReasoningContext);
@@ -181,7 +182,7 @@ export const ReasoningContent = memo(
       )}
       {...props}
     >
-      <Streamdown plugins={{ code, mermaid, math, cjk }} {...props}>
+      <Streamdown plugins={{ code: codePlugin, mermaid, math, cjk }} {...props}>
         {children}
       </Streamdown>
     </CollapsibleContent>

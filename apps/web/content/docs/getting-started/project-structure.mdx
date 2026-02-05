@@ -11,13 +11,13 @@ This template uses a monorepo structure powered by Turborepo, with clear separat
 
 ```
 just-use-convex/
+├── alchemy.run.ts             # Cloudflare deployment config (web + agent)
 ├── apps/
 │   └── web/                    # Frontend application
 ├── packages/
 │   ├── backend/
 │   │   └── convex/             # Convex backend
 │   ├── config/                 # Shared TypeScript config
-│   └── env/                    # Environment variables
 ├── package.json                # Root workspace config
 ├── turbo.json                  # Turborepo configuration
 └── bun.lock                    # Bun lockfile
@@ -105,9 +105,9 @@ packages/backend/convex/
 
 Shared TypeScript configuration for the monorepo.
 
-### `packages/env`
+### `alchemy.run.ts`
 
-Centralized environment variable management with type-safe validation.
+Centralized Cloudflare + Alchemy deployment configuration, including environment bindings.
 
 ## Key Files Explained
 

@@ -1,4 +1,4 @@
-import { env } from "@just-use-convex/env/web";
+import { env } from "@/lib/env";
 import { ConvexQueryClient } from "@convex-dev/react-query";
 import { QueryClient } from "@tanstack/react-query";
 import { createRouter as createTanStackRouter } from "@tanstack/react-router";

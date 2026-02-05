@@ -24,7 +24,12 @@
     "paths": {
       "@/*": ["./src/*"],
       "@convex/*": ["../../packages/backend/convex/*"],
-      "fumadocs-mdx:collections/*": [".source/*"]
+      "fumadocs-mdx:collections/*": [".source/*"],
+      "alchemy": ["../../packages/agent/node_modules/alchemy"],
+      "alchemy/*": ["../../packages/agent/node_modules/alchemy/*"],
+      "alchemy/cloudflare/tanstack-start": [
+        "../../packages/agent/node_modules/alchemy/lib/cloudflare/tanstack-start/plugin.d.ts"
+      ]
     }
   }
 }

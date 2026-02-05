@@ -7,7 +7,7 @@ import { math } from "@streamdown/math";
 import { mermaid } from "@streamdown/mermaid";
 import type { ComponentProps } from "react";
 import { useMemo } from "react";
-import { Streamdown } from "streamdown";
+import { Streamdown, type CodeHighlighterPlugin } from "streamdown";
 import { parseCitations, type SourceReference } from "@/lib/citations";
 import { CitationBadge } from "./citation-badge";
 
@@ -26,6 +26,7 @@ export const CitedMarkdown = ({
   sources,
   ...props
 }: CitedMarkdownProps) => {
+  const codePlugin = code as unknown as CodeHighlighterPlugin;
   // Parse text into segments
   const segments = useMemo(() => parseCitations(children), [children]);
 
@@ -38,7 +39,7 @@ export const CitedMarkdown = ({
           "size-full [&>*:first-child]:mt-0 [&>*:last-child]:mb-0",
           className
         )}
-        plugins={{ code, mermaid, math, cjk }}
+        plugins={{ code: codePlugin, mermaid, math, cjk }}
         shikiTheme={["github-light", "github-dark"]}
         {...props}
       >
@@ -76,7 +77,7 @@ export const CitedMarkdown = ({
           <Streamdown
             key={index}
             className="inline [&>p]:inline [&>*:first-child]:mt-0 [&>*:last-child]:mb-0"
-            plugins={{ code, mermaid, math, cjk }}
+            plugins={{ code: codePlugin, mermaid, math, cjk }}
             shikiTheme={["github-light", "github-dark"]}
             {...props}
           >

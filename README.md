@@ -2,7 +2,11 @@
 
 An organization-ready full-stack template built with [Better-T-Stack](https://github.com/AmanVarshney01/create-better-t-stack). Pre-configured with Better Auth, Convex, Zod validation, and Convex Ents - everything you need to build multi-tenant SaaS applications.
 
-[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fmantrakp04%2Fjust-use-convex&env=VITE_SITE_URL,CONVEX_DEPLOY_KEY,VITE_CONVEX_URL,VITE_CONVEX_SITE_URL,VITE_AGENT_URL&envDefaults=%7B%22VITE_SITE_URL%22%3A%22https%3A%2F%2Fjust-use-convex-web.vercel.app%2F%22%2C%22CONVEX_DEPLOY_KEY%22%3A%22go%20to%20https%3A%2F%2Fdashboard.convex.dev%2Ft%2Fbarrel-lube%2Fbetter-cvx%2F%3Cprod%20slug%3E%2Fsettings%20-%3E%20Deploy%20Keys%20-%3E%20Generate%20deploy%20key%22%2C%22VITE_CONVEX_URL%22%3A%22https%3A%2F%2F%3Cslug%3E.convex.cloud%22%2C%22VITE_CONVEX_SITE_URL%22%3A%22https%3A%2F%2F%3Cslug%3E.convex.site%22%2C%22VITE_AGENT_URL%22%3A%22https%3A%2F%2Fjust-use-convex-agent-worker-barrel.mantrakp.workers.dev%22%7D&project-name=just-use-convex&demo-title=Just-Use-Convex&demo-description=An%20org%20configured%20template)
+Deploy to Cloudflare with Alchemy:
+
+```bash
+bunx alchemy deploy alchemy.run.ts
+```
 
 ## Why This Template?
 
@@ -122,6 +126,7 @@ bun run dev
 
 ```
 just-use-convex/
+├── alchemy.run.ts             # Cloudflare deployment config (web + agent)
 ├── apps/
 │   └── web/                    # React + TanStack Start frontend
 │       ├── content/
@@ -143,7 +148,6 @@ just-use-convex/
 │   │       ├── schema.ts       # Database schema
 │   │       └── auth.ts         # Auth configuration
 │   ├── config/                 # Shared configuration
-│   └── env/                    # Environment variable schemas (T3 Env)
 ```
 
 ## Schema Example

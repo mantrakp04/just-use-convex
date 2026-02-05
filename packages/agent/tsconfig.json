@@ -3,7 +3,13 @@
   "compilerOptions": {
     "types": ["@cloudflare/workers-types", "node"],
     "lib": ["ESNext"],
-    "noEmit": true
+    "noEmit": true,
+    "baseUrl": ".",
+    "paths": {
+      "alchemy": ["node_modules/alchemy"],
+      "alchemy/*": ["node_modules/alchemy/*"],
+      "@cloudflare/sandbox": ["node_modules/@cloudflare/sandbox"]
+    }
   },
-  "include": ["src/**/*.ts", "alchemy.run.ts"]
+  "include": ["src/**/*.ts"]
 }

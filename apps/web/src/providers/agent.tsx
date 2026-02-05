@@ -1,6 +1,6 @@
 import type { ChatSettings } from "@/components/chat";
 import { useAgentChat } from "@cloudflare/ai-chat/react";
-import { env } from "@just-use-convex/env/web";
+import { env } from "@/lib/env";
 import { useAgent } from "agents/react";
 import { defaultChatSettingsAtom, type DefaultChatSettings } from "@/store/models";
 import { useAtomValue } from "jotai";

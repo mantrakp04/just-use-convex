@@ -43,55 +43,11 @@ Never prefix secrets with `VITE_` or `NEXT_PUBLIC_` - this exposes them to clien
 
 ## Setting Variables by Platform
 
-### Vercel
+### Alchemy (Cloudflare Workers)
 
-**Dashboard Method:**
-
-1. Go to Project Settings → Environment Variables
-2. Add each variable with appropriate scope (Production/Preview/Development)
-3. Click Save
-
-**CLI Method:**
-
-```bash
-# Add a variable
-vercel env add BETTER_AUTH_SECRET production
-
-# List variables
-vercel env ls
-```
-
-### Netlify
-
-**Dashboard Method:**
-
-1. Site Settings → Environment Variables
-2. Add variables with scope selection
-3. Save and redeploy
-
-**CLI Method:**
-
-```bash
-# Set variable
-netlify env:set BETTER_AUTH_SECRET "value"
-
-# Import from file
-netlify env:import .env.production
-```
-
-### Cloudflare Pages
-
-**Dashboard Method:**
-
-1. Settings → Environment Variables
-2. Add variables for Production and Preview
-
-**CLI Method:**
-
-```bash
-# Set secret
-wrangler secret put BETTER_AUTH_SECRET
-```
+1. Open your Alchemy project environment
+2. Add the variables listed below
+3. Re-deploy with `bunx alchemy deploy alchemy.run.ts`
 
 ### Convex Dashboard
 
@@ -264,15 +220,14 @@ for (const key of required) {
 ### Check Current Values
 
 ```bash
-# Vercel
-vercel env ls
-
 # Convex
 bunx convex env list
 
 # In application
 console.log("CONVEX_URL:", process.env.CONVEX_URL);
 ```
+
+Check your Alchemy project environment settings for Cloudflare-bound variables.
 
 ### Common Issues
 

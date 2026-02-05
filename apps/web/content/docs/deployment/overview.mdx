@@ -12,8 +12,8 @@ Deploying a Convex application involves two separate deployments: the Convex bac
 ```
 ┌─────────────────┐         ┌─────────────────┐
 │   Frontend      │ ──────▶ │    Convex       │
-│   (Vercel,      │         │    Cloud        │
-│    Netlify)     │         │                 │
+│  (Cloudflare)   │         │    Cloud        │
+│   Workers       │         │                 │
 └─────────────────┘         └─────────────────┘
         │                           │
         ▼                           ▼
@@ -41,12 +41,7 @@ bunx convex deploy
 
 ### Frontend
 
-Your React application can be deployed to any static hosting provider:
-
-- **Vercel** (Recommended for TanStack Start)
-- **Netlify**
-- **Cloudflare Pages**
-- **AWS Amplify**
+Your React application is deployed to Cloudflare Workers with Alchemy.
 
 ## Deployment Environments
 
@@ -84,9 +79,11 @@ bun run build
 
 ## One-Click Deploy
 
-The fastest way to deploy is using the Vercel one-click deploy button:
+The fastest way to deploy is using Alchemy:
 
-[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fmantrakp04%2Fjust-use-convex&env=VITE_SITE_URL,CONVEX_DEPLOY_KEY,VITE_CONVEX_URL,VITE_CONVEX_SITE_URL)
+```bash
+bunx alchemy deploy alchemy.run.ts
+```
 
 ## Deployment Checklist
 
@@ -119,9 +116,7 @@ Convex offers a generous free tier:
 
 Most hosting providers offer free tiers suitable for small to medium applications:
 
-- **Vercel**: 100GB bandwidth/month
-- **Netlify**: 100GB bandwidth/month
-- **Cloudflare**: Unlimited bandwidth
+- **Cloudflare Workers**: Usage-based with generous free tier
 
 ## Next Steps
 
