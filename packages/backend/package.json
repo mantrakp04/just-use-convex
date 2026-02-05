@@ -7,7 +7,8 @@
   "scripts": {
     "dev": "convex dev",
     "dev:setup": "convex dev --configure --until-success",
-    "build": "tsc --noEmit --project convex"
+    "build": "tsc --noEmit --project convex",
+    "check-types": "tsc --noEmit --project convex"
   },
   "dependencies": {
     "@convex-dev/aggregate": "^0.2.1",

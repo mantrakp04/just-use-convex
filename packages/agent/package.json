@@ -7,7 +7,7 @@
     "dev": "bunx alchemy dev alchemy.run.ts",
     "deploy": "bunx alchemy deploy alchemy.run.ts",
     "destroy": "bunx alchemy destroy alchemy.run.ts",
-    "typecheck": "tsc --noEmit"
+    "check-types": "tsc --noEmit"
   },
   "dependencies": {
     "@just-use-convex/backend": "workspace:*",
