@@ -23,7 +23,6 @@ import { Route as protectedSettingsIndexRouteImport } from './routes/(protected)
 import { Route as protectedChatsIndexRouteImport } from './routes/(protected)/chats/index'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
 import { Route as publicDocsSplatRouteImport } from './routes/(public)/docs/$'
-import { Route as protectedChatsSchedulesRouteImport } from './routes/(protected)/chats/schedules'
 import { Route as protectedChatsChatIdRouteImport } from './routes/(protected)/chats/$chatId'
 import { Route as protectedSettingsOrganizationRouteRouteImport } from './routes/(protected)/settings/organization/route'
 import { Route as protectedSettingsOrganizationIndexRouteImport } from './routes/(protected)/settings/organization/index'
@@ -98,11 +97,6 @@ const publicDocsSplatRoute = publicDocsSplatRouteImport.update({
   path: '/$',
   getParentRoute: () => publicDocsRouteRoute,
 } as any)
-const protectedChatsSchedulesRoute = protectedChatsSchedulesRouteImport.update({
-  id: '/schedules',
-  path: '/schedules',
-  getParentRoute: () => protectedChatsRouteRoute,
-} as any)
 const protectedChatsChatIdRoute = protectedChatsChatIdRouteImport.update({
   id: '/$chatId',
   path: '/$chatId',
@@ -144,7 +138,6 @@ export interface FileRoutesByFullPath {
   '/': typeof publicIndexRoute
   '/settings/organization': typeof protectedSettingsOrganizationRouteRouteWithChildren
   '/chats/$chatId': typeof protectedChatsChatIdRoute
-  '/chats/schedules': typeof protectedChatsSchedulesRoute
   '/docs/$': typeof publicDocsSplatRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/chats/': typeof protectedChatsIndexRoute
@@ -161,7 +154,6 @@ export interface FileRoutesByTo {
   '/api/search': typeof ApiSearchRoute
   '/': typeof publicIndexRoute
   '/chats/$chatId': typeof protectedChatsChatIdRoute
-  '/chats/schedules': typeof protectedChatsSchedulesRoute
   '/docs/$': typeof publicDocsSplatRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/chats': typeof protectedChatsIndexRoute
@@ -184,7 +176,6 @@ export interface FileRoutesById {
   '/(public)/': typeof publicIndexRoute
   '/(protected)/settings/organization': typeof protectedSettingsOrganizationRouteRouteWithChildren
   '/(protected)/chats/$chatId': typeof protectedChatsChatIdRoute
-  '/(protected)/chats/schedules': typeof protectedChatsSchedulesRoute
   '/(public)/docs/$': typeof publicDocsSplatRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/(protected)/chats/': typeof protectedChatsIndexRoute
@@ -206,7 +197,6 @@ export interface FileRouteTypes {
     | '/'
     | '/settings/organization'
     | '/chats/$chatId'
-    | '/chats/schedules'
     | '/docs/$'
     | '/api/auth/$'
     | '/chats/'
@@ -223,7 +213,6 @@ export interface FileRouteTypes {
     | '/api/search'
     | '/'
     | '/chats/$chatId'
-    | '/chats/schedules'
     | '/docs/$'
     | '/api/auth/$'
     | '/chats'
@@ -245,7 +234,6 @@ export interface FileRouteTypes {
     | '/(public)/'
     | '/(protected)/settings/organization'
     | '/(protected)/chats/$chatId'
-    | '/(protected)/chats/schedules'
     | '/(public)/docs/$'
     | '/api/auth/$'
     | '/(protected)/chats/'
@@ -363,13 +351,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof publicDocsSplatRouteImport
       parentRoute: typeof publicDocsRouteRoute
     }
-    '/(protected)/chats/schedules': {
-      id: '/(protected)/chats/schedules'
-      path: '/schedules'
-      fullPath: '/chats/schedules'
-      preLoaderRoute: typeof protectedChatsSchedulesRouteImport
-      parentRoute: typeof protectedChatsRouteRoute
-    }
     '/(protected)/chats/$chatId': {
       id: '/(protected)/chats/$chatId'
       path: '/$chatId'
@@ -410,13 +391,11 @@ declare module '@tanstack/react-router' {
 
 interface protectedChatsRouteRouteChildren {
   protectedChatsChatIdRoute: typeof protectedChatsChatIdRoute
-  protectedChatsSchedulesRoute: typeof protectedChatsSchedulesRoute
   protectedChatsIndexRoute: typeof protectedChatsIndexRoute
 }
 
 const protectedChatsRouteRouteChildren: protectedChatsRouteRouteChildren = {
   protectedChatsChatIdRoute: protectedChatsChatIdRoute,
-  protectedChatsSchedulesRoute: protectedChatsSchedulesRoute,
   protectedChatsIndexRoute: protectedChatsIndexRoute,
 }
 

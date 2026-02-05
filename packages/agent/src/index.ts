@@ -14,14 +14,13 @@ import type { worker } from "../alchemy.run";
 import {
   createConvexAdapter,
   parseTokenFromUrl,
-  type ConvexAdapter,
+  ConvexAdapter,
 } from "@just-use-convex/backend/convex/lib/convexAdapter";
 import { api } from "@just-use-convex/backend/convex/_generated/api";
 import type { Id } from "@just-use-convex/backend/convex/_generated/dataModel";
 import { z } from "zod";
 import { parseStreamToUI } from "./utils/fullStreamParser";
 import type { FunctionReturnType } from "convex/server";
-export { ScheduledJobWorkflow } from "./workflows/scheduled-job";
 
 function extractMessageText(message: UIMessage): string {
   if (message.role !== "user" && message.role !== "assistant") return "";
@@ -101,8 +100,18 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, ChatState> {
   private backgroundTaskStore = new BackgroundTaskStore();
   private chatDoc: FunctionReturnType<typeof api.chats.index.get> | null = null;
 
-  private buildVectorId(messageId: string): string {
-    return `${this.name}:${messageId}`;
+  private async buildVectorId(messageId: string): Promise<string> {
+    const baseId = `${this.name}:${messageId}`;
+    const baseBytes = new TextEncoder().encode(baseId);
+    if (baseBytes.length <= 64) return baseId;
+
+    const digest = await crypto.subtle.digest("SHA-256", baseBytes);
+    const hash = btoa(String.fromCharCode(...new Uint8Array(digest)))
+      .replace(/\+/g, "-")
+      .replace(/\//g, "_")
+      .replace(/=+$/g, "");
+
+    return `m_${hash}`;
   }
 
   private async saveFilesToSandbox(messages: UIMessage[]): Promise<void> {
@@ -159,13 +168,18 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, ChatState> {
     if (texts.length === 0) return;
 
     const embeddings = await embedTexts(texts);
+    const vectorIds = await Promise.all(
+      metadata.map((meta) => this.buildVectorId(meta.messageId))
+    );
+
     const vectors = [];
     for (let index = 0; index < embeddings.length; index += 1) {
       const values = embeddings[index];
       const meta = metadata[index];
-      if (!values || !meta) continue;
+      const id = vectorIds[index];
+      if (!values || !meta || !id) continue;
       vectors.push({
-        id: this.buildVectorId(meta.messageId),
+        id,
         values,
         metadata: meta,
       });
@@ -180,7 +194,9 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, ChatState> {
     const vectorize = this.env.VECTORIZE_CHAT_MESSAGES;
     if (!vectorize || messageIds.length === 0) return;
 
-    const ids = messageIds.map((messageId) => this.buildVectorId(messageId));
+    const ids = await Promise.all(
+      messageIds.map((messageId) => this.buildVectorId(messageId))
+    );
     await vectorize.deleteByIds(ids);
   }
 
@@ -289,6 +305,14 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, ChatState> {
       if (chat.sandbox) {
         this.sandboxId = chat.sandbox._id;
       }
+
+    }
+
+    if (model || reasoningEffort) {
+      await this.ctx.storage.put("chatState", {
+        model: model ?? this.state?.model,
+        reasoningEffort: reasoningEffort ?? this.state?.reasoningEffort,
+      } satisfies ChatState);
     }
   }
 
@@ -431,6 +455,7 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, ChatState> {
 
   override async onStateUpdate(state: ChatState, source: Connection | "server"): Promise<void> {
     await this._patchAgent();
+    await this.ctx.storage.put("chatState", state);
     await super.onStateUpdate(state, source);
   }
 
@@ -468,81 +493,6 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, ChatState> {
     
     // Persist the new message set
     await this.persistMessages(messages);
-  }
-
-  @callable({ description: "Create a schedule or cron job for this agent" })
-  async createSchedule(input: {
-    type: "delay" | "date" | "cron";
-    value: number | string;
-    prompt: string;
-    label?: string | null;
-  }) {
-    if (!input.prompt?.trim()) {
-      throw new Error("Prompt is required.");
-    }
-
-    const payload = {
-      prompt: input.prompt.trim(),
-      label: input.label?.trim() || null,
-    };
-
-    if (input.type === "delay") {
-      const delaySeconds = Number(input.value);
-      if (!Number.isFinite(delaySeconds) || delaySeconds <= 0) {
-        throw new Error("Delay must be a positive number of seconds.");
-      }
-      return await this.schedule(delaySeconds, "runScheduledWorkflow", payload);
-    }
-
-    if (input.type === "date") {
-      if (typeof input.value !== "string") {
-        throw new Error("Date must be an ISO string.");
-      }
-      const runAt = new Date(input.value);
-      if (Number.isNaN(runAt.getTime())) {
-        throw new Error("Invalid date.");
-      }
-      return await this.schedule(runAt, "runScheduledWorkflow", payload);
-    }
-
-    if (typeof input.value !== "string" || !input.value.trim()) {
-      throw new Error("Cron expression is required.");
-    }
-
-    return await this.schedule(input.value.trim(), "runScheduledWorkflow", payload);
-  }
-
-  @callable({ description: "List schedules for this agent" })
-  listSchedules() {
-    return this.getSchedules();
-  }
-
-  @callable({ description: "Cancel a schedule by ID" })
-  async cancelScheduleById(id: string): Promise<boolean> {
-    return await this.cancelSchedule(id);
-  }
-
-  async runScheduledWorkflow(payload: { prompt: string; label?: string | null }) {
-    const instanceId = crypto.randomUUID();
-    const memberId = this.chatDoc?.memberId;
-    const workflowId = memberId ? `${memberId}:${instanceId}` : instanceId;
-    await this.env.SCHEDULED_JOB_WORKFLOW.create({
-      id: workflowId,
-      params: {
-        prompt: payload.prompt,
-        label: payload.label ?? null,
-        memberId: memberId ?? null,
-        agentName: this.name,
-      },
-    });
-    this.broadcast(
-      JSON.stringify({
-        type: "schedule_executed",
-        payload,
-        timestamp: Date.now(),
-        workflowId,
-      })
-    );
   }
 
   override async onChatMessage(

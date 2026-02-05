@@ -1,5 +1,5 @@
 import alchemy from "alchemy";
-import { Worker, DurableObjectNamespace, Container, WranglerJson, VectorizeIndex, Workflow } from "alchemy/cloudflare";
+import { Worker, DurableObjectNamespace, Container, WranglerJson, VectorizeIndex } from "alchemy/cloudflare";
 
 const app = await alchemy("just-use-convex", {
   phase: process.argv.includes("--destroy") ? "destroy" : "up",
@@ -26,11 +26,6 @@ const chatMessagesIndex = await VectorizeIndex("chat-messages", {
   adopt: true,
 });
 
-const scheduledJobWorkflow = Workflow("scheduled-job-workflow", {
-  workflowName: "scheduled-job-workflow",
-  className: "ScheduledJobWorkflow",
-});
-
 export const worker = await Worker("agent-worker", {
   entrypoint: "./src/index.ts",
   url: false,
@@ -39,17 +34,18 @@ export const worker = await Worker("agent-worker", {
     agentWorker: agentWorkerNamespace,
     Sandbox: sandboxContainer,
     VECTORIZE_CHAT_MESSAGES: chatMessagesIndex,
-    SCHEDULED_JOB_WORKFLOW: scheduledJobWorkflow,
     SANDBOX_ROOT_DIR: '/workspace',
     NODE_ENV: "production",
     CONVEX_URL: alchemy.secret(process.env.CONVEX_URL),
     CONVEX_SITE_URL: alchemy.secret(process.env.CONVEX_SITE_URL),
+    EXTERNAL_TOKEN: alchemy.secret(process.env.EXTERNAL_TOKEN || 'meow'),
     SITE_URL: alchemy.secret(process.env.SITE_URL || "http://localhost:3001"),
     OPENROUTER_API_KEY: alchemy.secret(process.env.OPENROUTER_API_KEY),
     COMPOSIO_API_KEY: alchemy.secret(process.env.COMPOSIO_API_KEY || ''),
     VOLTAGENT_PUBLIC_KEY: alchemy.secret(process.env.VOLTAGENT_PUBLIC_KEY || ''),
     VOLTAGENT_SECRET_KEY: alchemy.secret(process.env.VOLTAGENT_SECRET_KEY || ''),
     EXA_API_KEY: alchemy.secret(process.env.EXA_API_KEY || ''),
+    DEFAULT_MODEL: process.env.DEFAULT_MODEL || "openai/gpt-5.2-chat",
   },
   observability: {
     logs: {
