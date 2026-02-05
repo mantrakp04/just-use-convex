@@ -20,6 +20,7 @@ function RouteComponent() {
     { value: '', label: 'General' },
     { value: 'members', label: 'Members' },
     { value: 'teams', label: 'Teams' },
+    { value: 'attachments', label: 'Attachments' },
   ]
 
   // Extract the part after /settings/organization/ or empty string if just /settings/organization

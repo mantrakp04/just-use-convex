@@ -19,7 +19,6 @@ function RouteComponent() {
   const paths = [
     { value: "", label: "User" },
     { value: "organization", label: "Organization" },
-    { value: "org", label: "Org" },
   ]
 
   // Extract the part after /settings/ or empty string if just /settings

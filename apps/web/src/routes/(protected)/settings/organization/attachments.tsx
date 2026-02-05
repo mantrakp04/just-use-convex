@@ -21,7 +21,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 
-export const Route = createFileRoute("/(protected)/settings/org/attachments")({
+export const Route = createFileRoute("/(protected)/settings/organization/attachments")({
   component: AttachmentsSettings,
 });
 
