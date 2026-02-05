@@ -29,6 +29,7 @@ export const orgMemberAttachmentsWithSystemFields = {
 const orgMemberAttachmentsTable = OrgMemberAttachments.table
   .index("organizationId_memberId", ["organizationId", "memberId", "updatedAt"])
   .index("organizationId_memberId_globalAttachmentId", ["organizationId", "memberId", "globalAttachmentId"])
+  .index("globalAttachmentId", ["globalAttachmentId"])
   .index("organizationId", ["organizationId", "updatedAt"])
   .index("memberId", ["memberId"]);
 

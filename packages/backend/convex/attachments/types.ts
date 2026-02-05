@@ -34,4 +34,7 @@ const zPaginationOpts = convexToZod(paginationOptsValidator);
 
 export const ListOrgMemberAttachmentsArgs = z.object({
   paginationOpts: zPaginationOpts,
+  memberId: OrgMemberAttachment.pick({ memberId: true }).shape.memberId.optional(),
 });
+
+export const DeleteOrgMemberAttachmentArgs = OrgMemberAttachmentWithSystemFields.pick({ _id: true });

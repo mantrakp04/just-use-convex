@@ -38,6 +38,13 @@ export const list = zQuery({
   },
 });
 
+export const deleteAttachment = zMutation({
+  args: types.DeleteOrgMemberAttachmentArgs,
+  handler: async (ctx, args): Promise<ReturnType<typeof functions.DeleteOrgMemberAttachment>> => {
+    return await functions.DeleteOrgMemberAttachment(ctx, args);
+  },
+});
+
 // ═══════════════════════════════════════════════════════════════════
 // STATS QUERIES
 // ═══════════════════════════════════════════════════════════════════

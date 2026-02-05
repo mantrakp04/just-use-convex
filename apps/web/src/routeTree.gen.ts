@@ -25,9 +25,12 @@ import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
 import { Route as publicDocsSplatRouteImport } from './routes/(public)/docs/$'
 import { Route as protectedChatsChatIdRouteImport } from './routes/(protected)/chats/$chatId'
 import { Route as protectedSettingsOrganizationRouteRouteImport } from './routes/(protected)/settings/organization/route'
+import { Route as protectedSettingsOrgRouteRouteImport } from './routes/(protected)/settings/org/route'
 import { Route as protectedSettingsOrganizationIndexRouteImport } from './routes/(protected)/settings/organization/index'
+import { Route as protectedSettingsOrgIndexRouteImport } from './routes/(protected)/settings/org/index'
 import { Route as protectedSettingsOrganizationTeamsRouteImport } from './routes/(protected)/settings/organization/teams'
 import { Route as protectedSettingsOrganizationMembersRouteImport } from './routes/(protected)/settings/organization/members'
+import { Route as protectedSettingsOrgAttachmentsRouteImport } from './routes/(protected)/settings/org/attachments'
 
 const publicRouteRoute = publicRouteRouteImport.update({
   id: '/(public)',
@@ -108,11 +111,23 @@ const protectedSettingsOrganizationRouteRoute =
     path: '/organization',
     getParentRoute: () => protectedSettingsRouteRoute,
   } as any)
+const protectedSettingsOrgRouteRoute =
+  protectedSettingsOrgRouteRouteImport.update({
+    id: '/org',
+    path: '/org',
+    getParentRoute: () => protectedSettingsRouteRoute,
+  } as any)
 const protectedSettingsOrganizationIndexRoute =
   protectedSettingsOrganizationIndexRouteImport.update({
     id: '/',
     path: '/',
     getParentRoute: () => protectedSettingsOrganizationRouteRoute,
+  } as any)
+const protectedSettingsOrgIndexRoute =
+  protectedSettingsOrgIndexRouteImport.update({
+    id: '/',
+    path: '/',
+    getParentRoute: () => protectedSettingsOrgRouteRoute,
   } as any)
 const protectedSettingsOrganizationTeamsRoute =
   protectedSettingsOrganizationTeamsRouteImport.update({
@@ -126,6 +141,12 @@ const protectedSettingsOrganizationMembersRoute =
     path: '/members',
     getParentRoute: () => protectedSettingsOrganizationRouteRoute,
   } as any)
+const protectedSettingsOrgAttachmentsRoute =
+  protectedSettingsOrgAttachmentsRouteImport.update({
+    id: '/attachments',
+    path: '/attachments',
+    getParentRoute: () => protectedSettingsOrgRouteRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/chats': typeof protectedChatsRouteRouteWithChildren
@@ -136,14 +157,17 @@ export interface FileRoutesByFullPath {
   '/api/models': typeof ApiModelsRoute
   '/api/search': typeof ApiSearchRoute
   '/': typeof publicIndexRoute
+  '/settings/org': typeof protectedSettingsOrgRouteRouteWithChildren
   '/settings/organization': typeof protectedSettingsOrganizationRouteRouteWithChildren
   '/chats/$chatId': typeof protectedChatsChatIdRoute
   '/docs/$': typeof publicDocsSplatRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/chats/': typeof protectedChatsIndexRoute
   '/settings/': typeof protectedSettingsIndexRoute
+  '/settings/org/attachments': typeof protectedSettingsOrgAttachmentsRoute
   '/settings/organization/members': typeof protectedSettingsOrganizationMembersRoute
   '/settings/organization/teams': typeof protectedSettingsOrganizationTeamsRoute
+  '/settings/org/': typeof protectedSettingsOrgIndexRoute
   '/settings/organization/': typeof protectedSettingsOrganizationIndexRoute
 }
 export interface FileRoutesByTo {
@@ -158,8 +182,10 @@ export interface FileRoutesByTo {
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/chats': typeof protectedChatsIndexRoute
   '/settings': typeof protectedSettingsIndexRoute
+  '/settings/org/attachments': typeof protectedSettingsOrgAttachmentsRoute
   '/settings/organization/members': typeof protectedSettingsOrganizationMembersRoute
   '/settings/organization/teams': typeof protectedSettingsOrganizationTeamsRoute
+  '/settings/org': typeof protectedSettingsOrgIndexRoute
   '/settings/organization': typeof protectedSettingsOrganizationIndexRoute
 }
 export interface FileRoutesById {
@@ -174,14 +200,17 @@ export interface FileRoutesById {
   '/api/models': typeof ApiModelsRoute
   '/api/search': typeof ApiSearchRoute
   '/(public)/': typeof publicIndexRoute
+  '/(protected)/settings/org': typeof protectedSettingsOrgRouteRouteWithChildren
   '/(protected)/settings/organization': typeof protectedSettingsOrganizationRouteRouteWithChildren
   '/(protected)/chats/$chatId': typeof protectedChatsChatIdRoute
   '/(public)/docs/$': typeof publicDocsSplatRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/(protected)/chats/': typeof protectedChatsIndexRoute
   '/(protected)/settings/': typeof protectedSettingsIndexRoute
+  '/(protected)/settings/org/attachments': typeof protectedSettingsOrgAttachmentsRoute
   '/(protected)/settings/organization/members': typeof protectedSettingsOrganizationMembersRoute
   '/(protected)/settings/organization/teams': typeof protectedSettingsOrganizationTeamsRoute
+  '/(protected)/settings/org/': typeof protectedSettingsOrgIndexRoute
   '/(protected)/settings/organization/': typeof protectedSettingsOrganizationIndexRoute
 }
 export interface FileRouteTypes {
@@ -195,14 +224,17 @@ export interface FileRouteTypes {
     | '/api/models'
     | '/api/search'
     | '/'
+    | '/settings/org'
     | '/settings/organization'
     | '/chats/$chatId'
     | '/docs/$'
     | '/api/auth/$'
     | '/chats/'
     | '/settings/'
+    | '/settings/org/attachments'
     | '/settings/organization/members'
     | '/settings/organization/teams'
+    | '/settings/org/'
     | '/settings/organization/'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -217,8 +249,10 @@ export interface FileRouteTypes {
     | '/api/auth/$'
     | '/chats'
     | '/settings'
+    | '/settings/org/attachments'
     | '/settings/organization/members'
     | '/settings/organization/teams'
+    | '/settings/org'
     | '/settings/organization'
   id:
     | '__root__'
@@ -232,14 +266,17 @@ export interface FileRouteTypes {
     | '/api/models'
     | '/api/search'
     | '/(public)/'
+    | '/(protected)/settings/org'
     | '/(protected)/settings/organization'
     | '/(protected)/chats/$chatId'
     | '/(public)/docs/$'
     | '/api/auth/$'
     | '/(protected)/chats/'
     | '/(protected)/settings/'
+    | '/(protected)/settings/org/attachments'
     | '/(protected)/settings/organization/members'
     | '/(protected)/settings/organization/teams'
+    | '/(protected)/settings/org/'
     | '/(protected)/settings/organization/'
   fileRoutesById: FileRoutesById
 }
@@ -365,12 +402,26 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof protectedSettingsOrganizationRouteRouteImport
       parentRoute: typeof protectedSettingsRouteRoute
     }
+    '/(protected)/settings/org': {
+      id: '/(protected)/settings/org'
+      path: '/org'
+      fullPath: '/settings/org'
+      preLoaderRoute: typeof protectedSettingsOrgRouteRouteImport
+      parentRoute: typeof protectedSettingsRouteRoute
+    }
     '/(protected)/settings/organization/': {
       id: '/(protected)/settings/organization/'
       path: '/'
       fullPath: '/settings/organization/'
       preLoaderRoute: typeof protectedSettingsOrganizationIndexRouteImport
       parentRoute: typeof protectedSettingsOrganizationRouteRoute
+    }
+    '/(protected)/settings/org/': {
+      id: '/(protected)/settings/org/'
+      path: '/'
+      fullPath: '/settings/org/'
+      preLoaderRoute: typeof protectedSettingsOrgIndexRouteImport
+      parentRoute: typeof protectedSettingsOrgRouteRoute
     }
     '/(protected)/settings/organization/teams': {
       id: '/(protected)/settings/organization/teams'
@@ -385,6 +436,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/settings/organization/members'
       preLoaderRoute: typeof protectedSettingsOrganizationMembersRouteImport
       parentRoute: typeof protectedSettingsOrganizationRouteRoute
+    }
+    '/(protected)/settings/org/attachments': {
+      id: '/(protected)/settings/org/attachments'
+      path: '/attachments'
+      fullPath: '/settings/org/attachments'
+      preLoaderRoute: typeof protectedSettingsOrgAttachmentsRouteImport
+      parentRoute: typeof protectedSettingsOrgRouteRoute
     }
   }
 }
@@ -401,6 +459,22 @@ const protectedChatsRouteRouteChildren: protectedChatsRouteRouteChildren = {
 
 const protectedChatsRouteRouteWithChildren =
   protectedChatsRouteRoute._addFileChildren(protectedChatsRouteRouteChildren)
+
+interface protectedSettingsOrgRouteRouteChildren {
+  protectedSettingsOrgAttachmentsRoute: typeof protectedSettingsOrgAttachmentsRoute
+  protectedSettingsOrgIndexRoute: typeof protectedSettingsOrgIndexRoute
+}
+
+const protectedSettingsOrgRouteRouteChildren: protectedSettingsOrgRouteRouteChildren =
+  {
+    protectedSettingsOrgAttachmentsRoute: protectedSettingsOrgAttachmentsRoute,
+    protectedSettingsOrgIndexRoute: protectedSettingsOrgIndexRoute,
+  }
+
+const protectedSettingsOrgRouteRouteWithChildren =
+  protectedSettingsOrgRouteRoute._addFileChildren(
+    protectedSettingsOrgRouteRouteChildren,
+  )
 
 interface protectedSettingsOrganizationRouteRouteChildren {
   protectedSettingsOrganizationMembersRoute: typeof protectedSettingsOrganizationMembersRoute
@@ -424,12 +498,14 @@ const protectedSettingsOrganizationRouteRouteWithChildren =
   )
 
 interface protectedSettingsRouteRouteChildren {
+  protectedSettingsOrgRouteRoute: typeof protectedSettingsOrgRouteRouteWithChildren
   protectedSettingsOrganizationRouteRoute: typeof protectedSettingsOrganizationRouteRouteWithChildren
   protectedSettingsIndexRoute: typeof protectedSettingsIndexRoute
 }
 
 const protectedSettingsRouteRouteChildren: protectedSettingsRouteRouteChildren =
   {
+    protectedSettingsOrgRouteRoute: protectedSettingsOrgRouteRouteWithChildren,
     protectedSettingsOrganizationRouteRoute:
       protectedSettingsOrganizationRouteRouteWithChildren,
     protectedSettingsIndexRoute: protectedSettingsIndexRoute,

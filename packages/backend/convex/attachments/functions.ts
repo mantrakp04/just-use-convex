@@ -2,6 +2,12 @@ import type { z } from "zod";
 import { api } from "../_generated/api";
 import type { zActionCtx, zMutationCtx, zQueryCtx } from "../functions";
 import * as types from "./types";
+import { ROLE_HIERARCHY } from "../shared/auth_shared";
+
+function isAdminOrAbove(role: string) {
+  const level = ROLE_HIERARCHY[role as keyof typeof ROLE_HIERARCHY] ?? 0;
+  return level >= ROLE_HIERARCHY.admin;
+}
 
 async function toHexHash(bytes: Uint8Array) {
   const data = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
@@ -130,10 +136,15 @@ export async function ListOrgMemberAttachments(
   ctx: zQueryCtx,
   args: z.infer<typeof types.ListOrgMemberAttachmentsArgs>
 ) {
+  const requestedMemberId = args.memberId ?? ctx.identity.memberId;
+  if (args.memberId && !isAdminOrAbove(ctx.identity.organizationRole)) {
+    throw new Error("You are not authorized to view other members' attachments");
+  }
+
   const attachments = await ctx.table("orgMemberAttachments", "organizationId_memberId", (q) =>
     q
       .eq("organizationId", ctx.identity.activeOrganizationId)
-      .eq("memberId", ctx.identity.memberId)
+      .eq("memberId", requestedMemberId)
   )
     .order("desc")
     .paginate(args.paginationOpts);
@@ -149,4 +160,33 @@ export async function ListOrgMemberAttachments(
     ...attachments,
     page: attachmentsWithGlobal,
   };
+}
+
+export async function DeleteOrgMemberAttachment(
+  ctx: zMutationCtx,
+  args: z.infer<typeof types.DeleteOrgMemberAttachmentArgs>
+) {
+  const attachment = await ctx.table("orgMemberAttachments").getX(args._id);
+  if (attachment.organizationId !== ctx.identity.activeOrganizationId) {
+    throw new Error("You are not authorized to delete this attachment");
+  }
+  if (attachment.memberId !== ctx.identity.memberId && !isAdminOrAbove(ctx.identity.organizationRole)) {
+    throw new Error("You are not authorized to delete other members' attachments");
+  }
+
+  const globalAttachmentId = attachment.globalAttachmentId;
+  await attachment.delete();
+
+  const remaining = await ctx.table("orgMemberAttachments", "globalAttachmentId", (q) =>
+    q.eq("globalAttachmentId", globalAttachmentId)
+  );
+
+  if (remaining.length > 0) {
+    return true;
+  }
+
+  const globalAttachment = await ctx.table("globalAttachments").getX(globalAttachmentId);
+  await ctx.storage.delete(globalAttachment.storageId);
+  await globalAttachment.delete();
+  return true;
 }
