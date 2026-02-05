@@ -1,7 +1,7 @@
 import * as functions from "./functions";
 import * as stats from "./stats";
 import * as types from "./types";
-import { zMutation, zQuery } from "../functions";
+import { zExternalMutation, zExternalQuery, zMutation, zQuery } from "../functions";
 
 export const list = zQuery({
   args: types.ListArgs,
@@ -11,6 +11,12 @@ export const list = zQuery({
 });
 
 export const get = zQuery({
+  args: types.GetChatArgs,
+  handler: async (ctx, args): Promise<ReturnType<typeof functions.GetChat>> => {
+    return await functions.GetChat(ctx, args);
+  },
+});
+export const getExt = zExternalQuery({
   args: types.GetChatArgs,
   handler: async (ctx, args): Promise<ReturnType<typeof functions.GetChat>> => {
     return await functions.GetChat(ctx, args);
@@ -30,6 +36,12 @@ export const update = zMutation({
     return await functions.UpdateChat(ctx, args);
   },
 });
+export const updateExt = zExternalMutation({
+  args: types.UpdateArgs,
+  handler: async (ctx, args): Promise<ReturnType<typeof functions.UpdateChat>> => {
+    return await functions.UpdateChat(ctx, args);
+  },
+});
 
 export const deleteChat = zMutation({
   args: types.DeleteArgs,
@@ -38,14 +50,21 @@ export const deleteChat = zMutation({
   },
 });
 
+export const search = zQuery({
+  args: types.SearchArgs,
+  handler: async (ctx, args): Promise<ReturnType<typeof functions.SearchChats>> => {
+    return await functions.SearchChats(ctx, args);
+  },
+});
+
 // ═══════════════════════════════════════════════════════════════════
 // STATS QUERIES
 // ═══════════════════════════════════════════════════════════════════
 
-export const getUserStats = zQuery({
+export const getMemberStats = zQuery({
   args: {},
-  handler: async (ctx): Promise<ReturnType<typeof stats.GetUserChatStats>> => {
-    return await stats.GetUserChatStats(ctx);
+  handler: async (ctx): Promise<ReturnType<typeof stats.GetMemberChatStats>> => {
+    return await stats.GetMemberChatStats(ctx);
   },
 });
 

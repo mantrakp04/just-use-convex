@@ -5,7 +5,7 @@ export const TeamStatsArgs = {
   teamId: todosZodSchema.teamId,
 };
 
-// Infer userId type from todos schema
+// Infer memberId type from todos schema
 export const UserStatsArgs = {
-  userId: todosZodSchema.userId.optional(),
+  memberId: todosZodSchema.memberId.optional(),
 };

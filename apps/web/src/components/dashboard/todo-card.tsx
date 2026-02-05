@@ -39,23 +39,32 @@ export function TodoCard({
 
   return (
     <div
-      className="group flex flex-col gap-2 p-3 rounded-lg border bg-card hover:bg-muted/50 transition-colors cursor-pointer"
+      role="button"
+      tabIndex={0}
+      className="group flex w-full flex-col gap-2 p-3 rounded-lg border bg-card hover:bg-muted/50 transition-colors text-left"
       onClick={onOpen}
+      onKeyDown={(event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          onOpen();
+        }
+      }}
     >
       <div className="flex items-start gap-2">
-        <div onClick={(e) => e.stopPropagation()} className="pt-0.5">
-          <button
-            onClick={() => {
-              const nextStatus = status === "todo" ? "in_progress" : status === "in_progress" ? "done" : "todo";
-              onStatusChange(nextStatus);
-            }}
-            className="text-muted-foreground hover:text-foreground transition-colors"
-          >
-            <StatusIcon
-              className={`size-4 ${status === "done" ? "text-green-500" : status === "in_progress" ? "text-blue-500" : ""}`}
-            />
-          </button>
-        </div>
+        <Button
+          variant="ghost"
+          size="icon-xs"
+          className="text-muted-foreground hover:text-foreground mt-0.5"
+          onClick={(e) => {
+            e.stopPropagation();
+            const nextStatus = status === "todo" ? "in_progress" : status === "in_progress" ? "done" : "todo";
+            onStatusChange(nextStatus);
+          }}
+        >
+          <StatusIcon
+            className={`size-4 ${status === "done" ? "text-green-500" : status === "in_progress" ? "text-blue-500" : ""}`}
+          />
+        </Button>
         <div className="flex-1 min-w-0">
           <p
             className={`font-medium text-sm leading-tight ${
@@ -93,15 +102,15 @@ export function TodoCard({
         </div>
 
         {/* Quick move buttons */}
-        <div
-          className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity"
-          onClick={(e) => e.stopPropagation()}
-        >
+        <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
           {prevColumn && (
             <Button
               variant="ghost"
               size="icon-xs"
-              onClick={() => onMove(prevColumn.id)}
+              onClick={(e) => {
+                e.stopPropagation();
+                onMove(prevColumn.id);
+              }}
               title={`Move to ${prevColumn.label}`}
             >
               <ChevronLeft className="size-3" />
@@ -111,7 +120,10 @@ export function TodoCard({
             <Button
               variant="ghost"
               size="icon-xs"
-              onClick={() => onMove(nextColumn.id)}
+              onClick={(e) => {
+                e.stopPropagation();
+                onMove(nextColumn.id);
+              }}
               title={`Move to ${nextColumn.label}`}
             >
               <ChevronRight className="size-3" />

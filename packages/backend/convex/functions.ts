@@ -15,6 +15,9 @@ import type { DataModel } from "./_generated/dataModel";
 import { v, type Infer } from "convex/values";
 import { allTodoAggregates } from "./todos/aggregates";
 import { allChatAggregates } from "./chats/aggregates";
+import { allSandboxAggregates } from "./sandboxes/aggregates";
+
+const EXTERNAL_TOKEN = process.env.EXTERNAL_TOKEN ?? "meow";
 
 const triggers = new Triggers<DataModel>();
 
@@ -28,6 +31,11 @@ for (const aggregate of allChatAggregates) {
   triggers.register("chats", aggregate.trigger());
 }
 
+// Register all aggregate triggers for sandboxes table
+for (const aggregate of allSandboxAggregates) {
+  triggers.register("sandboxes", aggregate.trigger());
+}
+
 // Wrap base mutations with triggers
 const baseMutation = customMutation(rawMutation, customCtx(triggers.wrapDB));
 const baseInternalMutation = customMutation(rawInternalMutation, customCtx(triggers.wrapDB));
@@ -35,8 +43,14 @@ const baseInternalMutation = customMutation(rawInternalMutation, customCtx(trigg
 export const baseIdentity = v.object({
   userId: v.string(),
   activeOrganizationId: v.string(),
-  activeTeamId: v.optional(v.string()),
   organizationRole: v.string(),
+  memberId: v.string(),
+  activeTeamId: v.optional(v.string()),
+});
+
+export const externalFields = v.object({
+  externalToken: v.string(),
+  ...baseIdentity.fields,
 });
 
 export const zQuery = zCustomQuery(baseQuery, {
@@ -51,6 +65,7 @@ export const zQuery = zCustomQuery(baseQuery, {
       activeOrganizationId: identity.activeOrganizationId as string,
       activeTeamId: identity.activeTeamId as string | undefined,
       organizationRole: identity.organizationRole as string,
+      memberId: identity.memberId as string,
     };
     return {
       ctx: { ...ctx, table: entsTableFactory(ctx, entDefinitions), identity: parsedIdentity },
@@ -65,6 +80,18 @@ export const zInternalQuery = zCustomQuery(baseInternalQuery, {
     args: {},
   }),
 });
+export const zExternalQuery = zCustomQuery(baseQuery, {
+  args: externalFields.fields,
+  input: async (ctx, args) => {
+    if (args.externalToken !== EXTERNAL_TOKEN) {
+      throw new Error("Unauthorized: Invalid external token");
+    }
+    return {
+      ctx: { ...ctx, table: entsTableFactory(ctx, entDefinitions), identity: args },
+      args: {},
+    }
+  },
+});
 
 export const zMutation = zCustomMutation(baseMutation, {
   args: {},
@@ -78,6 +105,7 @@ export const zMutation = zCustomMutation(baseMutation, {
       activeOrganizationId: identity.activeOrganizationId as string,
       activeTeamId: identity.activeTeamId as string | undefined,
       organizationRole: identity.organizationRole as string,
+      memberId: identity.memberId as string,
     };
     return {
       ctx: { ...ctx, table: entsTableFactory(ctx, entDefinitions), identity: parsedIdentity },
@@ -94,6 +122,18 @@ export const zInternalMutation = zCustomMutation(baseInternalMutation, {
     }
   },
 });
+export const zExternalMutation = zCustomMutation(baseMutation, {
+  args: externalFields.fields,
+  input: async (ctx, args) => {
+    if (args.externalToken !== EXTERNAL_TOKEN) {
+      throw new Error("Unauthorized: Invalid external token");
+    }
+    return {
+      ctx: { ...ctx, table: entsTableFactory(ctx, entDefinitions), identity: args },
+      args: {},
+    }
+  }
+});
 
 export const zAction = zCustomAction(baseAction, {
   args: {},
@@ -107,6 +147,7 @@ export const zAction = zCustomAction(baseAction, {
       activeOrganizationId: identity.activeOrganizationId as string,
       activeTeamId: identity.activeTeamId as string | undefined,
       organizationRole: identity.organizationRole as string,
+      memberId: identity.memberId as string,
     };
     return {
       ctx: { ...ctx, identity: parsedIdentity },
@@ -123,10 +164,25 @@ export const zInternalAction = zCustomAction(baseInternalAction, {
     }
   },
 });
+export const zExternalAction = zCustomAction(baseAction, {
+  args: externalFields.fields,
+  input: async (ctx, args) => {
+    if (args.externalToken !== EXTERNAL_TOKEN) {
+      throw new Error("Unauthorized: Invalid external token");
+    }
+    return {
+    ctx: { ...ctx, identity: args },
+    args: {},
+    }
+  },
+});
 
 export type zQueryCtx = ZCustomCtx<typeof zQuery>;
 export type zInternalQueryCtx = ZCustomCtx<typeof zInternalQuery>;
+export type zExternalQueryCtx = ZCustomCtx<typeof zExternalQuery>;
 export type zMutationCtx = ZCustomCtx<typeof zMutation>;
 export type zInternalMutationCtx = ZCustomCtx<typeof zInternalMutation>;
+export type zExternalMutationCtx = ZCustomCtx<typeof zExternalMutation>;
 export type zActionCtx = ZCustomCtx<typeof zAction>;
 export type zInternalActionCtx = ZCustomCtx<typeof zInternalAction>;
+export type zExternalActionCtx = ZCustomCtx<typeof zExternalAction>;

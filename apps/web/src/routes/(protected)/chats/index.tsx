@@ -1,18 +1,22 @@
 import { useCallback } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { useAtomValue } from "jotai";
 import { useChats, useChatsList, useChatStats, type Chat } from "@/hooks/use-chats";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Empty, EmptyHeader, EmptyMedia, EmptyTitle, EmptyDescription } from "@/components/ui/empty";
 import { Skeleton } from "@/components/ui/skeleton";
 import { VirtualList } from "@/components/ui/virtual-list";
+import { SandboxSelector } from "@/components/sandboxes/sandbox-selector";
+import { selectedSandboxIdAtom } from "@/store/sandbox";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { MessageSquare, Plus, MoreVertical, Trash2, Pin } from "lucide-react";
+import { Box, MessageSquare, Plus, MoreVertical, Trash2, Pin } from "lucide-react";
 
 export const Route = createFileRoute("/(protected)/chats/")({
   component: ChatsListPage,
@@ -35,11 +39,12 @@ function ChatsListPage() {
   const pinnedChatsQuery = useChatsList({ isPinned: true });
   const unpinnedChatsQuery = useChatsList({ isPinned: false });
   const { data: stats } = useChatStats();
+  const selectedSandboxId = useAtomValue(selectedSandboxIdAtom);
 
   const handleCreateChat = useCallback(async () => {
-    const chat = await createChat({ data: { title: "New Chat" } });
+    const chat = await createChat({ data: { title: "New Chat", sandboxId: selectedSandboxId ?? undefined } });
     navigate({ to: "/chats/$chatId", params: { chatId: chat } });
-  }, [createChat, navigate]);
+  }, [createChat, navigate, selectedSandboxId]);
 
   const handleDeleteChat = useCallback(
     async (chatId: Chat["_id"]) => {
@@ -90,10 +95,18 @@ function ChatsListPage() {
             </div>
             <div>
               <CardTitle>{chat.title}</CardTitle>
-              <CardDescription>
-                {chat.updatedAt
-                  ? `Last message ${formatDate(chat.updatedAt)}`
-                  : `Created ${formatDate(chat._creationTime)}`}
+              <CardDescription className="flex items-center gap-2">
+                <span>
+                  {chat.updatedAt
+                    ? `Last message ${formatDate(chat.updatedAt)}`
+                    : `Created ${formatDate(chat._creationTime)}`}
+                </span>
+                {chat.sandbox && (
+                  <Badge variant="outline">
+                    <Box />
+                    {chat.sandbox.name}
+                  </Badge>
+                )}
               </CardDescription>
             </div>
           </div>
@@ -146,10 +159,13 @@ function ChatsListPage() {
             {total} {total === 1 ? "conversation" : "conversations"}
           </p>
         </div>
-        <Button onClick={handleCreateChat} disabled={isCreating}>
-          <Plus className="size-4 mr-2" />
-          New Chat
-        </Button>
+        <div className="flex items-center gap-2">
+          <SandboxSelector />
+          <Button onClick={handleCreateChat} disabled={isCreating}>
+            <Plus className="size-4 mr-2" />
+            New Chat
+          </Button>
+        </div>
       </div>
 
       {!pinnedChatsQuery.isLoading && !unpinnedChatsQuery.isLoading && !hasAnyChats && (

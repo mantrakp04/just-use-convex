@@ -22,7 +22,7 @@ interface TodoDialogProps {
 }
 
 export function TodoDialog({ todo, open, onOpenChange, mode, onModeChange }: TodoDialogProps) {
-  const { updateTodo, deleteTodo, createTodo, assignUser, unassignUser, isUpdating, isDeleting, isCreating } = useTodos();
+  const { updateTodo, deleteTodo, createTodo, assignMember, unassignMember, isUpdating, isDeleting, isCreating } = useTodos();
   const { teams } = useTeams();
   const { members } = useMembers();
 
@@ -38,14 +38,14 @@ export function TodoDialog({ todo, open, onOpenChange, mode, onModeChange }: Tod
   const [startTime, setStartTime] = useState(todo?.startTime ? new Date(todo.startTime).toTimeString().slice(0, 5) : "");
   const [endTime, setEndTime] = useState(todo?.endTime ? new Date(todo.endTime).toTimeString().slice(0, 5) : "");
   const [teamId, setTeamId] = useState<string | undefined>(todo?.teamId);
-  const [assignedUserIds, setAssignedUserIds] = useState<string[]>([]);
-  const [initialAssignedUserIds, setInitialAssignedUserIds] = useState<string[]>([]);
+  const [assignedMemberIds, setAssignedMemberIds] = useState<string[]>([]);
+  const [initialAssignedMemberIds, setInitialAssignedMemberIds] = useState<string[]>([]);
 
   // Find creator from members list
   const creator = useMemo(() => {
-    if (!todo?.userId) return null;
-    return members.find((m) => m.userId === todo.userId) ?? null;
-  }, [todo?.userId, members]);
+    if (!todo?.memberId) return null;
+    return members.find((m) => m.id === todo.memberId) ?? null;
+  }, [todo?.memberId, members]);
 
   // Find assigned team
   const assignedTeam = useMemo(() => {
@@ -55,10 +55,10 @@ export function TodoDialog({ todo, open, onOpenChange, mode, onModeChange }: Tod
 
   // Get assigned users details for display
   const assignedUsersDetails = useMemo(() => {
-    return assignedUserIds
-      .map((userId) => members.find((m) => m.userId === userId))
+    return assignedMemberIds
+      .map((memberId) => members.find((m) => m.id === memberId))
       .filter(Boolean) as typeof members;
-  }, [assignedUserIds, members]);
+  }, [assignedMemberIds, members]);
 
   useEffect(() => {
     if (open) {
@@ -70,10 +70,10 @@ export function TodoDialog({ todo, open, onOpenChange, mode, onModeChange }: Tod
       setStartTime(todo?.startTime ? new Date(todo.startTime).toTimeString().slice(0, 5) : "");
       setEndTime(todo?.endTime ? new Date(todo.endTime).toTimeString().slice(0, 5) : "");
       setTeamId(todo?.teamId);
-      // Initialize assigned user IDs from fetched todo with assignees
-      const userIds = todoWithAssignees?.assignedUsers?.map((a) => a.userId) ?? [];
-      setAssignedUserIds(userIds);
-      setInitialAssignedUserIds(userIds);
+      // Initialize assigned member IDs from fetched todo with assignees
+      const memberIds = todoWithAssignees?.assignedMembers?.map((a) => a.memberId) ?? [];
+      setAssignedMemberIds(memberIds);
+      setInitialAssignedMemberIds(memberIds);
     }
   }, [todo, open, todoWithAssignees]);
 
@@ -102,9 +102,9 @@ export function TodoDialog({ todo, open, onOpenChange, mode, onModeChange }: Tod
           teamId: teamId || undefined,
         },
       });
-      // Assign users to the newly created todo
-      for (const userId of assignedUserIds) {
-        await assignUser({ todoId: newTodoId, userId });
+      // Assign members to the newly created todo
+      for (const memberId of assignedMemberIds) {
+        await assignMember({ todoId: newTodoId, memberId });
       }
     } else if (todo) {
       await updateTodo({
@@ -121,13 +121,13 @@ export function TodoDialog({ todo, open, onOpenChange, mode, onModeChange }: Tod
         },
       });
       // Handle assignment changes
-      const usersToAssign = assignedUserIds.filter((id) => !initialAssignedUserIds.includes(id));
-      const usersToUnassign = initialAssignedUserIds.filter((id) => !assignedUserIds.includes(id));
-      for (const userId of usersToAssign) {
-        await assignUser({ todoId: todo._id, userId });
+      const membersToAssign = assignedMemberIds.filter((id) => !initialAssignedMemberIds.includes(id));
+      const membersToUnassign = initialAssignedMemberIds.filter((id) => !assignedMemberIds.includes(id));
+      for (const memberId of membersToAssign) {
+        await assignMember({ todoId: todo._id, memberId });
       }
-      for (const userId of usersToUnassign) {
-        await unassignUser({ todoId: todo._id, userId });
+      for (const memberId of membersToUnassign) {
+        await unassignMember({ todoId: todo._id, memberId });
       }
     }
     onOpenChange(false);
@@ -182,8 +182,8 @@ export function TodoDialog({ todo, open, onOpenChange, mode, onModeChange }: Tod
               onEndTimeChange={setEndTime}
               teamId={teamId}
               onTeamIdChange={setTeamId}
-              assignedUserIds={assignedUserIds}
-              onAssignedUserIdsChange={setAssignedUserIds}
+              assignedMemberIds={assignedMemberIds}
+              onAssignedMemberIdsChange={setAssignedMemberIds}
               teams={teams}
               members={members}
             />

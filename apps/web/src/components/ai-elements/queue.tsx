@@ -28,7 +28,7 @@ export interface QueueTodo {
   id: string;
   title: string;
   description?: string;
-  status?: "pending" | "in_progress" | "completed";
+  status?: "pending" | "in_progress" | "done";
 }
 
 export type QueueItemProps = ComponentProps<"li">;

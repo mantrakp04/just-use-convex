@@ -1,4 +1,4 @@
-import { chatsByOrg, chatsByUser } from "./aggregates";
+import { chatsByOrg, chatsByMember } from "./aggregates";
 import type { zQueryCtx } from "../functions";
 
 // Helper to create bounds for exact key match
@@ -12,16 +12,16 @@ function exactBounds<K>(key: K) {
 }
 
 // ═══════════════════════════════════════════════════════════════════
-// USER STATS (for the current user's chats)
+// MEMBER STATS (for the current member's chats)
 // ═══════════════════════════════════════════════════════════════════
 
-export async function GetUserChatStats(ctx: zQueryCtx) {
+export async function GetMemberChatStats(ctx: zQueryCtx) {
   const orgId = ctx.identity.activeOrganizationId;
-  const userId = ctx.identity.userId;
+  const memberId = ctx.identity.memberId;
 
-  const total = await chatsByUser.count(ctx, {
+  const total = await chatsByMember.count(ctx, {
     namespace: orgId,
-    ...exactBounds(userId),
+    ...exactBounds(memberId),
   });
 
   return { total };

@@ -1,9 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { Bot } from "lucide-react";
-import type { UIMessage } from "@ai-sdk/react";
-import { useCallback, useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useOpenRouterModels, type OpenRouterModel } from "@/hooks/use-openrouter-models";
-import { ChatInput, type ChatInputProps } from "@/components/chat";
+import { ChatInput } from "@/components/chat";
 import {
   Conversation,
   ConversationContent,
@@ -11,10 +10,12 @@ import {
   ConversationEmptyState,
 } from "@/components/ai-elements/conversation";
 import { Skeleton } from "@/components/ui/skeleton";
-import { VirtualMessageList } from "@/components/chat/virtual-message-list";
-import type { QueueTodo } from "@/components/ai-elements/queue";
+import { MessageList } from "@/components/chat/message-list";
+import type { AskUserState, TodosState } from "@/components/chat/types";
 import { useAgentInstance } from "@/providers/agent";
 import { TodosDisplay } from "@/components/chat/todos-display";
+import { useChat } from "@/hooks/use-chat";
+import { AskUserDisplay } from "@/components/chat/ask-user-display";
 
 export const Route = createFileRoute("/(protected)/chats/$chatId")({
   component: ChatPage,
@@ -33,7 +34,7 @@ function ChatLoadingSkeleton() {
 
 function ChatPage() {
   const { chatId } = Route.useParams();
-  const { chat, settings, setSettings, isReady } = useAgentInstance(chatId);
+  const { chat, agent, settings, setSettings, isReady } = useAgentInstance(chatId);
   const { groupedModels, models } = useOpenRouterModels();
 
   const selectedModel = useMemo(
@@ -41,68 +42,20 @@ function ChatPage() {
     [models, settings.model]
   );
 
-  // Extract values safely before any conditional returns to maintain hook order
-  const messages = chat?.messages ?? [];
-  const sendMessage = chat?.sendMessage;
+  const [todosState, setTodosState] = useState<TodosState>({ todos: [] });
+  const [askUserState, setAskUserState] = useState<AskUserState | null>(null);
 
-  const handleSubmit: ChatInputProps["onSubmit"] = useCallback(
-    async ({ text, files }: { text: string; files: Array<{ url: string; mediaType: string; filename?: string }> }) => {
-      if (!sendMessage) return;
-      if (!text.trim() && files.length === 0) return;
-
-      const parts: UIMessage["parts"] = [];
-
-      if (text.trim()) {
-        parts.push({ type: "text", text });
-      }
-
-      for (const file of files) {
-        parts.push({
-          type: "file",
-          url: file.url,
-          mediaType: file.mediaType,
-          filename: file.filename,
-        });
-      }
-
-      await sendMessage({
-        role: "user",
-        parts,
-      });
-    },
-    [sendMessage]
-  );
-
-  const derivedState = useMemo(() => {
-    const state = {
-      todos: [] as QueueTodo[],
-    };
-
-    const lastMsg = messages[messages.length - 1];
-    if (lastMsg?.role !== "assistant") return state;
-
-    for (const part of lastMsg.parts) {
-      if (part.type !== "dynamic-tool") continue;
-
-      switch (part.toolName) {
-        case "write_todos": {
-          const output = part.input as {
-            todos?: Array<{ content: string; status: string }>;
-          };
-          if (output?.todos) {
-            state.todos = output.todos.map((t, idx) => ({
-              id: `todo-${idx}`,
-              title: t.content,
-              status: t.status as "pending" | "in_progress" | "completed",
-            }));
-          }
-          break;
-        }
-      }
-    }
-
-    return state;
-  }, [messages]);
+  const {
+    status,
+    error,
+    stop,
+    messages,
+    isStreaming,
+    handleSubmit,
+    handleToolApprovalResponse,
+    handleRegenerate,
+    handleEditMessage,
+  } = useChat(chat, agent);
 
   if (!isReady || !chat) {
     return (
@@ -113,9 +66,6 @@ function ChatPage() {
       </div>
     );
   }
-
-  const { status, error, stop } = chat;
-  const isStreaming = status === "streaming";
 
   return (
     <div className="flex flex-col h-full w-full">
@@ -128,7 +78,15 @@ function ChatPage() {
               description="Ask me anything or share files to get started"
             />
           ) : (
-            <VirtualMessageList messages={messages} isStreaming={isStreaming} />
+            <MessageList
+              messages={messages}
+              isStreaming={isStreaming}
+              toolApprovalResponse={handleToolApprovalResponse}
+              onRegenerate={handleRegenerate}
+              onEditMessage={handleEditMessage}
+              onTodosChange={setTodosState}
+              onAskUserChange={setAskUserState}
+            />
           )}
           {error && (
             <div className="text-sm text-destructive bg-destructive/10 rounded-lg px-4 py-3 mx-auto w-4xl">
@@ -140,7 +98,21 @@ function ChatPage() {
       </Conversation>
 
       <div className="mx-auto w-4xl">
-        <TodosDisplay todos={derivedState.todos} />
+        {askUserState?.state === "approval-requested" ? (
+          <AskUserDisplay
+            input={askUserState.input}
+            approval={askUserState.approval}
+            state={askUserState.state}
+            toolApprovalResponse={handleToolApprovalResponse}
+          />
+        ) : (
+          <TodosDisplay
+            todos={todosState.todos}
+            approval={todosState.todosApproval}
+            state={todosState.todosState}
+            toolApprovalResponse={handleToolApprovalResponse}
+          />
+        )}
       </div>
       <ChatInput
         onSubmit={handleSubmit}

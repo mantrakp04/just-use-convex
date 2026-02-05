@@ -1,6 +1,7 @@
 "use client";
 
 import { cn } from "@/lib/utils";
+import { transitionInfinite } from "@/lib/motion";
 import { motion } from "motion/react";
 import {
   type CSSProperties,
@@ -50,11 +51,7 @@ const ShimmerComponent = ({
             "var(--bg), linear-gradient(var(--color-muted-foreground), var(--color-muted-foreground))",
         } as CSSProperties
       }
-      transition={{
-        repeat: Number.POSITIVE_INFINITY,
-        duration,
-        ease: "linear",
-      }}
+      transition={transitionInfinite(duration)}
     >
       {children}
     </MotionComponent>

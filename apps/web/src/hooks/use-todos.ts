@@ -47,23 +47,23 @@ export function useTodos() {
     },
   });
 
-  const assignUserMutation = useMutation({
-    mutationFn: useConvexMutation(api.todos.index.assignUser),
+  const assignMemberMutation = useMutation({
+    mutationFn: useConvexMutation(api.todos.index.assignMember),
     onSuccess: () => {
-      toast.success("User assigned");
+      toast.success("Member assigned");
     },
     onError: (error: Error) => {
-      toast.error(error.message || "Failed to assign user");
+      toast.error(error.message || "Failed to assign member");
     },
   });
 
-  const unassignUserMutation = useMutation({
-    mutationFn: useConvexMutation(api.todos.index.unassignUser),
+  const unassignMemberMutation = useMutation({
+    mutationFn: useConvexMutation(api.todos.index.unassignMember),
     onSuccess: () => {
-      toast.success("User unassigned");
+      toast.success("Member unassigned");
     },
     onError: (error: Error) => {
-      toast.error(error.message || "Failed to unassign user");
+      toast.error(error.message || "Failed to unassign member");
     },
   });
 
@@ -93,8 +93,8 @@ export function useTodos() {
     deleteTodo: deleteMutation.mutateAsync,
     updateStatus,
     updatePriority,
-    assignUser: assignUserMutation.mutateAsync,
-    unassignUser: unassignUserMutation.mutateAsync,
+    assignMember: assignMemberMutation.mutateAsync,
+    unassignMember: unassignMemberMutation.mutateAsync,
     isCreating: createMutation.isPending,
     isUpdating: updateMutation.isPending,
     isDeleting: deleteMutation.isPending,
@@ -109,10 +109,10 @@ export function useTodosList(filters: TodoFilters = EMPTY_FILTERS) {
   );
 }
 
-export function useAssignedTodosList(userId?: string) {
+export function useAssignedTodosList(memberId?: string) {
   return useConvexPaginatedQuery(
     api.todos.index.listAssigned,
-    { userId },
+    { memberId },
     { initialNumItems: INITIAL_NUM_ITEMS }
   );
 }

@@ -65,25 +65,25 @@ export const todosByTeamStatus = new TableAggregate<{
 // USER-LEVEL AGGREGATES
 // ═══════════════════════════════════════════════════════════════════
 
-// Count todos created by user (within org)
+// Count todos created by member (within org)
 export const todosByCreator = new TableAggregate<{
   Namespace: string; // organizationId
-  Key: string; // userId (creator)
+  Key: string; // memberId (creator)
   DataModel: DataModel;
   TableName: "todos";
 }>(components.todosByCreator, {
   namespace: (doc) => doc.organizationId,
-  sortKey: (doc) => doc.userId,
+  sortKey: (doc) => doc.memberId,
 });
 
 // Count todos by creator and status
 export const todosByCreatorStatus = new TableAggregate<{
-  Namespace: string; // orgId:userId composite
+  Namespace: string; // orgId:memberId composite
   Key: string; // status
   DataModel: DataModel;
   TableName: "todos";
 }>(components.todosByCreatorStatus, {
-  namespace: (doc) => `${doc.organizationId}:${doc.userId}`,
+  namespace: (doc) => `${doc.organizationId}:${doc.memberId}`,
   sortKey: (doc) => doc.status ?? "todo",
 });
 

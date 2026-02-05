@@ -22,7 +22,7 @@ function RouteComponent() {
   ]
 
   // Extract the part after /settings/ or empty string if just /settings
-  const activeTab = location.pathname === '/settings' ? '' : location.pathname.split('/settings/')[1] || '';
+  const activeTab = location.pathname === '/settings' ? '' : location.pathname.split('/settings/')[1]?.split('/')[0] || '';
 
   return (
     <Tabs value={activeTab} className="mx-auto w-4xl py-2">

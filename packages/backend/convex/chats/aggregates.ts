@@ -16,19 +16,19 @@ export const chatsByOrg = new TableAggregate<{
 });
 
 // ═══════════════════════════════════════════════════════════════════
-// USER-LEVEL AGGREGATES
+// MEMBER-LEVEL AGGREGATES
 // ═══════════════════════════════════════════════════════════════════
 
-// Count chats by user within an organization
-export const chatsByUser = new TableAggregate<{
+// Count chats by member within an organization
+export const chatsByMember = new TableAggregate<{
   Namespace: string; // organizationId
-  Key: string; // userId
+  Key: string; // memberId
   DataModel: DataModel;
   TableName: "chats";
-}>(components.chatsByUser, {
+}>(components.chatsByMember, {
   namespace: (doc) => doc.organizationId,
-  sortKey: (doc) => doc.userId,
+  sortKey: (doc) => doc.memberId,
 });
 
 // Export all aggregates for trigger registration
-export const allChatAggregates = [chatsByOrg, chatsByUser];
+export const allChatAggregates = [chatsByOrg, chatsByMember];

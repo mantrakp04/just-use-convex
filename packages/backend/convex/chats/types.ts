@@ -10,7 +10,7 @@ export const ChatWithSystemFields = z.object(chatsWithSystemFields);
 
 // Filter schema
 const ChatFilters = z.object({
-  userId: z.string(),
+  memberId: z.string(),
   title: z.string(),
 }).partial().extend({
   isPinned: z.boolean().default(false),
@@ -24,7 +24,7 @@ export const ListArgs = z.object({
 export const GetChatArgs = ChatWithSystemFields.pick({ _id: true });
 
 export const CreateArgs = z.object({
-  data: Chat.pick({ title: true }),
+  data: Chat.pick({ title: true, sandboxId: true }),
 });
 
 export const UpdateArgs = ChatWithSystemFields.pick({ _id: true }).extend({
@@ -32,3 +32,10 @@ export const UpdateArgs = ChatWithSystemFields.pick({ _id: true }).extend({
 });
 
 export const DeleteArgs = ChatWithSystemFields.pick({ _id: true });
+
+// Search args
+export const SearchArgs = z.object({
+  query: z.string(),
+  isPinned: z.boolean().default(false),
+  paginationOpts: zPaginationOpts,
+});

@@ -12,18 +12,18 @@
   },
   "dependencies": {
     "@convex-dev/aggregate": "^0.2.1",
-    "@convex-dev/better-auth": "catalog:",
+    "@convex-dev/better-auth": "^0.10.10",
     "@convex-dev/migrations": "^0.3.1",
     "better-auth": "catalog:",
-    "convex": "catalog:",
+    "convex": "^1.31.7",
     "convex-ents": "^0.18.1",
     "convex-helpers": "^0.1.111",
-    "dotenv": "catalog:",
-    "zod": "catalog:"
+    "dotenv": "^17.2.3",
+    "zod": "^4.3.6"
   },
   "devDependencies": {
     "@just-use-convex/config": "workspace:*",
-    "@types/node": "^24.3.0",
-    "typescript": "catalog:"
+    "@types/node": "^24.10.11",
+    "typescript": "^5.9.3"
   }
 }

@@ -86,8 +86,7 @@ function BreadcrumbSeparator({
       {...props}
     >
       {children ?? (
-        <ChevronRightIcon
-        />
+        <ChevronRightIcon />
       )}
     </li>
   )

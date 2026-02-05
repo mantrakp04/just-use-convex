@@ -50,10 +50,14 @@ function RouteComponent() {
     if (filterPriority !== "all") f.priority = filterPriority;
     if (filterStatus !== "all") f.status = filterStatus;
     if (filterTeamId !== "all") f.teamId = filterTeamId;
-    if (filterMemberId === "by_me" && user?.id) {
-      f.userId = user.id;
+    if (filterMemberId === "by_me") {
+      // Find current user's member record to get their memberId
+      const currentMember = members.find((m) => m.userId === user?.id);
+      if (currentMember) {
+        f.memberId = currentMember.id;
+      }
     } else if (filterMemberId !== "all") {
-      f.assignedUserId = filterMemberId;
+      f.assignedMemberId = filterMemberId;
     }
     // Apply date range filter when in calendar mode
     if (viewMode === "calendar" && calendarDateRange) {
@@ -61,7 +65,7 @@ function RouteComponent() {
       f.dueDateTo = calendarDateRange.to;
     }
     return f;
-  }, [filterPriority, filterStatus, filterTeamId, filterMemberId, user?.id, viewMode, calendarDateRange]);
+  }, [filterPriority, filterStatus, filterTeamId, filterMemberId, user?.id, members, viewMode, calendarDateRange]);
 
   const todosQuery = useTodosList(filters);
   const { results: todos, status } = todosQuery;

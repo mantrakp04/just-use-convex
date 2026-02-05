@@ -2,7 +2,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
 import { authClient } from "@/lib/auth-client";
-import { useRefreshAuth } from "../use-refresh-auth";
+import { useRefreshAuth } from "../utils";
 import { useNavigate } from "@tanstack/react-router";
 
 export function useUser() {

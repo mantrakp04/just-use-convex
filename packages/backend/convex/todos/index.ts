@@ -39,17 +39,17 @@ export const deleteTodo = zMutation({
   }
 });
 
-export const assignUser = zMutation({
-  args: types.AssignUserArgs,
-  handler: async (ctx, args): Promise<ReturnType<typeof functions.AssignUser>> => {
-    return await functions.AssignUser(ctx, args);
+export const assignMember = zMutation({
+  args: types.AssignMemberArgs,
+  handler: async (ctx, args): Promise<ReturnType<typeof functions.AssignMember>> => {
+    return await functions.AssignMember(ctx, args);
   }
 });
 
-export const unassignUser = zMutation({
-  args: types.UnassignUserArgs,
-  handler: async (ctx, args): Promise<ReturnType<typeof functions.UnassignUser>> => {
-    return await functions.UnassignUser(ctx, args);
+export const unassignMember = zMutation({
+  args: types.UnassignMemberArgs,
+  handler: async (ctx, args): Promise<ReturnType<typeof functions.UnassignMember>> => {
+    return await functions.UnassignMember(ctx, args);
   }
 });
 

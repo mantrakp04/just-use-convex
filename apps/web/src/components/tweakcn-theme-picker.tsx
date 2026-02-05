@@ -323,7 +323,7 @@ export function ThemePicker({
               </button>
             </div>
           ) : (
-            <div className="space-y-2" onClick={(e) => e.stopPropagation()}>
+            <div className="space-y-2" onPointerDown={(e) => e.stopPropagation()}>
               <div className="flex items-center justify-between">
                 <p className="text-xs font-medium text-muted-foreground">
                   Import Theme URL
@@ -378,11 +378,12 @@ export function ThemePicker({
               {filteredSavedThemes.map((entry) => {
                 const isSelected = currentTheme?.name === entry.theme.name
                 return (
-                  <div
+                  <button
                     key={entry.url}
+                    type="button"
                     onClick={() => handleThemeSelect(entry.theme)}
                     className={cn(
-                      "relative flex items-center gap-2 px-1 py-1.5 rounded-sm cursor-pointer text-sm group",
+                      "relative flex w-full items-center gap-2 px-1 py-1.5 rounded-sm text-sm group text-left",
                       "hover:bg-secondary/50 transition-colors",
                       isSelected && "bg-accent text-accent-foreground"
                     )}
@@ -392,15 +393,23 @@ export function ThemePicker({
                     {isSelected ? (
                       <Check className="h-3.5 w-3.5 shrink-0" />
                     ) : (
-                      <button
+                      <span
+                        role="button"
+                        tabIndex={0}
                         onClick={(e) => handleDeleteSavedTheme(entry.url, e)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" || e.key === " ") {
+                            e.preventDefault()
+                            handleDeleteSavedTheme(entry.url, e as unknown as React.MouseEvent)
+                          }
+                        }}
                         className="p-0.5 rounded opacity-0 group-hover:opacity-100 hover:bg-destructive/20 text-muted-foreground hover:text-destructive transition-all"
                         title="Remove theme"
                       >
                         <Trash2 className="h-3 w-3" />
-                      </button>
+                      </span>
                     )}
-                  </div>
+                  </button>
                 )
               })}
             </div>
@@ -419,11 +428,12 @@ export function ThemePicker({
             {filteredThemes.map((theme) => {
               const isSelected = currentTheme?.name === theme.name
               return (
-                <div
+                <button
                   key={theme.name}
+                  type="button"
                   onClick={() => handleThemeSelect(theme)}
                   className={cn(
-                    "relative flex items-center gap-2 px-2 py-2 mx-1 rounded-sm cursor-pointer text-sm",
+                    "relative flex w-full items-center gap-2 px-2 py-2 mx-1 rounded-sm text-sm text-left",
                     "hover:bg-secondary/50 transition-colors",
                     isSelected && "bg-accent text-accent-foreground"
                   )}
@@ -433,7 +443,7 @@ export function ThemePicker({
                   {isSelected && (
                     <Check className="h-4 w-4 shrink-0" />
                   )}
-                </div>
+                </button>
               )
             })}
 

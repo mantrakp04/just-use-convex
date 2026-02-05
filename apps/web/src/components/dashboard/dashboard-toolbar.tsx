@@ -6,6 +6,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Filter, X, LayoutGrid, List, Calendar } from "lucide-react";
 import type {
   ViewMode,
@@ -59,32 +60,19 @@ export function DashboardToolbar({
   return (
     <div className="flex flex-wrap items-center gap-2 border-b pb-4">
       {/* View Mode Toggle */}
-      <div className="flex items-center gap-1 border rounded-md p-0.5">
-        <Button
-          variant={viewMode === "kanban" ? "secondary" : "ghost"}
-          size="icon-sm"
-          onClick={() => onViewModeChange("kanban")}
-          title="Kanban view"
-        >
-          <LayoutGrid className="size-3.5" />
-        </Button>
-        <Button
-          variant={viewMode === "list" ? "secondary" : "ghost"}
-          size="icon-sm"
-          onClick={() => onViewModeChange("list")}
-          title="List view"
-        >
-          <List className="size-3.5" />
-        </Button>
-        <Button
-          variant={viewMode === "calendar" ? "secondary" : "ghost"}
-          size="icon-sm"
-          onClick={() => onViewModeChange("calendar")}
-          title="Calendar view"
-        >
-          <Calendar className="size-3.5" />
-        </Button>
-      </div>
+      <Tabs value={viewMode} onValueChange={(v) => onViewModeChange(v as ViewMode)}>
+        <TabsList>
+          <TabsTrigger value="kanban" title="Kanban view">
+            <LayoutGrid className="size-3.5" />
+          </TabsTrigger>
+          <TabsTrigger value="list" title="List view">
+            <List className="size-3.5" />
+          </TabsTrigger>
+          <TabsTrigger value="calendar" title="Calendar view">
+            <Calendar className="size-3.5" />
+          </TabsTrigger>
+        </TabsList>
+      </Tabs>
 
       {/* Kanban Group By */}
       {viewMode === "kanban" && (

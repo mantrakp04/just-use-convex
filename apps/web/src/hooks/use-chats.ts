@@ -93,8 +93,8 @@ export function useChat(chatId: Id<"chats"> | undefined) {
   });
 }
 
-export type ChatStats = FunctionReturnType<typeof api.chats.index.getUserStats>;
+export type ChatStats = FunctionReturnType<typeof api.chats.index.getMemberStats>;
 
 export function useChatStats() {
-  return useQuery(convexQuery(api.chats.index.getUserStats, {}));
+  return useQuery(convexQuery(api.chats.index.getMemberStats, {}));
 }

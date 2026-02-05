@@ -5,7 +5,7 @@ import { convexToZodFields, zodToConvexFields } from "convex-helpers/server/zod4
 
 export const todosZodSchema = {
   organizationId: z.string(),
-  userId: z.string(),
+  memberId: z.string(),
   teamId: z.string().optional(),
   title: z.string(),
   description: z.string().optional(),
@@ -30,10 +30,10 @@ export const todosWithSystemFields = {
 };
 
 const todosTable = Todos.table
-  .index("organizationId_userId", ["organizationId", "userId", "updatedAt"])
+  .index("organizationId_memberId", ["organizationId", "memberId", "updatedAt"])
   .index("organizationId", ["organizationId", "updatedAt"])
   .index("organizationId_teamId", ["organizationId", "teamId", "updatedAt"])
-  .index("userId", ["userId"]);
+  .index("memberId", ["memberId"]);
 
 export const todosEnt = defineEntFromTable(todosTable)
-  .edges("assignedUsers", { to: "todoAssignedUsers", ref: "todoId" });
+  .edges("assignedMembers", { to: "todoAssignedMembers", ref: "todoId" });

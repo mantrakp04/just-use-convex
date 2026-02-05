@@ -42,12 +42,12 @@ export const Route = createRootRouteWithContext<RouterAppContext>()({
         content: "width=device-width, initial-scale=1",
       },
       {
-        title: "My App",
+        title: "Just Use Convex",
       },
       ...seo({
-        title: "My App",
-        description: "My App Description",
-        keywords: "My App, My App Description",
+        title: "Just Use Convex",
+        description: "Just Use Convex is a platform for building web applications with Convex and TanstackStart using best practices.",
+        keywords: "Just Use Convex, Convex, React, TanstackStart, Best Practices",
         image: "/logo.svg",
       }),
     ],

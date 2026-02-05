@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { ChevronDownIcon, Star } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { OpenRouterModel } from "@/hooks/use-openrouter-models";
@@ -21,15 +21,13 @@ import {
   ModelSelectorBadge,
   ModelSelectorMain,
 } from "@/components/ai-elements/model-selector";
-import { env } from "@just-use-convex/env/web";
 import { useAtom } from "jotai";
-import { defaultModelAtom } from "@/store/models";
+import { defaultChatSettingsAtom } from "@/store/models";
 
 export type ChatModelSelectorProps = {
   groupedModels: [string, OpenRouterModel[]][];
   models: OpenRouterModel[];
   selectedModel?: OpenRouterModel;
-  settings: ChatSettings;
   onSettingsChange: (settings: ChatSettings | ((prev: ChatSettings) => ChatSettings)) => void;
   hasMessages: boolean;
 };
@@ -38,13 +36,11 @@ export function ChatModelSelector({
   groupedModels,
   models,
   selectedModel,
-  settings,
   onSettingsChange,
   hasMessages,
 }: ChatModelSelectorProps) {
   const [open, setOpen] = useState(false);
-  const [defaultModel, setDefaultModel] = useAtom(defaultModelAtom);
-  const fallbackModel = env.VITE_DEFAULT_MODEL;
+  const [, setDefaultSettings] = useAtom(defaultChatSettingsAtom);
   const {
     selectedAuthor,
     setSelectedAuthor,
@@ -58,27 +54,21 @@ export function ChatModelSelector({
   const providerLabel = selectedModel?.author ? getProviderLabel(selectedModel.author) : null;
   const providerSlug = providerLabel ? getProviderLogoSlug(providerLabel) : "openrouter";
 
-  useEffect(() => {
-    if (!selectedModel && models.length > 0 && !settings.model) {
-      const modelToUse = defaultModel || fallbackModel;
-      onSettingsChange((prev) => ({
-        ...prev,
-        model: modelToUse,
-        reasoningEffort: modelToUse.includes("reasoning") ? prev.reasoningEffort : undefined,
-      }));
-    }
-  }, [selectedModel, models.length, settings.model, onSettingsChange, defaultModel, fallbackModel]);
-
   const handleModelSelect = (model: OpenRouterModel) => {
     onSettingsChange((prev) => ({
       ...prev,
       model: model.slug,
       reasoningEffort: model.supports_reasoning ? prev.reasoningEffort : undefined,
+      inputModalities: model.input_modalities,
     }));
 
-    // Update default model only if there are no messages yet
+    // Update default settings only if there are no messages yet
     if (!hasMessages) {
-      setDefaultModel(model.slug);
+      setDefaultSettings((prev) => ({
+        ...prev,
+        model: model.slug,
+        reasoningEffort: model.supports_reasoning ? prev.reasoningEffort : undefined,
+      }));
     }
 
     setOpen(false);
@@ -196,6 +186,7 @@ function ModelItem({ model, isFavorite, onSelect, onToggleFavorite, selectedAuth
           />
           <div className="flex items-center gap-1 ml-auto">
             {model.supports_reasoning && <ModelSelectorBadge type="reasoning" />}
+            {model.input_modalities?.includes("image") && <ModelSelectorBadge type="vision" />}
             {model.context_length > 100000 && <ModelSelectorBadge type="large-context" />}
           </div>
         </div>

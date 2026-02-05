@@ -1,3 +1,4 @@
+import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Calendar } from "lucide-react";
 import type { Todo, TodoStatus } from "@/hooks/use-todos";
@@ -16,22 +17,31 @@ export function TodoListItem({ todo, onOpen, onStatusChange }: TodoListItemProps
 
   return (
     <div
-      className="flex items-center gap-3 p-4 hover:bg-muted/50 transition-colors cursor-pointer border-b"
+      role="button"
+      tabIndex={0}
+      className="flex w-full items-center gap-3 p-4 hover:bg-muted/50 transition-colors border-b text-left"
       onClick={onOpen}
+      onKeyDown={(event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          onOpen();
+        }
+      }}
     >
-      <div onClick={(e) => e.stopPropagation()}>
-        <button
-          onClick={() => {
-            const nextStatus = status === "todo" ? "in_progress" : status === "in_progress" ? "done" : "todo";
-            onStatusChange(nextStatus);
-          }}
-          className="text-muted-foreground hover:text-foreground transition-colors"
-        >
-          <StatusIcon
-            className={`size-5 ${status === "done" ? "text-green-500" : status === "in_progress" ? "text-blue-500" : ""}`}
-          />
-        </button>
-      </div>
+      <Button
+        variant="ghost"
+        size="icon-xs"
+        onClick={(e) => {
+          e.stopPropagation();
+          const nextStatus = status === "todo" ? "in_progress" : status === "in_progress" ? "done" : "todo";
+          onStatusChange(nextStatus);
+        }}
+        className="text-muted-foreground hover:text-foreground"
+      >
+        <StatusIcon
+          className={`size-5 ${status === "done" ? "text-green-500" : status === "in_progress" ? "text-blue-500" : ""}`}
+        />
+      </Button>
       <div className="flex-1 min-w-0">
         <p
           className={`font-medium ${

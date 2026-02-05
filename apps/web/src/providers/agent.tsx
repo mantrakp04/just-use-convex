@@ -2,18 +2,20 @@ import type { ChatSettings } from "@/components/chat";
 import { useAgentChat } from "@cloudflare/ai-chat/react";
 import { env } from "@just-use-convex/env/web";
 import { useAgent } from "agents/react";
+import { defaultChatSettingsAtom, type DefaultChatSettings } from "@/store/models";
+import { useAtomValue } from "jotai";
 type AgentConnection = ReturnType<typeof useAgent<ChatSettings>>;
 import {
   createContext,
   useCallback,
   useContext,
   useMemo,
-  useState,
   useEffect,
   useSyncExternalStore,
   useRef,
   type ReactNode,
   createElement,
+  useLayoutEffect,
 } from "react";
 import { createRoot, type Root } from "react-dom/client";
 
@@ -30,6 +32,7 @@ type AgentsContextValue = {
   requestInstance: (chatId: string) => void;
   subscribe: (chatId: string, callback: () => void) => () => void;
   getSnapshot: (chatId: string) => InstanceData | undefined;
+  defaultSettings: DefaultChatSettings;
 };
 
 const AgentsContext = createContext<AgentsContextValue | null>(null);
@@ -53,16 +56,32 @@ type IsolatedInstance = {
 
 const isolatedInstances = new Map<string, IsolatedInstance>();
 
-function AgentInstanceInner({ chatId, token }: { chatId: string, token: string | null | undefined }) {
-  const [settings, setSettingsState] = useState<ChatSettings>({});
+function AgentInstanceInner({
+  chatId,
+  token,
+  defaultSettings,
+}: {
+  chatId: string;
+  token: string | null | undefined;
+  defaultSettings: DefaultChatSettings;
+}) {
+  const settingsRef = useRef<ChatSettings>({});
+  const chatRef = useRef<AgentChatInstance | null>(null);
+  const agentRef = useRef<AgentConnection | null>(null);
 
   const handleStateUpdate = useCallback(
     (state: ChatSettings | undefined, source: string) => {
       if (source === "server" && state) {
-        setSettingsState(state);
+        settingsRef.current = state;
+        updateInstanceData(chatId, {
+          chat: chatRef.current,
+          agent: agentRef.current,
+          settings: state,
+          setSettings,
+        });
       }
     },
-    []
+    [chatId]
   );
 
   const handleError = useCallback((error: Error) => {
@@ -71,17 +90,21 @@ function AgentInstanceInner({ chatId, token }: { chatId: string, token: string |
 
   const setSettings = useCallback(
     (settingsOrFn: ChatSettings | ((prev: ChatSettings) => ChatSettings)) => {
-      setSettingsState((prev: ChatSettings) =>
-        typeof settingsOrFn === "function" ? settingsOrFn(prev) : settingsOrFn
-      );
+      const prev = settingsRef.current;
+      const next = typeof settingsOrFn === "function" ? settingsOrFn(prev) : settingsOrFn;
+      // Update local state immediately for responsive UI
+      settingsRef.current = next;
+      updateInstanceData(chatId, {
+        chat: chatRef.current,
+        agent: agentRef.current,
+        settings: next,
+        setSettings,
+      });
+      // Sync to server
+      agentRef.current?.setState(next);
     },
-    []
+    [chatId]
   );
-
-  const chatRef = useRef<AgentChatInstance | null>(null);
-  const agentRef = useRef<AgentConnection | null>(null);
-  const settingsRef = useRef(settings);
-  settingsRef.current = settings;
 
   const handleMessage = useCallback(() => {
     updateInstanceData(chatId, {
@@ -100,35 +123,47 @@ function AgentInstanceInner({ chatId, token }: { chatId: string, token: string |
     onMessage: handleMessage,
     query: {
       token: token ?? null,
-    }
+      // Pass defaults - backend will only use if state is empty
+      model: defaultSettings.model,
+      reasoningEffort: defaultSettings.reasoningEffort ?? null,
+    },
   });
 
   const chat = useAgentChat({
     agent,
     resume: true,
     onError: handleError,
+    autoContinueAfterToolResult: true,
   });
 
-  chatRef.current = chat;
-  agentRef.current = agent;
+  useLayoutEffect(() => {
+    chatRef.current = chat;
+    agentRef.current = agent;
+  }, [chat, agent]);
 
-  // Update instance data whenever chat/agent/settings change
+  // Update instance data on mount
   useEffect(() => {
-    updateInstanceData(chatId, { chat, agent, settings, setSettings });
-  }, [chatId, chat, agent, settings, setSettings]);
-
-  // Sync settings to agent only when settings actually changes
-  useEffect(() => {
-    agent.setState(settings);
-  }, [agent, settings]);
+    updateInstanceData(chatId, {
+      chat,
+      agent,
+      settings: settingsRef.current,
+      setSettings,
+    });
+  }, [chatId, chat, agent, setSettings]);
 
   return null;
 }
 
-function createIsolatedInstance(chatId: string, token: string | null | undefined): void {
-  if (isolatedInstances.has(chatId)) return;
-
-  // Create a hidden container for this instance
+function createIsolatedInstance(
+  chatId: string,
+  token: string | null | undefined,
+  defaultSettings: DefaultChatSettings
+): void {
+  const existing = isolatedInstances.get(chatId);
+  if (existing) {
+    existing.root.render(createElement(AgentInstanceInner, { chatId, token, defaultSettings }));
+    return;
+  }
   const container = document.createElement("div");
   container.style.display = "none";
   container.dataset.agentInstance = chatId;
@@ -136,7 +171,7 @@ function createIsolatedInstance(chatId: string, token: string | null | undefined
 
   // Create a separate React root - this won't be affected by parent re-renders
   const root = createRoot(container);
-  root.render(createElement(AgentInstanceInner, { chatId, token }));
+  root.render(createElement(AgentInstanceInner, { chatId, token, defaultSettings }));
 
   isolatedInstances.set(chatId, { root, container });
 }
@@ -152,9 +187,11 @@ function createIsolatedInstance(chatId: string, token: string | null | undefined
 // }
 
 export function AgentsProvider({ children, token }: { children: ReactNode, token: string | null | undefined }) {
+  const defaultSettings = useAtomValue(defaultChatSettingsAtom);
+
   const requestInstance = useCallback((chatId: string) => {
-    createIsolatedInstance(chatId, token);
-  }, [token]);
+    createIsolatedInstance(chatId, token, defaultSettings);
+  }, [token, defaultSettings]);
 
   const subscribe = useCallback((chatId: string, callback: () => void) => {
     if (!subscribersStore.has(chatId)) {
@@ -176,8 +213,9 @@ export function AgentsProvider({ children, token }: { children: ReactNode, token
       requestInstance,
       subscribe,
       getSnapshot,
+      defaultSettings,
     }),
-    [requestInstance, subscribe, getSnapshot]
+    [requestInstance, subscribe, getSnapshot, defaultSettings]
   );
 
   return (

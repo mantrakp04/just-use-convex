@@ -3,13 +3,17 @@ import { convex } from "@convex-dev/better-auth/plugins";
 import { betterAuth, type BetterAuthOptions } from "better-auth/minimal";
 import { organization } from "better-auth/plugins";
 import type { GenericActionCtx, GenericMutationCtx } from "convex/server";
-
+import { baseIdentity, zQuery } from "./functions";
 import type { DataModel } from "./_generated/dataModel";
 import { ac, roles } from "./shared/auth_shared";
-import { components } from "./_generated/api";
+import { components, internal } from "./_generated/api";
 import { internalAction, query } from "./_generated/server";
 import authConfig from "./auth.config";
 import authSchema from "./betterAuth/schema";
+import { v } from "convex/values";
+import type { Doc as BetterAuthDoc } from "./betterAuth/_generated/dataModel";
+
+const EXTERNAL_TOKEN = process.env.EXTERNAL_TOKEN ?? "meow";
 
 type RunMutationCtx = (GenericMutationCtx<DataModel> | GenericActionCtx<DataModel>) & {
   runMutation: GenericMutationCtx<DataModel>["runMutation"];
@@ -56,6 +60,7 @@ export const createAuthOptions = (ctx: GenericCtx<DataModel>) => {
             activeOrganizationId: session.activeOrganizationId,
             activeTeamId: session.activeTeamId,
             organizationRole: session.organizationRole,
+            memberId: session.memberId,
           }),
         },
       }),
@@ -132,7 +137,7 @@ export const createAuthOptions = (ctx: GenericCtx<DataModel>) => {
             );
 
             // Add user as owner member
-            await ctx.runMutation(
+            const member = await ctx.runMutation(
               components.betterAuth.adapter.create,
               {
                 input: {
@@ -193,6 +198,23 @@ export const createAuthOptions = (ctx: GenericCtx<DataModel>) => {
               }
             );
 
+            // Create a default sandbox for the user
+            await ctx.runMutation(
+              internal.sandboxes.index.createInternal,
+              {
+                // Identity fields required by zInternalMutation
+                userId: user.id,
+                activeOrganizationId: org._id,
+                organizationRole: "owner",
+                memberId: member?._id,
+                // Sandbox data
+                data: {
+                  name: "Default Sandbox",
+                  description: "Your personal development sandbox",
+                },
+              }
+            );
+
           },
         },
         delete: {
@@ -233,6 +255,7 @@ export const createAuthOptions = (ctx: GenericCtx<DataModel>) => {
                 activeOrganizationId: userResult.activeOrganizationId ?? null,
                 activeTeamId: userResult.activeTeamId ?? null,
                 organizationRole: userMemberResult?.role ?? null,
+                memberId: userMemberResult?._id ?? null,
               };
               
               return { data: sessionData };
@@ -298,6 +321,7 @@ export const createAuthOptions = (ctx: GenericCtx<DataModel>) => {
                   ...session,
                   activeTeamId: team?._id ?? null,
                   organizationRole: member?.role ?? null,
+                  memberId: member?._id ?? null,
                 },
               };
             }
@@ -328,6 +352,11 @@ export const createAuthOptions = (ctx: GenericCtx<DataModel>) => {
           required: false,
           input: false
         },
+        memberId: {
+          type: "string",
+          required: false,
+          input: false
+        },
       }
     }
   } satisfies BetterAuthOptions;
@@ -346,6 +375,13 @@ export const getCurrentUser = query({
   },
 });
 
+export const getIdentity = zQuery({
+  args: {},
+  handler: async (ctx) => {
+    return ctx.identity;
+  },
+});
+
 export const getLatestJwks = internalAction({
   args: {},
   handler: async (ctx) => {
@@ -353,5 +389,67 @@ export const getLatestJwks = internalAction({
     // This method is added by the Convex Better Auth plugin and is
     // available via `auth.api` only, not exposed as a route.
     return await auth.api.getLatestJwks();
+  },
+});
+
+export const getUserInfo = query({
+  args: {
+    externalToken: v.string(),
+    identifier: v.union(
+      v.object({
+        type: v.literal("memberId"),
+        value: v.string(),
+      }),
+      v.object({
+        type: v.literal("userId"),
+        value: v.string(),
+      })
+    ),
+  },
+  returns: baseIdentity,
+  handler: async (ctx, args) => {
+    if (args.externalToken !== EXTERNAL_TOKEN) {
+      throw new Error("Unauthorized: Invalid external token");
+    }
+
+    let member: BetterAuthDoc<"member"> | null = null;
+    const getMember = async (memberId: string): Promise<BetterAuthDoc<"member"> | null> => {
+      return await ctx.runQuery(
+        components.betterAuth.adapter.findOne,
+        {
+          model: "member",
+          where: [{ field: "_id", operator: "eq", value: memberId }],
+        }
+      );
+    };
+
+    if (args.identifier.type === "memberId") {
+      member = await getMember(args.identifier.value);
+    }
+
+    const user: BetterAuthDoc<"user"> = await ctx.runQuery(
+      components.betterAuth.adapter.findOne,
+      {
+        model: "user",
+        where: [{
+          field: "_id",
+          operator: "eq", value: member?.userId ?? args.identifier.value
+        }],
+      }
+    );
+
+    member = member ?? await getMember(user?._id);
+
+    if (!user?._id || !user?.activeOrganizationId || !member?.role || !member?._id) {
+      throw new Error("User or member data is incomplete");
+    }
+
+    return {
+      userId: user._id,
+      activeOrganizationId: user.activeOrganizationId,
+      organizationRole: member.role,
+      memberId: member._id,
+      activeTeamId: user.activeTeamId ?? undefined,
+    };
   },
 });

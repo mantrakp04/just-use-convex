@@ -8,10 +8,15 @@ export const favoriteModelsAtom = atomWithStorage<string[]>(
   { getOnInit: true }
 );
 
-// Persisted default model slug
-export const defaultModelAtom = atomWithStorage<string | undefined>(
-  "default-model",
-  undefined,
+export type DefaultChatSettings = {
+  model: string;
+  reasoningEffort?: "low" | "medium" | "high";
+};
+
+// Persisted default chat settings (model, reasoning)
+export const defaultChatSettingsAtom = atomWithStorage<DefaultChatSettings>(
+  "default-chat-settings",
+  { model: "openai/gpt-5.2-chat" },
   undefined,
   { getOnInit: true }
 );

@@ -2,7 +2,7 @@ import { useMutation } from "@tanstack/react-query";
 import { toast } from "sonner";
 
 import { authClient } from "@/lib/auth-client";
-import { useRefreshAuth } from "../use-refresh-auth";
+import { useRefreshAuth } from "../utils";
 
 export const organizationsKeys = {
   all: ["organizations"] as const,
