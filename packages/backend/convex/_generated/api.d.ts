@@ -9,6 +9,12 @@
  */
 
 import type * as auth from "../auth.js";
+import type * as actions_aggregates from "../actions/aggregates.js";
+import type * as actions_functions from "../actions/functions.js";
+import type * as actions_index from "../actions/index.js";
+import type * as actions_nodeActions from "../actions/nodeActions.js";
+import type * as actions_stats from "../actions/stats.js";
+import type * as actions_types from "../actions/types.js";
 import type * as chats_aggregates from "../chats/aggregates.js";
 import type * as chats_functions from "../chats/functions.js";
 import type * as chats_index from "../chats/index.js";
@@ -26,16 +32,26 @@ import type * as sandboxes_index from "../sandboxes/index.js";
 import type * as sandboxes_stats from "../sandboxes/stats.js";
 import type * as sandboxes_types from "../sandboxes/types.js";
 import type * as shared_auth_shared from "../shared/auth_shared.js";
+import type * as tables_actions from "../tables/actions.js";
 import type * as tables_chats from "../tables/chats.js";
 import type * as tables_sandboxes from "../tables/sandboxes.js";
 import type * as tables_todoAssignedMembers from "../tables/todoAssignedMembers.js";
 import type * as tables_todos from "../tables/todos.js";
+import type * as tables_triggers from "../tables/triggers.js";
+import type * as tables_workflowRuns from "../tables/workflowRuns.js";
 import type * as todos_aggregates from "../todos/aggregates.js";
 import type * as todos_functions from "../todos/functions.js";
 import type * as todos_index from "../todos/index.js";
 import type * as todos_stats from "../todos/stats.js";
 import type * as todos_statsTypes from "../todos/statsTypes.js";
 import type * as todos_types from "../todos/types.js";
+import type * as triggers_aggregates from "../triggers/aggregates.js";
+import type * as triggers_functions from "../triggers/functions.js";
+import type * as triggers_index from "../triggers/index.js";
+import type * as triggers_stats from "../triggers/stats.js";
+import type * as triggers_types from "../triggers/types.js";
+import type * as webhooks_http from "../webhooks/http.js";
+import type * as webhooks_index from "../webhooks/index.js";
 
 import type {
   ApiFromModules,
@@ -45,6 +61,12 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   auth: typeof auth;
+  "actions/aggregates": typeof actions_aggregates;
+  "actions/functions": typeof actions_functions;
+  "actions/index": typeof actions_index;
+  "actions/nodeActions": typeof actions_nodeActions;
+  "actions/stats": typeof actions_stats;
+  "actions/types": typeof actions_types;
   "chats/aggregates": typeof chats_aggregates;
   "chats/functions": typeof chats_functions;
   "chats/index": typeof chats_index;
@@ -62,16 +84,26 @@ declare const fullApi: ApiFromModules<{
   "sandboxes/stats": typeof sandboxes_stats;
   "sandboxes/types": typeof sandboxes_types;
   "shared/auth_shared": typeof shared_auth_shared;
+  "tables/actions": typeof tables_actions;
   "tables/chats": typeof tables_chats;
   "tables/sandboxes": typeof tables_sandboxes;
   "tables/todoAssignedMembers": typeof tables_todoAssignedMembers;
   "tables/todos": typeof tables_todos;
+  "tables/triggers": typeof tables_triggers;
+  "tables/workflowRuns": typeof tables_workflowRuns;
   "todos/aggregates": typeof todos_aggregates;
   "todos/functions": typeof todos_functions;
   "todos/index": typeof todos_index;
   "todos/stats": typeof todos_stats;
   "todos/statsTypes": typeof todos_statsTypes;
   "todos/types": typeof todos_types;
+  "triggers/aggregates": typeof triggers_aggregates;
+  "triggers/functions": typeof triggers_functions;
+  "triggers/index": typeof triggers_index;
+  "triggers/stats": typeof triggers_stats;
+  "triggers/types": typeof triggers_types;
+  "webhooks/http": typeof webhooks_http;
+  "webhooks/index": typeof webhooks_index;
 }>;
 
 /**
