@@ -61,6 +61,7 @@ User uses casual language ("bro", "dawg", "ugh"). Keep responses terse and actio
 - **Use `useSyncExternalStore`** for shared mutable state
 - **Reference skills** when available (`emilkowal-animations`, `vercel-react-best-practices`)
 - **Use skeleton loaders**, not spinners
+- **Use GitHub CLI efficiently** — prefer `gh` subcommands over manual API calls, and reuse existing auth/config without re-authing
 - **Match Tailwind patterns exactly** — don't modify unrelated classes
 - **DRY the code** — reuse existing utilities
 - **Ask clarifying questions** if requirements are unclear
