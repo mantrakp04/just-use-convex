@@ -627,11 +627,13 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, ChatState> {
 
     const queueId = crypto.randomUUID();
     let streamScheduled = false;
+    let queueTurnAcquired = false;
     this.enqueueUserMessageId(queueId);
-    await this.waitForQueueTurn(queueId, options?.abortSignal);
-    this.setStreaming(true);
-
     try {
+      await this.waitForQueueTurn(queueId, options?.abortSignal);
+      queueTurnAcquired = true;
+      this.setStreaming(true);
+
       // Update chat timestamp (fire and forget)
       if (this.convexAdapter) {
         const updateFn = this.convexAdapter.getTokenType() === "ext"
@@ -698,10 +700,20 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, ChatState> {
         }),
       });
     } catch (error) {
+      if (!queueTurnAcquired) {
+        const { isStreaming, pendingUserMessageIds, pendingBackgroundTaskIds } = this.getQueueState();
+        if (pendingUserMessageIds.includes(queueId)) {
+          this.setQueueState({
+            isStreaming,
+            pendingUserMessageIds: pendingUserMessageIds.filter((id: string) => id !== queueId),
+            pendingBackgroundTaskIds,
+          });
+        }
+      }
       console.error("Error in onChatMessage:", error);
       return new Response("Internal Server Error: " + JSON.stringify(error, null, 2), { status: 500 });
     } finally {
-      if (!streamScheduled) {
+      if (queueTurnAcquired && !streamScheduled) {
         await this.flushBackgroundTaskCompletions();
         this.completeUserMessageId(queueId);
       }
