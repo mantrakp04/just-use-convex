@@ -1,4 +1,4 @@
-import { routeAgentRequest, type Connection, type ConnectionContext, callable } from "agents";
+import { routeAgentRequest, type Connection, type ConnectionContext, type AgentContext, callable } from "agents";
 export { Sandbox } from "@cloudflare/sandbox";
 import { AIChatAgent, type OnChatMessageOptions } from "@cloudflare/ai-chat";
 import { generateText, type StreamTextOnFinishCallback, type ToolSet, Output, type UIMessage, isFileUIPart, createUIMessageStreamResponse, createUIMessageStream } from "ai";
@@ -8,7 +8,7 @@ import { SYSTEM_PROMPT, TASK_PROMPT } from "./prompt";
 import { SandboxFilesystemBackend, createSandboxToolkit } from "./tools/sandbox";
 import { createWebSearchToolkit } from "./tools/websearch";
 import { createAskUserToolkit } from "./tools/ask-user";
-import { BackgroundTaskStore, withBackgroundTaskTools } from "./utils/toolWBackground";
+import { BackgroundTaskStore, type BackgroundTask, withBackgroundTaskTools } from "./utils/toolWBackground";
 import { patchToolWithBackgroundSupport } from "./utils/toolWTimeout";
 import type { worker } from "../alchemy.run";
 import {
@@ -35,6 +35,11 @@ type ChatState = {
   model: string;
   reasoningEffort?: "low" | "medium" | "high";
   inputModalities?: string[];
+  queue?: {
+    isStreaming?: boolean;
+    pendingUserMessageIds?: string[];
+    pendingBackgroundTaskIds?: string[];
+  };
 };
 
 // Map MIME type prefixes to OpenRouter modality names
@@ -99,6 +104,123 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, ChatState> {
   private sandboxBackend: SandboxFilesystemBackend | null = null;
   private backgroundTaskStore = new BackgroundTaskStore();
   private chatDoc: FunctionReturnType<typeof api.chats.index.get> | null = null;
+  constructor(ctx: AgentContext, env: typeof worker.Env) {
+    super(ctx, env);
+    this.backgroundTaskStore.onComplete((task) => {
+      this.queueBackgroundTaskCompletion(task.id);
+    });
+  }
+
+  private getQueueState() {
+    const queue = this.state?.queue;
+    return {
+      isStreaming: queue?.isStreaming ?? false,
+      pendingUserMessageIds: queue?.pendingUserMessageIds ?? [],
+      pendingBackgroundTaskIds: queue?.pendingBackgroundTaskIds ?? [],
+    };
+  }
+
+  private setQueueState(next: {
+    isStreaming: boolean;
+    pendingUserMessageIds: string[];
+    pendingBackgroundTaskIds: string[];
+  }) {
+    this.setState({
+      ...(this.state ?? {}),
+      queue: next,
+    });
+  }
+
+  private enqueueUserMessageId(messageId: string) {
+    const { isStreaming, pendingUserMessageIds, pendingBackgroundTaskIds } = this.getQueueState();
+    const nextPending = pendingUserMessageIds.includes(messageId)
+      ? pendingUserMessageIds
+      : [...pendingUserMessageIds, messageId];
+    this.setQueueState({
+      isStreaming,
+      pendingUserMessageIds: nextPending,
+      pendingBackgroundTaskIds,
+    });
+  }
+
+  private async waitForQueueTurn(messageId: string, abortSignal?: AbortSignal) {
+    while (true) {
+      if (abortSignal?.aborted) {
+        throw new Error("Queue wait aborted");
+      }
+      const { isStreaming, pendingUserMessageIds } = this.getQueueState();
+      if (!isStreaming && pendingUserMessageIds[0] === messageId) {
+        return;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+  }
+
+  private completeUserMessageId(messageId: string) {
+    const { pendingUserMessageIds, pendingBackgroundTaskIds } = this.getQueueState();
+    const nextPending = pendingUserMessageIds.filter((id: string) => id !== messageId);
+    this.setQueueState({
+      isStreaming: false,
+      pendingUserMessageIds: nextPending,
+      pendingBackgroundTaskIds,
+    });
+  }
+
+  private async queueBackgroundTaskCompletion(taskId: string) {
+    const { isStreaming, pendingUserMessageIds, pendingBackgroundTaskIds } = this.getQueueState();
+    if (!pendingBackgroundTaskIds.includes(taskId)) {
+      this.setQueueState({
+        isStreaming,
+        pendingUserMessageIds,
+        pendingBackgroundTaskIds: [...pendingBackgroundTaskIds, taskId],
+      });
+    }
+    if (!isStreaming && pendingUserMessageIds.length === 0) {
+      await this.flushBackgroundTaskCompletions();
+    }
+  }
+
+  private setStreaming(isStreaming: boolean) {
+    const { pendingUserMessageIds, pendingBackgroundTaskIds } = this.getQueueState();
+    this.setQueueState({
+      isStreaming,
+      pendingUserMessageIds,
+      pendingBackgroundTaskIds,
+    });
+  }
+
+  private async flushBackgroundTaskCompletions() {
+    const { isStreaming, pendingUserMessageIds, pendingBackgroundTaskIds } = this.getQueueState();
+    if (pendingBackgroundTaskIds.length === 0) return;
+    const parts = pendingBackgroundTaskIds
+      .map((taskId: string) => this.backgroundTaskStore.get(taskId))
+      .filter((task): task is BackgroundTask => Boolean(task))
+      .map((task: BackgroundTask) => ({
+        type: `tool-${task.toolName}`,
+        toolCallId: task.toolCallId,
+        state: "output-available" as const,
+        input: task.args,
+        output: task.result,
+        errorText: task.error,
+      })) as UIMessage["parts"];
+
+    if (parts.length > 0) {
+      await this.persistMessages([
+        ...this.messages,
+        {
+          id: `assistant_${crypto.randomUUID()}`,
+          role: "assistant",
+          parts,
+        },
+      ]);
+    }
+
+    this.setQueueState({
+      isStreaming,
+      pendingUserMessageIds,
+      pendingBackgroundTaskIds: [],
+    });
+  }
 
   private async buildVectorId(messageId: string): Promise<string> {
     const baseId = `${this.name}:${messageId}`;
@@ -503,6 +625,12 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, ChatState> {
       return new Response("Model not configured. Use the model selector in the chat header or pass 'model' as a query parameter when connecting.", { status: 400 });
     }
 
+    const queueId = crypto.randomUUID();
+    let streamScheduled = false;
+    this.enqueueUserMessageId(queueId);
+    await this.waitForQueueTurn(queueId, options?.abortSignal);
+    this.setStreaming(true);
+
     try {
       // Update chat timestamp (fire and forget)
       if (this.convexAdapter) {
@@ -559,14 +687,24 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, ChatState> {
         abortSignal: options?.abortSignal
       })
 
+      streamScheduled = true;
       return createUIMessageStreamResponse({
         stream: createUIMessageStream({
           execute: ({ writer }) => parseStreamToUI(stream.fullStream, writer),
+          onFinish: async () => {
+            await this.flushBackgroundTaskCompletions();
+            this.completeUserMessageId(queueId);
+          },
         }),
       });
     } catch (error) {
       console.error("Error in onChatMessage:", error);
       return new Response("Internal Server Error: " + JSON.stringify(error, null, 2), { status: 500 });
+    } finally {
+      if (!streamScheduled) {
+        await this.flushBackgroundTaskCompletions();
+        this.completeUserMessageId(queueId);
+      }
     }
   }
 }
