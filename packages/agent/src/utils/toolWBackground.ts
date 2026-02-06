@@ -71,6 +71,7 @@ export type ToolOrToolkit = BaseTool | Toolkit;
 export class BackgroundTaskStore {
   private tasks = new Map<string, BackgroundTask>();
   private idCounter = 0;
+  private onCompleteHandlers = new Set<(task: BackgroundTask) => void>();
 
   generateId(): string {
     return `bg_${Date.now()}_${++this.idCounter}`;
@@ -101,9 +102,22 @@ export class BackgroundTaskStore {
 
   update(id: string, updates: Partial<BackgroundTask>): void {
     const task = this.tasks.get(id);
-    if (task) {
-      Object.assign(task, updates);
+    if (!task) return;
+    const previousStatus = task.status;
+    Object.assign(task, updates);
+    if (
+      TERMINAL_STATUSES.includes(task.status) &&
+      !TERMINAL_STATUSES.includes(previousStatus)
+    ) {
+      this.onCompleteHandlers.forEach((handler) => handler(task));
     }
+  }
+
+  onComplete(handler: (task: BackgroundTask) => void): () => void {
+    this.onCompleteHandlers.add(handler);
+    return () => {
+      this.onCompleteHandlers.delete(handler);
+    };
   }
 
   addLog(id: string, log: Omit<BackgroundTaskLog, "timestamp">): void {
