@@ -1,11 +1,16 @@
 import type { z } from "zod";
 import type { zMutationCtx, zQueryCtx } from "../functions";
 import * as types from "./types";
-import { ROLE_HIERARCHY } from "../shared/auth_shared";
+import { ROLE_HIERARCHY, type MemberRole } from "../shared/auth_shared";
 import { withInvalidCursorRetry } from "../shared/pagination";
 
+function isMemberRole(role: string): role is MemberRole {
+  return role in ROLE_HIERARCHY;
+}
+
 function isAdminOrAbove(role: string) {
-  const level = ROLE_HIERARCHY[role as keyof typeof ROLE_HIERARCHY] ?? 0;
+  if (!isMemberRole(role)) return false;
+  const level = ROLE_HIERARCHY[role] ?? 0;
   return level >= ROLE_HIERARCHY.admin;
 }
 
@@ -45,7 +50,7 @@ export async function CreateAttachmentFromHash(
       q
         .eq("organizationId", ctx.identity.activeOrganizationId)
         .eq("memberId", ctx.identity.memberId)
-        .eq("globalAttachmentId", globalAttachment._id)
+        .eq("globalAttachmentId", globalAttachment?._id!)
   ).unique();
 
   const url = await ctx.storage.getUrl(globalAttachment.storageId);

@@ -92,7 +92,7 @@ export function useAttachmentsList(filters: AttachmentFilters = EMPTY_FILTERS) {
 }
 
 async function toHexHash(bytes: Uint8Array) {
-  const data = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
+  const data = bytes.slice();
   const hashBuffer = await crypto.subtle.digest("SHA-256", data);
   return Array.from(new Uint8Array(hashBuffer))
     .map((byte) => byte.toString(16).padStart(2, "0"))
