@@ -1,4 +1,3 @@
-import { env } from "@just-use-convex/env/web";
 import { ConvexQueryClient } from "@convex-dev/react-query";
 import { QueryClient } from "@tanstack/react-query";
 import { createRouter as createTanStackRouter } from "@tanstack/react-router";
@@ -11,7 +10,7 @@ import { routeTree } from "./routeTree.gen";
 import { TokenClient } from "./lib/token-client";
 
 export function getRouter() {
-  const convexUrl = env.VITE_CONVEX_URL;
+  const convexUrl = import.meta.env.VITE_CONVEX_URL;
   if (!convexUrl) {
     throw new Error("VITE_CONVEX_URL is not set");
   }

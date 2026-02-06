@@ -1,7 +1,7 @@
 {
   "name": "just-use-convex-agent-worker-barrel",
   "main": "src/index.ts",
-  "compatibility_date": "2026-02-05",
+  "compatibility_date": "2026-01-20",
   "compatibility_flags": [
     "nodejs_compat",
     "nodejs_compat_populate_process_env"
