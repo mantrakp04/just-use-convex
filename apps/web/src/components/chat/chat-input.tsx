@@ -25,6 +25,7 @@ import {
   Attachments,
   Attachment,
   AttachmentPreview,
+  AttachmentProgress,
   AttachmentRemove,
 } from "@/components/ai-elements/attachments";
 import { ChatModelSelector } from "./chat-model-selector";
@@ -123,6 +124,7 @@ function PromptInputAttachmentsDisplay() {
       {attachments.files.map((file) => (
         <Attachment key={file.id} data={file} onRemove={() => attachments.remove(file.id)}>
           <AttachmentPreview />
+          <AttachmentProgress />
           <AttachmentRemove />
         </Attachment>
       ))}

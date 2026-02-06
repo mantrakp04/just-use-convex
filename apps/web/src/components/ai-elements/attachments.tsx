@@ -6,6 +6,7 @@ import {
   HoverCardContent,
   HoverCardTrigger,
 } from "@/components/ui/hover-card";
+import { Progress } from "@/components/ui/progress";
 import { cn } from "@/lib/utils";
 import type { FileUIPart, SourceDocumentUIPart } from "ai";
 import {
@@ -357,6 +358,47 @@ export const AttachmentRemove = ({
       {children ?? <XIcon />}
       <span className="sr-only">{label}</span>
     </Button>
+  );
+};
+
+// ============================================================================
+// AttachmentProgress - Upload progress bar
+// ============================================================================
+
+export type AttachmentProgressProps = HTMLAttributes<HTMLDivElement>;
+
+export const AttachmentProgress = ({
+  className,
+  ...props
+}: AttachmentProgressProps) => {
+  const { data, variant } = useAttachmentContext();
+  if (data.type !== "file") {
+    return null;
+  }
+
+  const hasProgress = "uploadProgress" in data;
+  if (!hasProgress) {
+    return null;
+  }
+
+  const progress = typeof data.uploadProgress === "number" ? data.uploadProgress : 0;
+  const status = "uploadStatus" in data ? data.uploadStatus : undefined;
+  if (status === "done" || status === undefined) {
+    return null;
+  }
+
+  return (
+    <div
+      className={cn(
+        "pointer-events-none absolute inset-x-1 bottom-1",
+        variant === "list" && "static inset-auto w-full",
+        variant === "inline" && "static inset-auto w-20",
+        className
+      )}
+      {...props}
+    >
+      <Progress className="h-1 bg-muted" value={progress} />
+    </div>
   );
 };
 

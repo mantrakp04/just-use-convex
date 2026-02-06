@@ -340,8 +340,8 @@ export type PromptInputProps = Omit<
   // Minimal constraints
   maxFiles?: number;
   maxFileSize?: number; // bytes
-  uploadAttachment?: ReturnType<typeof useAttachments>["uploadAttachment"];
-  isUploading?: boolean;
+  uploadAttachment: ReturnType<typeof useAttachments>["uploadAttachment"];
+  isUploading: boolean;
   onError?: (err: {
     code: "max_files" | "max_file_size" | "accept";
     message: string;
@@ -376,7 +376,13 @@ export const PromptInput = ({
   const formRef = useRef<HTMLFormElement | null>(null);
 
   // ----- Local attachments (only used when no provider)
-  const [items, setItems] = useState<(FileUIPart & { id: string })[]>([]);
+  const [items, setItems] = useState<
+    (FileUIPart & {
+      id: string;
+      uploadProgress?: number;
+      uploadStatus?: "uploading" | "done" | "error";
+    })[]
+  >([]);
   const files = usingProvider ? controller.attachments.files : items;
 
   // ----- Local referenced sources (always local to PromptInput)
@@ -414,6 +420,28 @@ export const PromptInput = ({
     [accept]
   );
 
+  const updateLocalFile = useCallback(
+    (
+      id: string,
+      updater: (
+        item: FileUIPart & {
+          id: string;
+          uploadProgress?: number;
+          uploadStatus?: "uploading" | "done" | "error";
+        }
+      ) => FileUIPart & {
+        id: string;
+        uploadProgress?: number;
+        uploadStatus?: "uploading" | "done" | "error";
+      }
+    ) => {
+      setItems((prev) =>
+        prev.map((item) => (item.id === id ? updater(item) : item))
+      );
+    },
+    []
+  );
+
   const addLocal = useCallback(
     (fileList: File[] | FileList) => {
       const incoming = Array.from(fileList);
@@ -436,33 +464,89 @@ export const PromptInput = ({
         return;
       }
 
-      setItems((prev) => {
-        const capacity =
-          typeof maxFiles === "number"
-            ? Math.max(0, maxFiles - prev.length)
-            : undefined;
-        const capped =
-          typeof capacity === "number" ? sized.slice(0, capacity) : sized;
-        if (typeof capacity === "number" && sized.length > capacity) {
-          onError?.({
-            code: "max_files",
-            message: "Too many files. Some were not added.",
-          });
-        }
-        const next: (FileUIPart & { id: string })[] = [];
-        for (const file of capped) {
-          next.push({
-            id: nanoid(),
-            type: "file",
+      const currentCount = filesRef.current.length;
+      const capacity =
+        typeof maxFiles === "number"
+          ? Math.max(0, maxFiles - currentCount)
+          : undefined;
+      const capped =
+        typeof capacity === "number" ? sized.slice(0, capacity) : sized;
+      if (typeof capacity === "number" && sized.length > capacity) {
+        onError?.({
+          code: "max_files",
+          message: "Too many files. Some were not added.",
+        });
+      }
+
+      if (capped.length === 0) {
+        return;
+      }
+
+      const uploadFiles = async () => {
+        const optimisticItems = capped.map((file) => ({
+          id: nanoid(),
+          file,
+          item: {
+            type: "file" as const,
             url: URL.createObjectURL(file),
             mediaType: file.type,
             filename: file.name,
-          });
-        }
-        return prev.concat(next);
-      });
+            uploadProgress: 0,
+            uploadStatus: "uploading" as const,
+          },
+        }));
+
+        setItems((prev) =>
+          prev.concat(optimisticItems.map(({ id, item }) => ({ id, ...item })))
+        );
+
+        await Promise.all(
+          optimisticItems.map(async ({ id, file }) => {
+            try {
+              const bytes = new Uint8Array(await file.arrayBuffer());
+              const uploaded = await uploadAttachment({
+                fileBytes: bytes,
+                fileName: file.name,
+                contentType: file.type || undefined,
+                onProgress: (progress) => {
+                  updateLocalFile(id, (item) => ({
+                    ...item,
+                    uploadProgress: progress,
+                  }));
+                },
+              });
+
+              updateLocalFile(id, (item) => {
+                if (item.url?.startsWith("blob:")) {
+                  URL.revokeObjectURL(item.url);
+                }
+                return {
+                  ...item,
+                  url: uploaded.url,
+                  uploadProgress: 100,
+                  uploadStatus: "done",
+                };
+              });
+            } catch {
+              updateLocalFile(id, (item) => ({
+                ...item,
+                uploadStatus: "error",
+              }));
+            }
+          })
+        );
+      };
+
+      void uploadFiles();
     },
-    [matchesAccept, maxFiles, maxFileSize, onError]
+    [
+      matchesAccept,
+      maxFiles,
+      maxFileSize,
+      onError,
+      uploadAttachment,
+      updateLocalFile,
+    ]
   );
 
   const removeLocal = useCallback(

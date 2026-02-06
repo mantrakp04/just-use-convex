@@ -15,6 +15,7 @@ import {
   createConvexAdapter,
   parseTokenFromUrl,
   ConvexAdapter,
+  type TokenConfig,
 } from "@just-use-convex/backend/convex/lib/convexAdapter";
 import { api } from "@just-use-convex/backend/convex/_generated/api";
 import type { Id } from "@just-use-convex/backend/convex/_generated/dataModel";
@@ -35,6 +36,12 @@ type ChatState = {
   model: string;
   reasoningEffort?: "low" | "medium" | "high";
   inputModalities?: string[];
+};
+
+type InitArgs = {
+  model?: string;
+  reasoningEffort?: "low" | "medium" | "high";
+  tokenConfig: TokenConfig;
 };
 
 // Map MIME type prefixes to OpenRouter modality names
@@ -118,8 +125,11 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, ChatState> {
     if (!this.sandboxBackend) return;
 
     const uploadDir = "/workspace/uploads";
-    const bufferToBinaryString = (buffer: ArrayBuffer): string =>
-      String.fromCharCode(...new Uint8Array(buffer));
+    const escapeShellArg = (arg: string): string =>
+      `'${arg.replace(/'/g, "'\\''")}'`;
+    await this.sandboxBackend.exec(
+      `mkdir -p ${escapeShellArg(uploadDir)}`
+    );
 
     for (const msg of messages) {
       for (const part of msg.parts) {
@@ -140,17 +150,17 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, ChatState> {
             }
           }
           if (url.startsWith("http://") || url.startsWith("https://")) {
-            const response = await fetch(url);
-            if (!response.ok) {
-              throw new Error(`Failed to fetch ${url}: ${response.status}`);
-            }
-            const buffer = await response.arrayBuffer();
             const filePath = `${uploadDir}/${filename}`;
-            await this.sandboxBackend.write(filePath, bufferToBinaryString(buffer));
+            const result = await this.sandboxBackend.exec(
+              `curl -L --fail --silent --show-error ${escapeShellArg(url)} -o ${escapeShellArg(filePath)}`
+            );
+            if (!result.success) {
+              throw new Error(`Failed to curl ${url}: ${result.stderr}`);
+            }
           }
           // Blob URLs are not accessible server-side; skip.
         } catch (error) {
-          console.error(`Failed to save file ${filename} to sandbox:`, error);
+          // silently ignore sandbox file save failures
         }
       }
     }
@@ -272,15 +282,15 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, ChatState> {
         });
       }
     } catch (error) {
-      console.error("Failed to generate title:", error);
+      // silently ignore title generation failures
     }
   }
   
-  private async _init(request: Request): Promise<void> {
-    const url = new URL(request.url);
-    const model = url.searchParams.get('model');
-    const reasoningEffort = url.searchParams.get('reasoningEffort') as "low" | "medium" | "high" | undefined;
-    // Only update state if we have new values and state doesn't exist yet
+  private async _init(args?: InitArgs): Promise<void> {
+    if (args) {
+      this.ctx.storage.put("initArgs", args);
+    }
+    const { model, reasoningEffort, tokenConfig } = (await this.ctx.storage.get("initArgs")) as InitArgs;
     const state = this.state ?? {};
     if (
       (!state.model && model) ||
@@ -295,7 +305,6 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, ChatState> {
 
     // Only require token on first connection
     if (!this.convexAdapter) {
-      const tokenConfig = parseTokenFromUrl(url);
       if (!tokenConfig) {
         throw new Error("Unauthorized: No token provided");
       }
@@ -342,12 +351,9 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, ChatState> {
     const filesystemBackend = this.sandboxId ? new SandboxFilesystemBackend(this.env, this.sandboxId) : undefined;
     this.sandboxBackend = filesystemBackend ?? null;
     if (filesystemBackend) {
-      console.log("[sandbox] backend ready", {
-        sandboxId: this.sandboxId,
-        rootDir: filesystemBackend.rootDir,
-      });
+      // sandbox backend ready
     } else {
-      console.log("[sandbox] backend disabled (no sandboxId)");
+      // sandbox backend disabled (no sandboxId)
     }
 
     const agent = new PlanAgent({
@@ -415,6 +421,7 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, ChatState> {
 
     this.planAgent = agent;
     await this._patchAgent();
+
     return agent;
   }
 
@@ -454,12 +461,23 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, ChatState> {
   }
 
   override async onRequest(request: Request): Promise<Response> {
-    await this._init(request);
+    await this._init({
+      model: (new URL(request.url)).searchParams.get("model") ?? undefined,
+      reasoningEffort: (new URL(request.url)).searchParams.get("reasoningEffort") as "low" | "medium" | "high" | undefined,
+      tokenConfig: parseTokenFromUrl(new URL(request.url)) ?? { type: "jwt", token: "" },
+    });
     return await super.onRequest(request);
   }
 
   override async onConnect(connection: Connection, ctx: ConnectionContext): Promise<void> {
-    await this._init(ctx.request);
+    await this._init({
+      model: (new URL(ctx.request.url)).searchParams.get("model") ?? undefined,
+      reasoningEffort: (new URL(ctx.request.url)).searchParams.get("reasoningEffort") as "low" | "medium" | "high" | undefined,
+      tokenConfig: parseTokenFromUrl(new URL(ctx.request.url)) ?? {
+        type: "jwt",
+        token: "",
+      },
+    });
     await this._prepAgent();
     return await super.onConnect(connection, ctx);
   }
@@ -475,7 +493,7 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, ChatState> {
     try {
       await this.indexMessages(messages);
     } catch (error) {
-      console.error("Failed to index messages in Vectorize:", error);
+      // silently ignore vectorize indexing failures
     }
   }
 
@@ -497,9 +515,7 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, ChatState> {
     );
 
     if (deletedMessageIds.length > 0) {
-      this.deleteMessageVectors(deletedMessageIds).catch((error) => {
-        console.error("Failed to delete vectorized messages:", error);
-      });
+      this.deleteMessageVectors(deletedMessageIds).catch(() => {});
     }
     
     // Persist the new message set
@@ -516,54 +532,43 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, ChatState> {
 
     try {
       // Update chat timestamp (fire and forget)
-      if (this.convexAdapter) {
-        const updateFn = this.convexAdapter.getTokenType() === "ext"
-          ? api.chats.index.updateExt
-          : api.chats.index.update;
-        this.convexAdapter.mutation(updateFn, {
-          _id: this.chatDoc?._id,
-          patch: {},
-        });
-      }
-
-      // Generate title for first message (fire and forget)
-      if (this.messages.length === 1) {
-        const firstMessage = this.messages[0];
-        const textContent = firstMessage?.parts
-          ?.filter((p): p is { type: "text"; text: string } => p.type === "text")
-          .map((p) => p.text)
-          .join(" ");
-        if (textContent) {
-          this.generateTitle(textContent);
+      if (!this.convexAdapter) {
+        await this._init();
+        if (!this.convexAdapter) {
+          throw new Error("No convex adapter");
         }
       }
 
-      // Save uploaded files to sandbox (fire and forget)
-      this.saveFilesToSandbox(this.messages);
+      const updateFn = this.convexAdapter.getTokenType() === "ext"
+        ? api.chats.index.updateExt
+        : api.chats.index.update;
+      this.convexAdapter.mutation(updateFn, {
+        _id: this.chatDoc?._id,
+        patch: {},
+      });
 
-      // Filter file parts based on model's supported input modalities
-      const filteredMessages = filterMessageParts(
+      // Generate title for first message (fire and forget)
+      if (this.messages.length === 1 && this.messages[0]) {
+        const textContent = extractMessageText(this.messages[0]);
+        if (textContent) this.generateTitle(textContent);
+      }
+
+      const messagesForSandbox = this.messages;
+      const messagesForAgent = filterMessageParts(
         this.messages,
         this.state.inputModalities
       );
 
-      let lastUserMessage: { index: number; message: UIMessage } | null = null;
-      for (const [index, message] of filteredMessages.reverse().entries()) {
-        if (message.role === "user") {
-          lastUserMessage = { index, message };
-          break;
-        }
-      }
-      const retrievalMessage = lastUserMessage
-        ? await this.buildRetrievalMessage(extractMessageText(lastUserMessage.message))
+      // Save uploaded files to sandbox (fire and forget)
+      this.saveFilesToSandbox(messagesForSandbox);
+
+      const lastUserIdx = messagesForAgent.findLastIndex(m => m.role === "user");
+      const retrievalMessage = lastUserIdx !== -1
+        ? await this.buildRetrievalMessage(extractMessageText(messagesForAgent[lastUserIdx]!))
         : null;
       const modelMessages = retrievalMessage
-        ? [
-            ...filteredMessages.slice(0, filteredMessages.length - 1 - (lastUserMessage?.index ?? 0)),
-            retrievalMessage,
-            ...filteredMessages.slice(filteredMessages.length - 1 - (lastUserMessage?.index ?? 0)),
-          ]
-        : filteredMessages;
+        ? messagesForAgent.toSpliced(lastUserIdx, 0, retrievalMessage)
+        : messagesForAgent;
 
       const agent = this.planAgent || (await this._prepAgent());
       const stream = await agent?.streamText(modelMessages, {
@@ -576,7 +581,6 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, ChatState> {
         }),
       });
     } catch (error) {
-      console.error("Error in onChatMessage:", error);
       return new Response("Internal Server Error: " + JSON.stringify(error, null, 2), { status: 500 });
     }
   }

@@ -25,30 +25,34 @@ export function useAttachments() {
 
   const uploadMutation = useMutation({
     mutationKey: ["attachments", "upload"],
-    mutationFn: async (args: z.infer<typeof attachmentTypes.CreateFromBytesArgs>): Promise<CreateFromHashResult> => {
-      const blob = new Blob([args.fileBytes], {
-        type: args.contentType ?? "application/octet-stream",
+    mutationFn: async (
+      args: z.infer<typeof attachmentTypes.CreateFromBytesArgs> & {
+        onProgress?: (progress: number) => void;
+        signal?: AbortSignal;
+      }
+    ): Promise<CreateFromHashResult> => {
+      const { onProgress, signal, ...uploadArgs } = args;
+      const blob = new Blob([uploadArgs.fileBytes], {
+        type: uploadArgs.contentType ?? "application/octet-stream",
       });
-      const safeFileName = args.fileName.replace(/[\r\n]+/g, " ").trim();
+      const safeFileName = uploadArgs.fileName.replace(/[\r\n]+/g, " ").trim();
 
       const uploadUrl = await generateUploadUrlMutation.mutateAsync({});
-      const uploadResponse = await fetch(uploadUrl, {
-        method: "POST",
-        headers: {
-          "Content-Type": args.contentType ?? "application/octet-stream",
-        },
-        body: blob,
-      });
-
-      const uploadResult = (await uploadResponse.json()) as { storageId: string };
-      const hash = await toHexHash(args.fileBytes);
-      return (await createFromHashMutation.mutateAsync({
+      const uploadResult = await uploadBlobWithProgress(
+        uploadUrl,
+        blob,
+        uploadArgs.contentType,
+        onProgress,
+        signal
+      );
+      const hash = await toHexHash(uploadArgs.fileBytes);
+      return await createFromHashMutation.mutateAsync({
         hash,
         storageId: uploadResult.storageId,
-        size: args.fileBytes.byteLength,
+        size: uploadArgs.fileBytes.byteLength,
         fileName: safeFileName,
-        contentType: args.contentType,
-      }));
+        contentType: uploadArgs.contentType,
+      });
     },
     onSuccess: () => {
       toast.success("Attachment uploaded");
@@ -93,4 +97,67 @@ async function toHexHash(bytes: Uint8Array) {
   return Array.from(new Uint8Array(hashBuffer))
     .map((byte) => byte.toString(16).padStart(2, "0"))
     .join("");
+}
+
+async function uploadBlobWithProgress(
+  uploadUrl: string,
+  blob: Blob,
+  contentType: string | undefined,
+  onProgress?: (progress: number) => void,
+  signal?: AbortSignal
+): Promise<{ storageId: string }> {
+  return await new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", uploadUrl);
+    xhr.responseType = "json";
+    xhr.setRequestHeader("Content-Type", contentType ?? "application/octet-stream");
+
+    if (onProgress) {
+      onProgress(0);
+    }
+
+    xhr.upload.onprogress = (event) => {
+      if (!event.lengthComputable || !onProgress) {
+        return;
+      }
+      const percent = Math.round((event.loaded / event.total) * 100);
+      onProgress(Math.min(100, Math.max(0, percent)));
+    };
+
+    xhr.onload = () => {
+      if (xhr.status < 200 || xhr.status >= 300) {
+        reject(new Error(`Upload failed (${xhr.status})`));
+        return;
+      }
+      if (xhr.response && typeof xhr.response === "object") {
+        resolve(xhr.response as { storageId: string });
+        return;
+      }
+      try {
+        resolve(JSON.parse(xhr.responseText ?? "{}") as { storageId: string });
+      } catch {
+        reject(new Error("Upload failed (invalid response)"));
+      }
+    };
+
+    xhr.onerror = () => {
+      reject(new Error("Upload failed"));
+    };
+
+    xhr.onabort = () => {
+      reject(new Error("Upload canceled"));
+    };
+
+    if (signal) {
+      signal.addEventListener(
+        "abort",
+        () => {
+          xhr.abort();
+        },
+        { once: true }
+      );
+    }
+
+    xhr.send(blob);
+  });
 }

@@ -77,6 +77,7 @@ export function SandboxSelector() {
     if (!deleteTarget) return;
     await deleteSandbox({ _id: deleteTarget._id });
     if (selectedSandboxId === deleteTarget._id) {
+      console.log("[sandbox] cleared selection (deleted)", { sandboxId: deleteTarget._id });
       setSelectedSandboxId(null);
     }
     setDeleteTarget(null);
@@ -88,6 +89,7 @@ export function SandboxSelector() {
       const sandboxId = await createSandbox({
         data: { name: name.trim(), description: description.trim() || undefined },
       });
+      console.log("[sandbox] created", { sandboxId, name: name.trim() });
       setSelectedSandboxId(sandboxId);
     } else if (editState.sandbox) {
       await updateSandbox({
@@ -113,7 +115,10 @@ export function SandboxSelector() {
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-56">
           <DropdownMenuItem
-            onClick={() => setSelectedSandboxId(null)}
+            onClick={() => {
+              console.log("[sandbox] selected none");
+              setSelectedSandboxId(null);
+            }}
             className={cn("cursor-pointer justify-between", !selectedSandboxId && "bg-accent")}
           >
             <span className="text-muted-foreground">No Sandbox</span>
@@ -134,7 +139,10 @@ export function SandboxSelector() {
                   return (
                     <DropdownMenuItem
                       key={sandbox._id}
-                      onClick={() => setSelectedSandboxId(sandbox._id)}
+                      onClick={() => {
+                        console.log("[sandbox] selected", { sandboxId: sandbox._id, name: sandbox.name });
+                        setSelectedSandboxId(sandbox._id);
+                      }}
                       className={cn(
                         "cursor-pointer justify-between group",
                         isSelected && "bg-accent"
