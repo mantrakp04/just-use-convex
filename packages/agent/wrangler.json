@@ -36,7 +36,10 @@
       "tag": "v1",
       "new_sqlite_classes": [
         "AgentWorker"
-      ],
+      ]
+    },
+    {
+      "tag": "v2",
       "new_classes": [
         "Sandbox"
       ]

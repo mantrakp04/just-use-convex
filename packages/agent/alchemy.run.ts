@@ -69,18 +69,27 @@ await WranglerJson({
           }
         }
       }
-      // Fix migrations: Sandbox is a container, not a sqlite class
+      // Keep AgentWorker in v1 and add Sandbox in a separate tag (v2).
+      // Durable Object migration tags are immutable once deployed.
       if (spec.migrations) {
         for (const migration of spec.migrations) {
           if (migration.new_sqlite_classes?.includes("Sandbox")) {
             migration.new_sqlite_classes = migration.new_sqlite_classes.filter(
               (c: string) => c !== "Sandbox"
             );
-            migration.new_classes = migration.new_classes || [];
-            if (!migration.new_classes.includes("Sandbox")) {
-              migration.new_classes.push("Sandbox");
-            }
           }
+          if (migration.tag === "v1" && migration.new_classes?.includes("Sandbox")) {
+            migration.new_classes = migration.new_classes.filter((c: string) => c !== "Sandbox");
+          }
+        }
+        const hasSandboxMigration = spec.migrations.some(
+          (migration) => migration.new_classes?.includes("Sandbox")
+        );
+        if (!hasSandboxMigration) {
+          spec.migrations.push({
+            tag: "v2",
+            new_classes: ["Sandbox"],
+          });
         }
       }
       return spec;
