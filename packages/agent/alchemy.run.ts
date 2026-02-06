@@ -73,22 +73,29 @@ await WranglerJson({
       // Durable Object migration tags are immutable once deployed.
       if (spec.migrations) {
         for (const migration of spec.migrations) {
-          if (migration.new_sqlite_classes?.includes("Sandbox")) {
-            migration.new_sqlite_classes = migration.new_sqlite_classes.filter(
-              (c: string) => c !== "Sandbox"
-            );
-          }
           if (migration.tag === "v1" && migration.new_classes?.includes("Sandbox")) {
             migration.new_classes = migration.new_classes.filter((c: string) => c !== "Sandbox");
           }
+          if (migration.tag === "v1" && migration.new_sqlite_classes?.includes("Sandbox")) {
+            migration.new_sqlite_classes = migration.new_sqlite_classes.filter((c: string) => c !== "Sandbox");
+          }
+          if (migration.new_classes?.includes("Sandbox")) {
+            migration.new_classes = migration.new_classes.filter((c: string) => c !== "Sandbox");
+          }
+          if (migration.tag === "v2") {
+            migration.new_sqlite_classes = migration.new_sqlite_classes || [];
+            if (!migration.new_sqlite_classes.includes("Sandbox")) {
+              migration.new_sqlite_classes.push("Sandbox");
+            }
+          }
         }
         const hasSandboxMigration = spec.migrations.some(
-          (migration) => migration.new_classes?.includes("Sandbox")
+          (migration) => migration.new_sqlite_classes?.includes("Sandbox")
         );
         if (!hasSandboxMigration) {
           spec.migrations.push({
             tag: "v2",
-            new_classes: ["Sandbox"],
+            new_sqlite_classes: ["Sandbox"],
           });
         }
       }

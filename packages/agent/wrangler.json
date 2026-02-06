@@ -40,7 +40,7 @@
     },
     {
       "tag": "v2",
-      "new_classes": [
+      "new_sqlite_classes": [
         "Sandbox"
       ]
     }
