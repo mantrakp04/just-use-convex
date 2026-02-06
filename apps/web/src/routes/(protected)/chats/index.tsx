@@ -42,9 +42,7 @@ function ChatsListPage() {
   const selectedSandboxId = useAtomValue(selectedSandboxIdAtom);
 
   const handleCreateChat = useCallback(async () => {
-    console.log("[chats] create requested", { selectedSandboxId });
     const chat = await createChat({ data: { title: "New Chat", sandboxId: selectedSandboxId ?? undefined } });
-    console.log("[chats] created", { chatId: chat, selectedSandboxId });
     navigate({ to: "/chats/$chatId", params: { chatId: chat } });
   }, [createChat, navigate, selectedSandboxId]);
 
