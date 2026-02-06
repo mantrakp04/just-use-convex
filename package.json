@@ -20,10 +20,7 @@
     "dev": "turbo dev",
     "build": "turbo build",
     "check-types": "turbo check-types",
-    "dev:native": "turbo -F native dev",
-    "dev:web": "turbo -F web dev",
-    "dev:server": "turbo -F @just-use-convex/backend dev",
-    "dev:setup": "turbo -F @just-use-convex/backend dev:setup"
+    "deploy": "turbo deploy"
   },
   "dependencies": {
     "zod": "^4.3.6"

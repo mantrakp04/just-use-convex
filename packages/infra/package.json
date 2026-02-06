@@ -1,0 +1,21 @@
+{
+  "name": "@just-use-convex/infra",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "alchemy dev",
+    "build": "tsc --noEmit",
+    "deploy": "alchemy deploy",
+    "destroy": "alchemy destroy"
+  },
+  "dependencies": {
+    "dotenv": "catalog:",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@cloudflare/sandbox": "^0.7.0",
+    "@just-use-convex/config": "workspace:*",
+    "alchemy": "^0.83.3",
+    "typescript": "catalog:"
+  }
+}

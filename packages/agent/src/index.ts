@@ -10,7 +10,7 @@ import { createWebSearchToolkit } from "./tools/websearch";
 import { createAskUserToolkit } from "./tools/ask-user";
 import { BackgroundTaskStore, withBackgroundTaskTools } from "./utils/toolWBackground";
 import { patchToolWithBackgroundSupport } from "./utils/toolWTimeout";
-import type { worker } from "../alchemy.run";
+import type { worker } from "@just-use-convex/infra/alchemy.run";
 import {
   createConvexAdapter,
   parseTokenFromUrl,

@@ -3,11 +3,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "vite build",
     "serve": "vite preview",
-    "dev": "alchemy dev",
-    "deploy": "alchemy deploy",
-    "destroy": "alchemy destroy",
+    "build": "vite build",
     "check-types": "tsc --noEmit"
   },
   "dependencies": {

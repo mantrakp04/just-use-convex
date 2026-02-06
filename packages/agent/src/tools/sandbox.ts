@@ -11,7 +11,7 @@ import {
   type Toolkit,
 } from "@voltagent/core";
 import { z } from "zod";
-import type { worker } from "../../alchemy.run";
+import type { worker } from "@just-use-convex/infra/alchemy.run";
 import { type WrappedExecuteOptions, createWrappedTool } from "../utils/toolWTimeout";
 import { type BackgroundTaskStore } from "../utils/toolWBackground";
 

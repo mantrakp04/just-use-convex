@@ -1,5 +1,6 @@
 import alchemy from "alchemy";
-import { Worker, DurableObjectNamespace, Container, WranglerJson, VectorizeIndex } from "alchemy/cloudflare";
+import { Worker, DurableObjectNamespace, Container, VectorizeIndex } from "alchemy/cloudflare";
+import { TanStackStart } from "alchemy/cloudflare";
 
 const app = await alchemy("just-use-convex", {
   phase: process.argv.includes("--destroy") ? "destroy" : "up",
@@ -27,7 +28,7 @@ const chatMessagesIndex = await VectorizeIndex("chat-messages", {
 });
 
 export const worker = await Worker("agent-worker", {
-  entrypoint: "./src/index.ts",
+  entrypoint: "../agent/src/index.ts",
   url: false,
   compatibility: "node",
   bindings: {
@@ -55,35 +56,18 @@ export const worker = await Worker("agent-worker", {
   }
 });
 
-await app.finalize();
-
-await WranglerJson({
-  worker: worker,
-  path: "./wrangler.json",
-  transform: {
-    wrangler: (spec) => {
-      if (spec.containers) {
-        for (const container of spec.containers) {
-          if (container.class_name === "Sandbox") {
-            container.image = SANDBOX_IMAGE;
-          }
-        }
-      }
-      // Fix migrations: Sandbox is a container, not a sqlite class
-      if (spec.migrations) {
-        for (const migration of spec.migrations) {
-          if (migration.new_sqlite_classes?.includes("Sandbox")) {
-            migration.new_sqlite_classes = migration.new_sqlite_classes.filter(
-              (c: string) => c !== "Sandbox"
-            );
-            migration.new_classes = migration.new_classes || [];
-            if (!migration.new_classes.includes("Sandbox")) {
-              migration.new_classes.push("Sandbox");
-            }
-          }
-        }
-      }
-      return spec;
-    },
+export const website = await TanStackStart("website", {
+  cwd: "../../apps/web",
+  bindings: {
+    VITE_CONVEX_URL: alchemy.env("VITE_CONVEX_URL"),
+    VITE_CONVEX_SITE_URL: alchemy.env("VITE_CONVEX_SITE_URL"),
+    VITE_SITE_URL: alchemy.env("VITE_SITE_URL", "http://localhost:3001"),
+    VITE_AGENT_URL: alchemy.env("VITE_AGENT_URL", "http://localhost:1337"),
+    VITE_DEFAULT_MODEL: alchemy.env("VITE_DEFAULT_MODEL", "openai/gpt-5.2-chat"),
   },
+  adopt: true
 });
+
+console.log({ url: website.url });
+
+await app.finalize();
