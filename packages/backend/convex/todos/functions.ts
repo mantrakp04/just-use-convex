@@ -2,6 +2,11 @@ import type { z } from "zod";
 import type { zMutationCtx, zQueryCtx } from "../functions";
 import * as types from "./types";
 import { withInvalidCursorRetry } from "../shared/pagination";
+import {
+  assertOrganizationAccess,
+  assertPermission,
+  assertScopedPermission,
+} from "../shared/auth_shared";
 
 async function runTodosQuery(ctx: zQueryCtx, args: z.infer<typeof types.ListArgs>) {
   return ctx.table("todos", 'organizationId', (q) => q
@@ -46,6 +51,26 @@ async function runTodosQuery(ctx: zQueryCtx, args: z.infer<typeof types.ListArgs
 }
 
 export async function ListTodos(ctx: zQueryCtx, args: z.infer<typeof types.ListArgs>) {
+  assertPermission(
+    ctx.identity.organizationRole,
+    { todo: ["read"] },
+    "You are not authorized to view todos"
+  );
+  if (args.filters.memberId !== undefined && args.filters.memberId !== ctx.identity.memberId) {
+    assertPermission(
+      ctx.identity.organizationRole,
+      { todo: ["readAny"] },
+      "You are not authorized to view other members' todos"
+    );
+  }
+  if (args.filters.assignedMemberId !== undefined && args.filters.assignedMemberId !== ctx.identity.memberId) {
+    assertPermission(
+      ctx.identity.organizationRole,
+      { todo: ["readAny"] },
+      "You are not authorized to view other members' assigned todos"
+    );
+  }
+
   // If filtering by assigned member, get the set of todo IDs first
   let assignedTodoIds: Set<string> | null = null;
   if (args.filters.assignedMemberId !== undefined) {
@@ -75,9 +100,20 @@ export async function ListTodos(ctx: zQueryCtx, args: z.infer<typeof types.ListA
 
 export async function GetTodo(ctx: zQueryCtx, args: z.infer<typeof types.GetTodoArgs>) {
   const todo = await ctx.table("todos").getX(args._id)
-  if (todo.organizationId !== ctx.identity.activeOrganizationId) {
-    throw new Error("You are not authorized to get this todo");
-  }
+  assertOrganizationAccess(
+    todo.organizationId,
+    ctx.identity.activeOrganizationId,
+    "You are not authorized to get this todo"
+  );
+  assertScopedPermission(
+    ctx.identity.organizationRole,
+    ctx.identity.memberId,
+    todo.memberId,
+    { todo: ["read"] },
+    { todo: ["readAny"] },
+    "You are not authorized to get this todo",
+    "You are not authorized to get this todo"
+  );
   const assignedMembers = await todo.edge("assignedMembers").order('desc')
 
   return {
@@ -87,6 +123,12 @@ export async function GetTodo(ctx: zQueryCtx, args: z.infer<typeof types.GetTodo
 }
 
 export async function CreateTodo(ctx: zMutationCtx, args: z.infer<typeof types.CreateArgs>) {
+  assertPermission(
+    ctx.identity.organizationRole,
+    { todo: ["create"] },
+    "You are not authorized to create todos"
+  );
+
   const todo = await ctx.table("todos").insert({
     ...args.data,
     organizationId: ctx.identity.activeOrganizationId,
@@ -98,9 +140,20 @@ export async function CreateTodo(ctx: zMutationCtx, args: z.infer<typeof types.C
 
 export async function UpdateTodo(ctx: zMutationCtx, args: z.infer<typeof types.UpdateArgs>) {
   const todo = await ctx.table("todos").getX(args._id)
-  if (todo.organizationId !== ctx.identity.activeOrganizationId) {
-    throw new Error("You are not authorized to update this todo");
-  }
+  assertOrganizationAccess(
+    todo.organizationId,
+    ctx.identity.activeOrganizationId,
+    "You are not authorized to update this todo"
+  );
+  assertScopedPermission(
+    ctx.identity.organizationRole,
+    ctx.identity.memberId,
+    todo.memberId,
+    { todo: ["update"] },
+    { todo: ["updateAny"] },
+    "You are not authorized to update this todo",
+    "You are not authorized to update this todo"
+  );
 
   // Separate fields to set vs unset (null means unset)
   const fieldsToUnset: string[] = [];
@@ -131,18 +184,40 @@ export async function UpdateTodo(ctx: zMutationCtx, args: z.infer<typeof types.U
 
 export async function DeleteTodo(ctx: zMutationCtx, args: z.infer<typeof types.DeleteArgs>) {
   const todo = await ctx.table("todos").getX(args._id)
-  if (todo.organizationId !== ctx.identity.activeOrganizationId) {
-    throw new Error("You are not authorized to delete this todo");
-  }
+  assertOrganizationAccess(
+    todo.organizationId,
+    ctx.identity.activeOrganizationId,
+    "You are not authorized to delete this todo"
+  );
+  assertScopedPermission(
+    ctx.identity.organizationRole,
+    ctx.identity.memberId,
+    todo.memberId,
+    { todo: ["delete"] },
+    { todo: ["deleteAny"] },
+    "You are not authorized to delete this todo",
+    "You are not authorized to delete this todo"
+  );
   await todo.delete();
   return true;
 }
 
 export async function AssignMember(ctx: zMutationCtx, args: z.infer<typeof types.AssignMemberArgs>) {
   const todo = await ctx.table("todos").getX(args.todoId);
-  if (todo.organizationId !== ctx.identity.activeOrganizationId) {
-    throw new Error("You are not authorized to assign members to this todo");
-  }
+  assertOrganizationAccess(
+    todo.organizationId,
+    ctx.identity.activeOrganizationId,
+    "You are not authorized to assign members to this todo"
+  );
+  assertScopedPermission(
+    ctx.identity.organizationRole,
+    ctx.identity.memberId,
+    todo.memberId,
+    { todo: ["assign"] },
+    { todo: ["assignAny"] },
+    "You are not authorized to assign members to this todo",
+    "You are not authorized to assign members to this todo"
+  );
 
   const existing = await ctx.table("todoAssignedMembers", "todoId_memberId", (q) =>
     q.eq("todoId", args.todoId).eq("memberId", args.memberId)
@@ -162,9 +237,20 @@ export async function AssignMember(ctx: zMutationCtx, args: z.infer<typeof types
 
 export async function UnassignMember(ctx: zMutationCtx, args: z.infer<typeof types.UnassignMemberArgs>) {
   const todo = await ctx.table("todos").getX(args.todoId);
-  if (todo.organizationId !== ctx.identity.activeOrganizationId) {
-    throw new Error("You are not authorized to unassign members from this todo");
-  }
+  assertOrganizationAccess(
+    todo.organizationId,
+    ctx.identity.activeOrganizationId,
+    "You are not authorized to unassign members from this todo"
+  );
+  assertScopedPermission(
+    ctx.identity.organizationRole,
+    ctx.identity.memberId,
+    todo.memberId,
+    { todo: ["assign"] },
+    { todo: ["assignAny"] },
+    "You are not authorized to unassign members from this todo",
+    "You are not authorized to unassign members from this todo"
+  );
 
   const assignment = await ctx.table("todoAssignedMembers", "todoId_memberId", (q) =>
     q.eq("todoId", args.todoId).eq("memberId", args.memberId)
@@ -180,6 +266,15 @@ export async function UnassignMember(ctx: zMutationCtx, args: z.infer<typeof typ
 
 export async function ListAssignedTodos(ctx: zQueryCtx, args: z.infer<typeof types.ListAssignedTodosArgs>) {
   const memberId = args.memberId ?? ctx.identity.memberId;
+  assertScopedPermission(
+    ctx.identity.organizationRole,
+    ctx.identity.memberId,
+    memberId,
+    { todo: ["read"] },
+    { todo: ["readAny"] },
+    "You are not authorized to view assigned todos",
+    "You are not authorized to view other members' assigned todos"
+  );
 
   const assignments = await ctx.table("todoAssignedMembers", "memberId", (q) =>
     q.eq("memberId", memberId)

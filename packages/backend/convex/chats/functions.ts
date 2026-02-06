@@ -2,6 +2,11 @@ import type { z } from "zod";
 import type { zMutationCtx, zQueryCtx } from "../functions";
 import * as types from "./types";
 import { withInvalidCursorRetry } from "../shared/pagination";
+import {
+  assertOrganizationAccess,
+  assertPermission,
+  assertScopedPermission,
+} from "../shared/auth_shared";
 
 async function runChatsQuery(ctx: zQueryCtx, args: z.infer<typeof types.ListArgs>) {
   return ctx.table("chats", "organizationId_memberId_isPinned", (q) => q
@@ -29,6 +34,12 @@ async function runChatsQuery(ctx: zQueryCtx, args: z.infer<typeof types.ListArgs
 }
 
 export async function ListChats(ctx: zQueryCtx, args: z.infer<typeof types.ListArgs>) {
+  assertPermission(
+    ctx.identity.organizationRole,
+    { chat: ["read"] },
+    "You are not authorized to view chats"
+  );
+
   const chats = await withInvalidCursorRetry(
     args,
     (nextArgs) => runChatsQuery(ctx, nextArgs),
@@ -51,17 +62,31 @@ export async function ListChats(ctx: zQueryCtx, args: z.infer<typeof types.ListA
 
 export async function GetChat(ctx: zQueryCtx, args: z.infer<typeof types.GetChatArgs>) {
   const chat = await ctx.table("chats").getX(args._id);
-  if (chat.organizationId !== ctx.identity.activeOrganizationId) {
-    throw new Error("You are not authorized to view this chat");
-  }
-  if (chat.memberId !== ctx.identity.memberId) {
-    throw new Error("You are not authorized to view this chat");
-  }
+  assertOrganizationAccess(
+    chat.organizationId,
+    ctx.identity.activeOrganizationId,
+    "You are not authorized to view this chat"
+  );
+  assertScopedPermission(
+    ctx.identity.organizationRole,
+    ctx.identity.memberId,
+    chat.memberId,
+    { chat: ["read"] },
+    { chat: ["readAny"] },
+    "You are not authorized to view this chat",
+    "You are not authorized to view this chat"
+  );
   const sandbox = await chat.edge("sandbox");
   return { ...chat.doc(), sandbox };
 }
 
 export async function CreateChat(ctx: zMutationCtx, args: z.infer<typeof types.CreateArgs>) {
+  assertPermission(
+    ctx.identity.organizationRole,
+    { chat: ["create"] },
+    "You are not authorized to create chats"
+  );
+
   const now = Date.now();
 
   // Validate sandboxId if provided
@@ -88,12 +113,20 @@ export async function CreateChat(ctx: zMutationCtx, args: z.infer<typeof types.C
 
 export async function UpdateChat(ctx: zMutationCtx, args: z.infer<typeof types.UpdateArgs>) {
   const chat = await ctx.table("chats").getX(args._id);
-  if (chat.organizationId !== ctx.identity.activeOrganizationId) {
-    throw new Error("You are not authorized to update this chat");
-  }
-  if (chat.memberId !== ctx.identity.memberId) {
-    throw new Error("You are not authorized to update this chat");
-  }
+  assertOrganizationAccess(
+    chat.organizationId,
+    ctx.identity.activeOrganizationId,
+    "You are not authorized to update this chat"
+  );
+  assertScopedPermission(
+    ctx.identity.organizationRole,
+    ctx.identity.memberId,
+    chat.memberId,
+    { chat: ["update"] },
+    { chat: ["updateAny"] },
+    "You are not authorized to update this chat",
+    "You are not authorized to update this chat"
+  );
 
   const patchData: Record<string, unknown> = { updatedAt: Date.now() };
 
@@ -109,17 +142,31 @@ export async function UpdateChat(ctx: zMutationCtx, args: z.infer<typeof types.U
 
 export async function DeleteChat(ctx: zMutationCtx, args: z.infer<typeof types.DeleteArgs>) {
   const chat = await ctx.table("chats").getX(args._id);
-  if (chat.organizationId !== ctx.identity.activeOrganizationId) {
-    throw new Error("You are not authorized to delete this chat");
-  }
-  if (chat.memberId !== ctx.identity.memberId) {
-    throw new Error("You are not authorized to delete this chat");
-  }
+  assertOrganizationAccess(
+    chat.organizationId,
+    ctx.identity.activeOrganizationId,
+    "You are not authorized to delete this chat"
+  );
+  assertScopedPermission(
+    ctx.identity.organizationRole,
+    ctx.identity.memberId,
+    chat.memberId,
+    { chat: ["delete"] },
+    { chat: ["deleteAny"] },
+    "You are not authorized to delete this chat",
+    "You are not authorized to delete this chat"
+  );
   await chat.delete();
   return true;
 }
 
 export async function SearchChats(ctx: zQueryCtx, args: z.infer<typeof types.SearchArgs>) {
+  assertPermission(
+    ctx.identity.organizationRole,
+    { chat: ["read"] },
+    "You are not authorized to search chats"
+  );
+
   const results = await ctx.table("chats")
     .search("title", (q) =>
       q.search("title", args.query)

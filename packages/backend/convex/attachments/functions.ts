@@ -1,13 +1,23 @@
 import type { z } from "zod";
 import type { zMutationCtx, zQueryCtx } from "../functions";
 import * as types from "./types";
-import { isAdminOrAbove } from "../shared/auth_shared";
+import {
+  assertOrganizationAccess,
+  assertPermission,
+  assertScopedPermission,
+} from "../shared/auth_shared";
 import { withInvalidCursorRetry } from "../shared/pagination";
 
 export async function CreateAttachmentFromHash(
   ctx: zMutationCtx,
   args: z.infer<typeof types.CreateFromHashArgs>
 ) {
+  assertPermission(
+    ctx.identity.organizationRole,
+    { attachment: ["create"] },
+    "You are not authorized to create attachments"
+  );
+
   let globalAttachment = await ctx.table("globalAttachments", "hash", (q) =>
     q.eq("hash", args.hash)
   ).first();
@@ -79,12 +89,20 @@ export async function GetOrgMemberAttachment(
   args: z.infer<typeof types.GetOrgMemberAttachmentArgs>
 ) {
   const attachment = await ctx.table("orgMemberAttachments").getX(args._id);
-  if (attachment.organizationId !== ctx.identity.activeOrganizationId) {
-    throw new Error("You are not authorized to view this attachment");
-  }
-  if (attachment.memberId !== ctx.identity.memberId) {
-    throw new Error("You are not authorized to view this attachment");
-  }
+  assertOrganizationAccess(
+    attachment.organizationId,
+    ctx.identity.activeOrganizationId,
+    "You are not authorized to view this attachment"
+  );
+  assertScopedPermission(
+    ctx.identity.organizationRole,
+    ctx.identity.memberId,
+    attachment.memberId,
+    { attachment: ["read"] },
+    { attachment: ["readAny"] },
+    "You are not authorized to view this attachment",
+    "You are not authorized to view this attachment"
+  );
 
   const globalAttachment = await attachment.edge("globalAttachment");
   return {
@@ -97,6 +115,12 @@ export async function GetGlobalAttachmentByHash(
   ctx: zQueryCtx,
   args: z.infer<typeof types.GetGlobalAttachmentByHashArgs>
 ) {
+  assertPermission(
+    ctx.identity.organizationRole,
+    { attachment: ["read"] },
+    "You are not authorized to view attachments"
+  );
+
   const attachment = await ctx.table("globalAttachments", "hash", (q) =>
     q.eq("hash", args.hash)
   ).first();
@@ -123,9 +147,15 @@ export async function ListOrgMemberAttachments(
   args: z.infer<typeof types.ListOrgMemberAttachmentsArgs>
 ) {
   const requestedMemberId = args.memberId ?? ctx.identity.memberId;
-  if (args.memberId && args.memberId !== ctx.identity.memberId && !isAdminOrAbove(ctx.identity.organizationRole)) {
-    throw new Error("You are not authorized to view other members' attachments");
-  }
+  assertScopedPermission(
+    ctx.identity.organizationRole,
+    ctx.identity.memberId,
+    requestedMemberId,
+    { attachment: ["read"] },
+    { attachment: ["readAny"] },
+    "You are not authorized to view attachments",
+    "You are not authorized to view other members' attachments"
+  );
 
   const attachments = await withInvalidCursorRetry(
     args,
@@ -156,12 +186,20 @@ export async function DeleteOrgMemberAttachment(
   args: z.infer<typeof types.DeleteOrgMemberAttachmentArgs>
 ) {
   const attachment = await ctx.table("orgMemberAttachments").getX(args._id);
-  if (attachment.organizationId !== ctx.identity.activeOrganizationId) {
-    throw new Error("You are not authorized to delete this attachment");
-  }
-  if (attachment.memberId !== ctx.identity.memberId && !isAdminOrAbove(ctx.identity.organizationRole)) {
-    throw new Error("You are not authorized to delete other members' attachments");
-  }
+  assertOrganizationAccess(
+    attachment.organizationId,
+    ctx.identity.activeOrganizationId,
+    "You are not authorized to delete this attachment"
+  );
+  assertScopedPermission(
+    ctx.identity.organizationRole,
+    ctx.identity.memberId,
+    attachment.memberId,
+    { attachment: ["delete"] },
+    { attachment: ["deleteAny"] },
+    "You are not authorized to delete attachments",
+    "You are not authorized to delete other members' attachments"
+  );
 
   const globalAttachmentId = attachment.globalAttachmentId;
   await attachment.delete();

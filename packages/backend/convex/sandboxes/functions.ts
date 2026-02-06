@@ -2,6 +2,11 @@ import type { z } from "zod";
 import type { zMutationCtx, zQueryCtx } from "../functions";
 import * as types from "./types";
 import { withInvalidCursorRetry } from "../shared/pagination";
+import {
+  assertOrganizationAccess,
+  assertPermission,
+  assertScopedPermission,
+} from "../shared/auth_shared";
 
 async function runSandboxesQuery(ctx: zQueryCtx, args: z.infer<typeof types.ListArgs>) {
   return ctx.table("sandboxes", "organizationId_userId", (q) => q
@@ -28,6 +33,12 @@ async function runSandboxesQuery(ctx: zQueryCtx, args: z.infer<typeof types.List
 }
 
 export async function ListSandboxes(ctx: zQueryCtx, args: z.infer<typeof types.ListArgs>) {
+  assertPermission(
+    ctx.identity.organizationRole,
+    { sandbox: ["read"] },
+    "You are not authorized to view sandboxes"
+  );
+
   return withInvalidCursorRetry(
     args,
     (nextArgs) => runSandboxesQuery(ctx, nextArgs),
@@ -37,16 +48,30 @@ export async function ListSandboxes(ctx: zQueryCtx, args: z.infer<typeof types.L
 
 export async function GetSandbox(ctx: zQueryCtx, args: z.infer<typeof types.GetArgs>) {
   const sandbox = await ctx.table("sandboxes").getX(args._id);
-  if (sandbox.organizationId !== ctx.identity.activeOrganizationId) {
-    throw new Error("You are not authorized to view this sandbox");
-  }
-  if (sandbox.userId !== ctx.identity.userId) {
-    throw new Error("You are not authorized to view this sandbox");
-  }
+  assertOrganizationAccess(
+    sandbox.organizationId,
+    ctx.identity.activeOrganizationId,
+    "You are not authorized to view this sandbox"
+  );
+  assertScopedPermission(
+    ctx.identity.organizationRole,
+    ctx.identity.userId,
+    sandbox.userId,
+    { sandbox: ["read"] },
+    { sandbox: ["readAny"] },
+    "You are not authorized to view this sandbox",
+    "You are not authorized to view this sandbox"
+  );
   return sandbox;
 }
 
 export async function CreateSandbox(ctx: zMutationCtx, args: z.infer<typeof types.CreateArgs>) {
+  assertPermission(
+    ctx.identity.organizationRole,
+    { sandbox: ["create"] },
+    "You are not authorized to create sandboxes"
+  );
+
   const now = Date.now();
   const sandbox = await ctx.table("sandboxes").insert({
     ...args.data,
@@ -59,12 +84,20 @@ export async function CreateSandbox(ctx: zMutationCtx, args: z.infer<typeof type
 
 export async function UpdateSandbox(ctx: zMutationCtx, args: z.infer<typeof types.UpdateArgs>) {
   const sandbox = await ctx.table("sandboxes").getX(args._id);
-  if (sandbox.organizationId !== ctx.identity.activeOrganizationId) {
-    throw new Error("You are not authorized to update this sandbox");
-  }
-  if (sandbox.userId !== ctx.identity.userId) {
-    throw new Error("You are not authorized to update this sandbox");
-  }
+  assertOrganizationAccess(
+    sandbox.organizationId,
+    ctx.identity.activeOrganizationId,
+    "You are not authorized to update this sandbox"
+  );
+  assertScopedPermission(
+    ctx.identity.organizationRole,
+    ctx.identity.userId,
+    sandbox.userId,
+    { sandbox: ["update"] },
+    { sandbox: ["updateAny"] },
+    "You are not authorized to update this sandbox",
+    "You are not authorized to update this sandbox"
+  );
 
   const patchData: Record<string, unknown> = { updatedAt: Date.now() };
 
@@ -80,17 +113,31 @@ export async function UpdateSandbox(ctx: zMutationCtx, args: z.infer<typeof type
 
 export async function DeleteSandbox(ctx: zMutationCtx, args: z.infer<typeof types.DeleteArgs>) {
   const sandbox = await ctx.table("sandboxes").getX(args._id);
-  if (sandbox.organizationId !== ctx.identity.activeOrganizationId) {
-    throw new Error("You are not authorized to delete this sandbox");
-  }
-  if (sandbox.userId !== ctx.identity.userId) {
-    throw new Error("You are not authorized to delete this sandbox");
-  }
+  assertOrganizationAccess(
+    sandbox.organizationId,
+    ctx.identity.activeOrganizationId,
+    "You are not authorized to delete this sandbox"
+  );
+  assertScopedPermission(
+    ctx.identity.organizationRole,
+    ctx.identity.userId,
+    sandbox.userId,
+    { sandbox: ["delete"] },
+    { sandbox: ["deleteAny"] },
+    "You are not authorized to delete this sandbox",
+    "You are not authorized to delete this sandbox"
+  );
   await sandbox.delete();
   return true;
 }
 
 export async function SearchSandboxes(ctx: zQueryCtx, args: z.infer<typeof types.SearchArgs>) {
+  assertPermission(
+    ctx.identity.organizationRole,
+    { sandbox: ["read"] },
+    "You are not authorized to search sandboxes"
+  );
+
   return ctx.db
     .query("sandboxes")
     .withSearchIndex("name", (q) =>
@@ -103,12 +150,20 @@ export async function SearchSandboxes(ctx: zQueryCtx, args: z.infer<typeof types
 
 export async function GetSandboxChats(ctx: zQueryCtx, args: z.infer<typeof types.GetChatsArgs>) {
   const sandbox = await ctx.table("sandboxes").getX(args._id);
-  if (sandbox.organizationId !== ctx.identity.activeOrganizationId) {
-    throw new Error("You are not authorized to view this sandbox");
-  }
-  if (sandbox.userId !== ctx.identity.userId) {
-    throw new Error("You are not authorized to view this sandbox");
-  }
+  assertOrganizationAccess(
+    sandbox.organizationId,
+    ctx.identity.activeOrganizationId,
+    "You are not authorized to view this sandbox"
+  );
+  assertScopedPermission(
+    ctx.identity.organizationRole,
+    ctx.identity.userId,
+    sandbox.userId,
+    { sandbox: ["read"] },
+    { sandbox: ["readAny"] },
+    "You are not authorized to view this sandbox",
+    "You are not authorized to view this sandbox"
+  );
 
   // Get chats via the edge relationship
   const chats = await sandbox.edge("chats")
