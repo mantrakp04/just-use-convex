@@ -152,7 +152,9 @@ File-based TanStack Router:
 - avoid defining new types, infer and reuse exsisting types form other files / by importing them from the relevant package
 - always use convex ents for convex related stuff
 - whenever implementing something for convex, analyze adjecent and relevant files for similar pattern implementation
+- Daytona sandbox creation should default to snapshot `daytona-medium`
 - keep tool wrapper architecture under `tools/utils/wrapper`: timeout module must stay isolated from background, and timeout-to-background conversion must be handled via wrapper-level failure hooks
+- `streamLogs` in wrapper options is for live tool execution output (e.g. sandbox `exec`), not background-task log polling helpers
 
 ## Background & Subagents
 

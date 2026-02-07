@@ -121,14 +121,24 @@ export function runInBackground({
 
   const bgPromise = (async (): Promise<BackgroundTaskWaitUntilResult> => {
     try {
-      const executionPromise = executionFactory(task.abortController?.signal);
+      const executionPromise = executionFactory(
+        task.abortController?.signal,
+        (entry) => {
+          store.addLog(task.id, entry);
+        }
+      );
       const result = await executeWithTimeout(
         () => executionPromise,
         timeoutMs,
         task.abortController?.signal
       );
 
-      if (result && typeof result === "object" && result !== null) {
+      if (
+        result &&
+        typeof result === "object" &&
+        result !== null &&
+        (store.get(task.id)?.logs.length ?? 0) === 0
+      ) {
         if ("stdout" in result && typeof result.stdout === "string" && result.stdout) {
           store.addLog(task.id, { type: "stdout", message: result.stdout });
         }

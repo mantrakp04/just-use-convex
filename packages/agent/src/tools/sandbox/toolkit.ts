@@ -47,7 +47,12 @@ Important:
     execute: async (args, options?: WrappedExecuteOptions) => {
       const command = args.command as string;
       const cwd = args.cwd as string | undefined;
-      const result = await backend.exec(command, { cwd, timeout: options?.timeout });
+      const result = await backend.exec(command, {
+        cwd,
+        timeout: options?.timeout,
+        abortSignal: options?.toolContext?.abortSignal ?? options?.abortController?.signal,
+        streamLogs: options?.streamLogs ?? options?.log,
+      });
 
       const outputParts: string[] = [];
 
@@ -64,15 +69,6 @@ Important:
       }
 
       const fullOutput = outputParts.join("\n").trim() || "(no output)";
-
-      if (options?.log) {
-        if (result.stdout) {
-          options.log({ type: "stdout", message: result.stdout });
-        }
-        if (result.stderr) {
-          options.log({ type: "stderr", message: result.stderr });
-        }
-      }
 
       if (fullOutput.length > maxOutputChars) {
         const timestamp = Date.now();

@@ -58,7 +58,10 @@ export type BackgroundTaskWaitUntilResult = {
   error?: string;
 };
 
-export type ExecutionFactory = (abortSignal?: AbortSignal) => Promise<unknown> | unknown;
+export type ExecutionFactory = (
+  abortSignal?: AbortSignal,
+  streamLogs?: (entry: { type: BackgroundTaskLogType; message: string }) => void
+) => Promise<unknown> | unknown;
 
 export type RunInBackgroundOptions = {
   store: BackgroundTaskStoreApi;
@@ -86,6 +89,7 @@ export type ToolCallConfig = {
 
 export type WrappedExecuteOptions = ToolExecuteOptions & {
   timeout?: number;
+  streamLogs?: (entry: { type: BackgroundTaskLogType; message: string }) => void;
   log?: (entry: { type: BackgroundTaskLogType; message: string }) => void;
 };
 

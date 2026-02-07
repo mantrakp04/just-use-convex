@@ -3,6 +3,7 @@ import { z, type ZodObject, type ZodRawShape } from "zod";
 import { executeWithTimeout } from "./timeout";
 import type {
   ToolCallConfig,
+  WrappedExecuteOptions,
   WrappedExecuteFactoryOptions,
 } from "./types";
 
@@ -125,9 +126,17 @@ export function createWrappedExecute({
     const toolCallId = resolveToolCallId(opts);
 
     if (allowBackground && background && startBackground) {
-      const executionFactory = (backgroundSignal?: AbortSignal) => {
+      const executionFactory = (
+        backgroundSignal?: AbortSignal,
+        streamLogs?: WrappedExecuteOptions["streamLogs"]
+      ) => {
         const abortController = deriveAbortController(opts, backgroundSignal);
-        return originalExecute(toolArgs, buildExecutionOptions(opts, abortController));
+        const wrappedOptions: WrappedExecuteOptions = {
+          ...buildExecutionOptions(opts, abortController),
+          streamLogs,
+          log: streamLogs,
+        };
+        return originalExecute(toolArgs, wrappedOptions);
       };
 
       return startBackground({

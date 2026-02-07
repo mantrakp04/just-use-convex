@@ -64,9 +64,7 @@ export class SandboxFilesystemBackend implements FilesystemBackend {
         return daytona.create({
           name: this.sandboxName,
           language: "typescript",
-          envVars: {
-            NODE_ENV: this.env.NODE_ENV ?? "production",
-          },
+          snapshot: "daytona-medium",
         });
       }
     })();
@@ -325,7 +323,12 @@ export class SandboxFilesystemBackend implements FilesystemBackend {
     return string.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   }
 
-  async exec(command: string, options?: { timeout?: number; cwd?: string }): Promise<{
+  async exec(command: string, options?: {
+    timeout?: number;
+    cwd?: string;
+    abortSignal?: AbortSignal;
+    streamLogs?: (entry: { type: "stdout" | "stderr" | "info" | "error"; message: string }) => void;
+  }): Promise<{
     success: boolean;
     stdout: string;
     stderr: string;
@@ -333,14 +336,102 @@ export class SandboxFilesystemBackend implements FilesystemBackend {
   }> {
     const cwd = options?.cwd ? this.resolvePath(options.cwd) : this.rootDir;
     const cmd = `cd ${escapeShellArg(cwd)} && ${command}`;
+    const streamLogs = options?.streamLogs;
 
-    const result = await this.runCommand(cmd, { timeoutSeconds: options?.timeout });
+    if (!streamLogs) {
+      const result = await this.runCommand(cmd, { timeoutSeconds: options?.timeout });
 
-    return {
-      success: result.success,
-      stdout: result.stdout,
-      stderr: result.stderr,
-      exitCode: result.success ? 0 : 1,
-    };
+      return {
+        success: result.success,
+        stdout: result.stdout,
+        stderr: result.stderr,
+        exitCode: result.success ? 0 : 1,
+      };
+    }
+
+    const sandbox = await this.getSandbox();
+    const sessionId = `exec_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+    await sandbox.process.createSession(sessionId);
+
+    let stdout = "";
+    let stderr = "";
+    let commandId: string | undefined;
+
+    try {
+      const runResponse = await sandbox.process.executeSessionCommand(sessionId, {
+        command: cmd,
+        runAsync: true,
+      });
+      commandId = runResponse.cmdId;
+
+      if (!commandId) {
+        const fallbackStdout = runResponse.stdout ?? "";
+        const fallbackStderr = runResponse.stderr ?? "";
+        if (fallbackStdout) {
+          streamLogs({ type: "stdout", message: fallbackStdout });
+        }
+        if (fallbackStderr) {
+          streamLogs({ type: "stderr", message: fallbackStderr });
+        }
+        return {
+          success: (runResponse.exitCode ?? 1) === 0,
+          stdout: fallbackStdout,
+          stderr: fallbackStderr,
+          exitCode: runResponse.exitCode ?? 1,
+        };
+      }
+
+      const logStreamPromise = sandbox.process
+        .getSessionCommandLogs(
+          sessionId,
+          commandId,
+          (chunk) => {
+            if (!chunk) return;
+            stdout += chunk;
+            streamLogs({ type: "stdout", message: chunk });
+          },
+          (chunk) => {
+            if (!chunk) return;
+            stderr += chunk;
+            streamLogs({ type: "stderr", message: chunk });
+          }
+        )
+        .catch((error) => {
+          const message = error instanceof Error ? error.message : String(error);
+          streamLogs({ type: "error", message: `log stream error: ${message}` });
+        });
+
+      const timeoutMs = options?.timeout ? Math.max(1, Math.ceil(options.timeout * 1000)) : undefined;
+      const startedAt = Date.now();
+      let exitCode = 1;
+
+      while (true) {
+        if (options?.abortSignal?.aborted) {
+          throw new DOMException("Aborted", "AbortError");
+        }
+        if (timeoutMs !== undefined && Date.now() - startedAt >= timeoutMs) {
+          throw new Error(`Command timed out after ${timeoutMs}ms`);
+        }
+
+        const commandState = await sandbox.process.getSessionCommand(sessionId, commandId);
+        if (typeof commandState.exitCode === "number") {
+          exitCode = commandState.exitCode;
+          break;
+        }
+
+        await new Promise((resolve) => setTimeout(resolve, 200));
+      }
+
+      await logStreamPromise;
+
+      return {
+        success: exitCode === 0,
+        stdout,
+        stderr,
+        exitCode,
+      };
+    } finally {
+      await sandbox.process.deleteSession(sessionId).catch(() => {});
+    }
   }
 }
