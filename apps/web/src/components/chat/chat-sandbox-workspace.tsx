@@ -14,6 +14,8 @@ import {
 } from "@/components/ui/dropdown-menu";
 import "xterm/css/xterm.css";
 
+const TERMINAL_BACKGROUND = "#0b0f19";
+
 type XtermTerminalWriteData = Extract<Parameters<XtermTerminal["write"]>[0], string>;
 type XtermTerminalInputData = Extract<Parameters<Parameters<XtermTerminal["onData"]>[0]>[0], string>;
 type XtermTerminalResizeEvent = Parameters<Parameters<XtermTerminal["onResize"]>[0]>[0];
@@ -90,7 +92,7 @@ export function ChatSandboxWorkspace({
         fontSize: 12,
         fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
         theme: {
-          background: "#0b0f19",
+          background: TERMINAL_BACKGROUND,
           foreground: "#e5e7eb",
           cursor: "#f9fafb",
         },
@@ -346,7 +348,11 @@ export function ChatSandboxWorkspace({
               </Button>
             </div>
           </div>
-          <div ref={terminalContainerRef} className="min-h-0 flex-1 overflow-hidden rounded-md border bg-black" />
+          <div
+            ref={terminalContainerRef}
+            className="min-h-0 flex-1 overflow-hidden rounded-md border"
+            style={{ backgroundColor: TERMINAL_BACKGROUND }}
+          />
           {sshSession && (
             <div className="mt-2 text-xs text-muted-foreground">
               SSH expires: {new Date(sshSession.ssh.expiresAt).toLocaleString()}

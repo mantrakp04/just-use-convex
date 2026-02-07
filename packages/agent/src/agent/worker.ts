@@ -51,7 +51,6 @@ import {
   buildRetrievalMessage,
   deleteMessageVectors,
   indexMessagesInVectorStore,
-  queryVectorizedMessages,
 } from "./vectorize";
 import { createVectorizeToolkit } from "../tools/vectorize";
 
