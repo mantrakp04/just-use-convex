@@ -89,20 +89,12 @@ export async function buildRetrievalMessage(args: {
   memberId: string | undefined;
   queryText: string;
 }): Promise<UIMessage | null> {
-  const { env, memberId, queryText } = args;
-  const vectorize = env.VECTORIZE_CHAT_MESSAGES;
-  if (!vectorize) return null;
-
-  const [embedding] = await embedTexts([queryText]);
-  if (!embedding) return null;
-
-  const results = await vectorize.query(embedding, {
+  const results = await queryVectorizedMessages({
+    ...args,
     topK: 6,
-    namespace: memberId,
-    returnMetadata: "all",
   });
 
-  if (!results.matches.length) return null;
+  if (!results || !results.matches.length) return null;
 
   const contextLines = results.matches.map((match, index) => {
     const role = typeof match.metadata?.role === "string" ? match.metadata.role : "unknown";
@@ -121,4 +113,27 @@ export async function buildRetrievalMessage(args: {
       },
     ],
   };
+}
+
+export async function queryVectorizedMessages(args: {
+  env: typeof worker.Env;
+  memberId: string | undefined;
+  queryText: string;
+  topK?: number;
+}): Promise<VectorizeMatches | null> {
+  const { env, memberId, queryText, topK = 6 } = args;
+  const vectorize = env.VECTORIZE_CHAT_MESSAGES;
+  if (!vectorize) return null;
+
+  const normalizedQuery = queryText.trim();
+  if (!normalizedQuery) return null;
+
+  const [embedding] = await embedTexts([normalizedQuery]);
+  if (!embedding) return null;
+
+  return vectorize.query(embedding, {
+    topK,
+    namespace: memberId,
+    returnMetadata: "all",
+  });
 }

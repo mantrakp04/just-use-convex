@@ -51,7 +51,9 @@ import {
   buildRetrievalMessage,
   deleteMessageVectors,
   indexMessagesInVectorStore,
+  queryVectorizedMessages,
 } from "./vectorize";
+import { createVectorizeToolkit } from "../tools/vectorize";
 
 export class AgentWorker extends AIChatAgent<typeof worker.Env, AgentArgs> {
   private convexAdapter: ConvexAdapter | null = null;
@@ -142,9 +144,12 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, AgentArgs> {
     this.sandboxBackend = filesystemBackend ?? null;
 
     const subagents = [
-      ...(filesystemBackend ? [createSandboxToolkit(filesystemBackend, {
-        store: this.backgroundTaskStore,
-      })].map((toolkit) =>
+      ...(filesystemBackend ? [
+        createSandboxToolkit(filesystemBackend, {
+          store: this.backgroundTaskStore,
+        }),
+        createVectorizeToolkit(this.env, this.chatDoc?.memberId),
+      ].map((toolkit) =>
         new Agent({
           name: toolkit.name,
           purpose: toolkit.description,
@@ -298,16 +303,12 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, AgentArgs> {
 
   override async persistMessages(messages: UIMessage[]): Promise<void> {
     await super.persistMessages(messages);
-    try {
-      await indexMessagesInVectorStore({
-        env: this.env,
-        agentName: this.name,
-        chatId: this.chatDoc?._id as Id<"chats"> | undefined,
-        messages,
-      });
-    } catch {
-      // silently ignore vectorize indexing failures
-    }
+    await indexMessagesInVectorStore({
+      env: this.env,
+      agentName: this.name,
+      chatId: this.chatDoc?._id as Id<"chats"> | undefined,
+      messages,
+    });
   }
 
   @callable()
