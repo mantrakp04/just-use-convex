@@ -8,6 +8,7 @@ import { SYSTEM_PROMPT, TASK_PROMPT } from "./prompt";
 import { SandboxFilesystemBackend, createSandboxToolkit } from "./tools/sandbox";
 import { createWebSearchToolkit } from "./tools/websearch";
 import { createAskUserToolkit } from "./tools/ask-user";
+import { createVectorizeToolkit } from "./tools/vectorize";
 import { BackgroundTaskStore, withBackgroundTaskTools } from "./utils/toolWBackground";
 import { patchToolWithBackgroundSupport } from "./utils/toolWTimeout";
 import type { worker } from "../alchemy.run";
@@ -128,6 +129,10 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, ChatState> {
     return `m_${hash}`;
   }
 
+  private getVectorNamespace(): string | undefined {
+    return this.chatDoc?.memberId;
+  }
+
   private async saveFilesToSandbox(messages: UIMessage[]): Promise<void> {
     if (!this.sandboxBackend) return;
 
@@ -212,6 +217,7 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, ChatState> {
       vectors.push({
         id,
         values,
+        namespace: this.getVectorNamespace(),
         metadata: meta,
       });
     }
@@ -234,18 +240,8 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, ChatState> {
   private async buildRetrievalMessage(
     queryText: string
   ): Promise<UIMessage | null> {
-    const vectorize = this.env.VECTORIZE_CHAT_MESSAGES;
-    if (!vectorize) return null;
-
-    const [embedding] = await embedTexts([queryText]);
-    if (!embedding) return null;
-    const results = await vectorize.query(embedding, {
-      topK: 6,
-      namespace: this.chatDoc?.memberId,
-      returnMetadata: "all"
-    });
-
-    if (!results.matches.length) return null;
+    const results = await this.queryVectorizedMessages(queryText, 6);
+    if (!results || !results.matches.length) return null;
 
     const contextLines = results.matches.map((match, index) => {
       const role = typeof match.metadata?.role === "string" ? match.metadata.role : "unknown";
@@ -264,6 +260,23 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, ChatState> {
         },
       ],
     };
+  }
+
+  private async queryVectorizedMessages(queryText: string, topK = 6) {
+    const vectorize = this.env.VECTORIZE_CHAT_MESSAGES;
+    if (!vectorize) return null;
+
+    const normalizedQuery = queryText.trim();
+    if (!normalizedQuery) return null;
+
+    const [embedding] = await embedTexts([normalizedQuery]);
+    if (!embedding) return null;
+
+    return vectorize.query(embedding, {
+      topK,
+      namespace: this.getVectorNamespace(),
+      returnMetadata: "all",
+    });
   }
 
   private async generateTitle(userMessage: string): Promise<void> {
@@ -383,6 +396,9 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, ChatState> {
         ...(filesystemBackend ? [createSandboxToolkit(filesystemBackend, { store: this.backgroundTaskStore })] : []),
         createWebSearchToolkit(),
         createAskUserToolkit(),
+        createVectorizeToolkit({
+          queryVectorize: (query, topK) => this.queryVectorizedMessages(query, topK),
+        }),
       ], this.backgroundTaskStore),
       planning: false,
       toolResultEviction: {
