@@ -42,7 +42,15 @@ turbo dev          # Turborepo dev
 // MANDATORY RUN at the end
 bun check-types
 ```
----
+
+### On Finish
+
+Always play `finish.mp3` when done working to notify me. This is mandatory before your final response.
+Run from repo root and do not skip silently on failure.
+```bash
+test -f finish.mp3 && paplay finish.mp3
+```
+If playback fails, explicitly report that in the final response with the command error.
 
 ## Communication Style
 
@@ -54,8 +62,10 @@ User uses casual language ("bro", "dawg", "ugh"). Keep responses terse and actio
 
 ## DO
 
-- **Infer types from existing packages** — never create custom types
+- **Infer and derive types from existing packages** — avoid new types; use `Pick`, `Omit`, and built-in TS utilities
 - **Check existing patterns** in codebase before implementing
+- **Cross-check server/client impact** — if you edit server-side code, verify client usage, and vice versa
+- **Use Context7 for third-party SDK API verification** before integrating
 - **Keep responses terse** and actionable
 - **Use memo with custom comparison** for streaming optimization
 - **Use `useSyncExternalStore`** for shared mutable state
@@ -64,6 +74,8 @@ User uses casual language ("bro", "dawg", "ugh"). Keep responses terse and actio
 - **Use GitHub CLI efficiently** — prefer `gh` subcommands over manual API calls, and reuse existing auth/config without re-authing
 - **Match Tailwind patterns exactly** — don't modify unrelated classes
 - **DRY the code** — reuse existing utilities
+- **Clean up after approach changes** — remove stale paths/helpers when method changes
+- **Split oversized modules** — break complex files into focused, manageable units
 - **Ask clarifying questions** if requirements are unclear
 
 ## DON'T
@@ -148,14 +160,49 @@ File-based TanStack Router:
 
 - always run the typecheck at the end and iterate over it until finished
 - do not shy away from refactoring bad patterns, be proactive
-- avoid defining new types, infer and reuse exsisting types form other files / by importing them from the relevant package
+- avoid defining new types; infer and derive from existing types/packages (use `Pick`/`Omit` and TS utility types)
+- if you change server-side code, always verify affected client-side usage (and vice versa)
+- keep codebase DRY
+- cleanup stale code when changing methods/approach
 - always use convex ents for convex related stuff
 - whenever implementing something for convex, analyze adjecent and relevant files for similar pattern implementation
+- whenever working with external libraries always query context7 for their relevant docs
+- prefer container-query driven chat layout over `isCompact`-style state props
+- keep chat sandbox orchestration state in `apps/web/src/hooks/use-sandbox.ts`
+- keep `createChatSshAccess` and `createChatPreviewAccess` independent and lazily invoked from explicit user actions
+- use 2 minute sandbox access timeouts (SSH + preview URL) unless explicitly overridden
+- do not couple PTY terminal session lifecycle to SSH access `expiresInMinutes`
+- for Daytona sandbox backend code, avoid adding fallback/sanitization guardrails unless explicitly requested
+- chat sandbox is optional; when sandboxId is present, agent must assume sandbox already exists (no agent-side provisioning fallback)
 
 ## Background & Subagents
 
 - for anything related to implementation or research make use of background subagents
 - parallelize as much stuff you can, todos -> each todo is a subagent, make them background whenever possible
+
+## Review Flow
+
+- fetch all PR comments from `greptile`, `cubic`, and `codex`
+- normalize comments into a single actionable list with file + line context
+- spawn a background subagent to validate each comment (real issue vs noise/outdated)
+- fix every validated comment in code, following existing project patterns
+- run required checks after fixes (`bun check-types` minimum)
+- post a concise end summary with:
+  - validated + fixed comments
+  - rejected comments with reason
+  - checks run and status
+
+## Self-Updating Scratchpad
+
+- treat this `AGENTS.md` as a living scratchpad
+- on every new user input, evaluate whether it contains durable guidance worth remembering:
+  - instruction/preference
+  - implementation pattern
+  - workflow/process rule
+  - recurring project context
+- if the input is durable and non-conflicting, update `AGENTS.md` in the same task
+- if it conflicts with existing rules, keep the newest explicit user instruction and remove/adjust the conflicting older rule
+- keep updates concise and structured (avoid noisy or one-off notes)
 
 ## Common Issues
 

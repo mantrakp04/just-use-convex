@@ -158,7 +158,7 @@ export async function UpdateTodo(ctx: zMutationCtx, args: z.infer<typeof types.U
   const patchData: Record<string, unknown> = { updatedAt: Date.now() };
 
   for (const [key, value] of Object.entries(args.patch)) {
-    if (value !== undefined) {
+    if (value !== undefined && value !== null) {
       patchData[key] = value;
     }
   }

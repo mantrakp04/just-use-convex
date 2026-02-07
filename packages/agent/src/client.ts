@@ -1,7 +1,8 @@
 import { embedMany } from "ai";
 import { createOpenRouter } from "@openrouter/ai-sdk-provider";
+import { env } from "@just-use-convex/env/agent";
 
-const apiKey = process.env.OPENROUTER_API_KEY;
+const apiKey = env.OPENROUTER_API_KEY;
 
 const openrouter = createOpenRouter({
   apiKey,

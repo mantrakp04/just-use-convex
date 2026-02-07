@@ -41,7 +41,7 @@ Normal tool calls (without background: true) are automatically awaited.
 Use background for truly long-running operations where you don't need to wait.
 
 Management tools available: list_background_tasks, get_background_task_logs,
-wait_for_background_task, cancel_background_task.
+cancel_background_task.
 
 ## MESSAGE QUEUE
 

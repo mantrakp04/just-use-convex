@@ -12,8 +12,9 @@ import authConfig from "./auth.config";
 import authSchema from "./betterAuth/schema";
 import { v } from "convex/values";
 import type { Doc as BetterAuthDoc } from "./betterAuth/_generated/dataModel";
+import { env } from "@just-use-convex/env/backend";
 
-const EXTERNAL_TOKEN = process.env.EXTERNAL_TOKEN ?? "meow";
+const EXTERNAL_TOKEN = env.EXTERNAL_TOKEN;
 
 type RunMutationCtx = (GenericMutationCtx<DataModel> | GenericActionCtx<DataModel>) & {
   runMutation: GenericMutationCtx<DataModel>["runMutation"];
@@ -23,8 +24,8 @@ const isRunMutationCtx = (ctx: GenericCtx<DataModel>): ctx is RunMutationCtx => 
   return "runMutation" in ctx;
 };
 
-const siteUrl = process.env.SITE_URL ?? "http://localhost:3001";
-const agentUrl = process.env.AGENT_URL ?? "http://localhost:1337";
+const siteUrl = env.SITE_URL;
+const agentUrl = env.AGENT_URL;
 
 export const authComponent = createClient<DataModel, typeof authSchema>(
   components.betterAuth,
@@ -47,7 +48,7 @@ export const createAuthOptions = (ctx: GenericCtx<DataModel>) => {
     plugins: [
       convex({
         authConfig,
-        jwks: process.env.JWKS,
+        jwks: env.JWKS,
         jwksRotateOnTokenGenerationError: true,
         jwt: {
           // Include session fields in the JWT payload so Convex can access them via getUserIdentity

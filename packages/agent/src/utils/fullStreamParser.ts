@@ -7,23 +7,23 @@ export async function parseStreamToUI(
 ): Promise<void> {
   try {
     for await (const part of fullStream) {
-      if (
-        part.subAgentId != null ||
-        part.subAgentName != null ||
-        part.executingAgentId != null ||
-        part.executingAgentName != null ||
-        part.parentAgentId != null ||
-        part.parentAgentName != null ||
-        (Array.isArray(part.agentPath) && part.agentPath.length > 0)
-      ) {
-        writer.write({
-          type: 'data-subagent-stream',
-          data: {
-            ...part,
-            originalType: part.type,
-          },
-        });
-      }
+      // if (
+      //   part.subAgentId != null ||
+      //   part.subAgentName != null ||
+      //   part.executingAgentId != null ||
+      //   part.executingAgentName != null ||
+      //   part.parentAgentId != null ||
+      //   part.parentAgentName != null ||
+      //   (Array.isArray(part.agentPath) && part.agentPath.length > 0)
+      // ) {
+      //   writer.write({
+      //     type: 'data-subagent-stream',
+      //     data: {
+      //       ...part,
+      //       originalType: part.type,
+      //     },
+      //   });
+      // }
 
       switch (part.type) {
         case 'text-start':

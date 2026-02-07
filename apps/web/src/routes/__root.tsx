@@ -11,6 +11,7 @@ import {
   useRouteContext,
 } from "@tanstack/react-router";
 import { TanStackRouterDevtools } from "@tanstack/react-router-devtools";
+import { ReactQueryDevtools } from '@tanstack/react-query-devtools'
 import { createServerFn } from "@tanstack/react-start";
 import { ThemeProvider, ThemeScript } from "@/components/tweakcn-theme-provider";
 import appCss from "../index.css?url";
@@ -98,6 +99,7 @@ function RootDocument() {
               <Outlet />
             </div>
             <Toaster richColors />
+            <ReactQueryDevtools buttonPosition="bottom-right" />
             <TanStackRouterDevtools position="bottom-left" />
             <Scripts />
           </body>
