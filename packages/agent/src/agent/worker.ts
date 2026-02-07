@@ -3,13 +3,13 @@ import { AIChatAgent, type OnChatMessageOptions } from "@cloudflare/ai-chat";
 import {
   createUIMessageStream,
   createUIMessageStreamResponse,
-  isFileUIPart,
   type StreamTextOnFinishCallback,
   type ToolSet,
   type UIMessage,
 } from "ai";
 import {
   AgentRegistry,
+  Agent,
   PlanAgent,
   createPlanningToolkit,
   createVoltAgentObservability,
@@ -37,7 +37,7 @@ import {
   withBackgroundTaskTools,
 } from "../tools/utils/wrapper";
 import { generateTitle } from "./chat-meta";
-import { extractMessageText, filterMessageParts, sanitizeFilename } from "./messages";
+import { extractMessageText, filterMessageParts } from "./messages";
 import type { ChatState, InitArgs } from "./types";
 import {
   buildRetrievalMessage,
@@ -52,50 +52,6 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, ChatState> {
   private sandboxBackend: SandboxFilesystemBackend | null = null;
   private backgroundTaskStore = new BackgroundTaskStore();
   private chatDoc: FunctionReturnType<typeof api.chats.index.get> | null = null;
-
-  private async saveFilesToSandbox(messages: UIMessage[]): Promise<void> {
-    if (!this.sandboxBackend) return;
-
-    const uploadDir = "/workspace/uploads";
-    const escapeShellArg = (arg: string): string =>
-      `'${arg.replace(/'/g, "'\\''")}'`;
-    await this.sandboxBackend.exec(`mkdir -p ${escapeShellArg(uploadDir)}`);
-
-    for (const msg of messages) {
-      for (const part of msg.parts) {
-        if (!isFileUIPart(part)) continue;
-
-        const { url, filename } = part;
-        if (!filename) continue;
-        const safeFilename = sanitizeFilename(filename);
-        const filePath = `${uploadDir}/${safeFilename}`;
-
-        try {
-          if (url.startsWith("data:")) {
-            const base64Match = url.match(/^data:[^;]+;base64,(.+)$/);
-            if (base64Match?.[1]) {
-              const binaryContent = atob(base64Match[1]);
-              await this.sandboxBackend.write(filePath, binaryContent, "binary");
-              continue;
-            }
-          }
-          if (url.startsWith("http://") || url.startsWith("https://")) {
-            if (!url.startsWith("https://")) {
-              throw new Error("Only https URLs are allowed for sandbox downloads");
-            }
-            const result = await this.sandboxBackend.exec(
-              `curl -L --fail --silent --show-error --connect-timeout 5 --max-time 20 --max-filesize 52428800 ${escapeShellArg(url)} -o ${escapeShellArg(filePath)}`
-            );
-            if (!result.success) {
-              throw new Error(`Failed to curl ${url}: ${result.stderr}`);
-            }
-          }
-        } catch {
-          // silently ignore sandbox file save failures
-        }
-      }
-    }
-  }
 
   private async _init(args?: InitArgs): Promise<void> {
     if (args) {
@@ -169,12 +125,23 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, ChatState> {
       : undefined;
     this.sandboxBackend = filesystemBackend ?? null;
 
+    const subagents = [
+      ...(filesystemBackend ? [createSandboxToolkit(filesystemBackend, { store: this.backgroundTaskStore })].map((toolkit) => 
+        new Agent({
+          name: toolkit.name,
+          purpose: toolkit.description,
+          model: createAiClient(this.state.model, this.state.reasoningEffort),
+          instructions: toolkit.instructions ?? '',
+          tools: toolkit.tools,
+        })
+      ) : []),
+    ]
+
     const agent = new PlanAgent({
       name: "Assistant",
       systemPrompt: SYSTEM_PROMPT,
       model: createAiClient(this.state.model, this.state.reasoningEffort),
       tools: withBackgroundTaskTools([
-        ...(filesystemBackend ? [createSandboxToolkit(filesystemBackend, { store: this.backgroundTaskStore })] : []),
         createWebSearchToolkit(),
         createAskUserToolkit(),
       ], this.backgroundTaskStore),
@@ -203,6 +170,7 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, ChatState> {
           },
         },
       },
+      subagents,
       filesystem: false,
       maxSteps: 100,
       ...(this.env.VOLTAGENT_PUBLIC_KEY && this.env.VOLTAGENT_SECRET_KEY ? {
@@ -231,6 +199,10 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, ChatState> {
         ].join("\n"),
       }),
     ]);
+
+    for (const subagent of subagents) {
+      agent.addSubAgent(subagent);
+    }
 
     this.planAgent = agent;
     await this._patchAgent();
@@ -384,7 +356,7 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, ChatState> {
         this.state.inputModalities
       );
 
-      this.saveFilesToSandbox(messagesForSandbox);
+      this.sandboxBackend?.saveFilesToSandbox(messagesForSandbox);
 
       const lastUserIdx = messagesForAgent.findLastIndex((m) => m.role === "user");
       const retrievalMessage = lastUserIdx !== -1

@@ -1,4 +1,5 @@
 import { Daytona } from "@daytonaio/sdk";
+import { isFileUIPart, type UIMessage } from "ai";
 import type {
   EditResult,
   FileData,
@@ -11,8 +12,19 @@ import type { worker } from "../../../alchemy.run";
 import { escapeShellArg } from "./shared";
 
 export class SandboxFilesystemBackend implements FilesystemBackend {
+  private static readonly LSP_IDLE_TTL_MS = 10 * 60 * 1000;
   private static daytonaClient: Daytona | null = null;
   private static sandboxByName = new Map<string, ReturnType<Daytona["get"]>>();
+  private static lspServerBySandbox = new Map<
+    string,
+    Map<
+      string,
+      {
+        server: Awaited<ReturnType<Awaited<ReturnType<Daytona["get"]>>["createLspServer"]>>;
+        lastUsedAt: number;
+      }
+    >
+  >();
   private env: typeof worker.Env;
   private sandboxName: string;
   public rootDir: string;
@@ -24,10 +36,14 @@ export class SandboxFilesystemBackend implements FilesystemBackend {
   }
 
   private resolvePath(path: string): string {
-    if (path.startsWith("/")) {
-      return path;
+    const normalizedInput = path.trim() || ".";
+    if (normalizedInput === "/" || normalizedInput === ".") {
+      return this.rootDir;
     }
-    return `${this.rootDir}/${path}`.replace(/\/+/g, "/");
+    if (normalizedInput.startsWith("/")) {
+      return normalizedInput.replace(/\/+/g, "/");
+    }
+    return `${this.rootDir}/${normalizedInput}`.replace(/\/+/g, "/");
   }
 
   private getDaytonaClient(): Daytona {
@@ -78,64 +94,147 @@ export class SandboxFilesystemBackend implements FilesystemBackend {
     }
   }
 
-  private async runCommand(command: string, options?: { cwd?: string; timeoutSeconds?: number }) {
-    const sandbox = await this.getSandbox();
-    const cwd = options?.cwd ? this.resolvePath(options.cwd) : this.rootDir;
-    const timeoutSeconds = options?.timeoutSeconds
-      ? Math.max(1, Math.ceil(options.timeoutSeconds))
-      : undefined;
-    const response = await sandbox.process.executeCommand(command, cwd, undefined, timeoutSeconds);
-    const exitCode = response.exitCode ?? 0;
-    const result = response.result ?? "";
-    const stdout = typeof result === "string" ? result : JSON.stringify(result);
-    const stderr = exitCode === 0 ? "" : stdout;
+  private getLspCache() {
+    const cached = SandboxFilesystemBackend.lspServerBySandbox.get(this.sandboxName);
+    if (cached) {
+      return cached;
+    }
 
-    return {
-      success: exitCode === 0,
-      stdout,
-      stderr,
-      exitCode,
-    };
+    const created = new Map<
+      string,
+      {
+        server: Awaited<ReturnType<Awaited<ReturnType<Daytona["get"]>>["createLspServer"]>>;
+        lastUsedAt: number;
+      }
+    >();
+    SandboxFilesystemBackend.lspServerBySandbox.set(this.sandboxName, created);
+    return created;
+  }
+
+  private normalizeTimestamp(timestamp?: string): string {
+    if (!timestamp) {
+      return new Date().toISOString();
+    }
+    const parsed = new Date(timestamp);
+    if (Number.isNaN(parsed.getTime())) {
+      return new Date().toISOString();
+    }
+    return parsed.toISOString();
+  }
+
+  private normalizeReturnedPath(path: string, basePath: string): string {
+    if (path.startsWith("/")) {
+      return path.replace(/\/+/g, "/");
+    }
+    return `${basePath}/${path}`.replace(/\/+/g, "/");
+  }
+
+  private joinPath(basePath: string, childName: string): string {
+    const cleanBase = basePath.endsWith("/") && basePath !== "/" ? basePath.slice(0, -1) : basePath;
+    return `${cleanBase}/${childName}`.replace(/\/+/g, "/");
+  }
+
+  private getParentDir(path: string): string {
+    const index = path.lastIndexOf("/");
+    if (index <= 0) {
+      return "/";
+    }
+    return path.slice(0, index) || "/";
+  }
+
+  private async getFileDetailsOrNull(
+    sandbox: Awaited<ReturnType<Daytona["get"]>>,
+    path: string
+  ) {
+    try {
+      return await sandbox.fs.getFileDetails(path);
+    } catch {
+      return null;
+    }
+  }
+
+  private async ensureDirectory(
+    sandbox: Awaited<ReturnType<Daytona["get"]>>,
+    directoryPath: string
+  ): Promise<void> {
+    if (!directoryPath || directoryPath === "/") {
+      return;
+    }
+
+    const segments = directoryPath.split("/").filter(Boolean);
+    let currentPath = "";
+
+    for (const segment of segments) {
+      currentPath = `${currentPath}/${segment}`.replace(/\/+/g, "/");
+      const details = await this.getFileDetailsOrNull(sandbox, currentPath);
+
+      if (details?.isDir) {
+        continue;
+      }
+      if (details && !details.isDir) {
+        throw new Error(`Path exists and is not a directory: ${currentPath}`);
+      }
+
+      try {
+        await sandbox.fs.createFolder(currentPath, "755");
+      } catch {
+        const refreshed = await this.getFileDetailsOrNull(sandbox, currentPath);
+        if (!refreshed?.isDir) {
+          throw new Error(`Failed to create directory: ${currentPath}`);
+        }
+      }
+    }
+  }
+
+  private async cleanupIdleLspServers(): Promise<void> {
+    const cache = this.getLspCache();
+    const now = Date.now();
+
+    for (const [key, entry] of cache) {
+      if (now - entry.lastUsedAt < SandboxFilesystemBackend.LSP_IDLE_TTL_MS) {
+        continue;
+      }
+      await entry.server.stop().catch(() => {});
+      cache.delete(key);
+    }
+  }
+
+  private buildLspCacheKey(languageId: string, projectPath: string): string {
+    return `${languageId.trim().toLowerCase()}::${projectPath}`;
+  }
+
+  private async getOrCreateLspServer(languageId: string, projectPath: string) {
+    await this.cleanupIdleLspServers();
+
+    const cache = this.getLspCache();
+    const key = this.buildLspCacheKey(languageId, projectPath);
+    const existing = cache.get(key);
+    if (existing) {
+      existing.lastUsedAt = Date.now();
+      return existing.server;
+    }
+
+    const sandbox = await this.getSandbox();
+    const server = await sandbox.createLspServer(languageId, projectPath);
+    await server.start();
+    cache.set(key, { server, lastUsedAt: Date.now() });
+
+    return server;
   }
 
   async lsInfo(path: string): Promise<FileInfo[]> {
     const resolvedPath = this.resolvePath(path);
 
     try {
-      const result = await this.runCommand(
-        `ls -la --time-style=+%Y-%m-%dT%H:%M:%S ${escapeShellArg(resolvedPath)} 2>/dev/null || echo "[]"`
-      );
+      const sandbox = await this.getSandbox();
+      const files = await sandbox.fs.listFiles(resolvedPath);
 
-      if (!result.success || !result.stdout.trim()) {
-        return [];
-      }
-
-      const lines = result.stdout.trim().split("\n");
-      const files: FileInfo[] = [];
-
-      for (const line of lines) {
-        if (line.startsWith("total") || !line.trim()) continue;
-
-        const parts = line.split(/\s+/);
-        if (parts.length < 7) continue;
-
-        const permissions = parts[0] ?? "";
-        const sizeStr = parts[4];
-        const size = sizeStr ? parseInt(sizeStr, 10) : NaN;
-        const date = parts[5] ?? "";
-        const name = parts.slice(6).join(" ");
-
-        if (name === "." || name === "..") continue;
-
-        files.push({
-          path: `${resolvedPath}/${name}`.replace(/\/+/g, "/"),
-          is_dir: permissions.startsWith("d"),
-          size: isNaN(size) ? undefined : size,
-          modified_at: date || undefined,
-        });
-      }
-
-      return files;
+      return files.map((file) => ({
+        path: this.joinPath(resolvedPath, file.name),
+        is_dir: file.isDir,
+        size: file.size,
+        modified_at: file.modTime ? this.normalizeTimestamp(file.modTime) : undefined,
+      }));
     } catch {
       return [];
     }
@@ -143,46 +242,31 @@ export class SandboxFilesystemBackend implements FilesystemBackend {
 
   async read(filePath: string, offset?: number, limit?: number): Promise<string> {
     const resolvedPath = this.resolvePath(filePath);
+    const sandbox = await this.getSandbox();
+    const content = (await sandbox.fs.downloadFile(resolvedPath)).toString("utf-8");
 
-    let cmd = `cat ${escapeShellArg(resolvedPath)}`;
-    if (offset !== undefined || limit !== undefined) {
-      const start = (offset || 0) + 1;
-      if (limit !== undefined) {
-        const end = start + limit - 1;
-        cmd = `sed -n '${start},${end}p' ${escapeShellArg(resolvedPath)}`;
-      } else {
-        cmd = `sed -n '${start},$p' ${escapeShellArg(resolvedPath)}`;
-      }
+    if (offset === undefined && limit === undefined) {
+      return content;
     }
 
-    const result = await this.runCommand(cmd);
-
-    if (!result.success) {
-      throw new Error(`Failed to read file: ${result.stderr}`);
-    }
-
-    return result.stdout;
+    const lines = content.split("\n");
+    const start = Math.max(0, offset ?? 0);
+    const end = limit === undefined ? lines.length : start + Math.max(0, limit);
+    return lines.slice(start, end).join("\n");
   }
 
   async readRaw(filePath: string): Promise<FileData> {
     const resolvedPath = this.resolvePath(filePath);
-
-    const [contentResult, statResult] = await Promise.all([
-      this.runCommand(`cat ${escapeShellArg(resolvedPath)}`),
-      this.runCommand(
-        `stat -c '%Y' ${escapeShellArg(resolvedPath)} 2>/dev/null || echo "0"`
-      ),
+    const sandbox = await this.getSandbox();
+    const [rawBuffer, details] = await Promise.all([
+      sandbox.fs.downloadFile(resolvedPath),
+      sandbox.fs.getFileDetails(resolvedPath).catch(() => null),
     ]);
-
-    if (!contentResult.success) {
-      throw new Error(`Failed to read file: ${contentResult.stderr}`);
-    }
-
-    const modifiedTimestamp = parseInt(statResult.stdout.trim(), 10) || 0;
-    const modifiedAt = new Date(modifiedTimestamp * 1000).toISOString();
+    const content = rawBuffer.toString("utf-8");
+    const modifiedAt = this.normalizeTimestamp(details?.modTime);
 
     return {
-      content: contentResult.stdout.split("\n"),
+      content: content.split("\n"),
       created_at: modifiedAt,
       modified_at: modifiedAt,
     };
@@ -190,75 +274,83 @@ export class SandboxFilesystemBackend implements FilesystemBackend {
 
   async grepRaw(pattern: string, path?: string | null, glob?: string | null): Promise<GrepMatch[] | string> {
     const searchPath = path ? this.resolvePath(path) : this.rootDir;
+    try {
+      const sandbox = await this.getSandbox();
+      const matches = await sandbox.fs.findFiles(searchPath, pattern);
+      if (!matches.length) {
+        return [];
+      }
 
-    let cmd: string;
-    if (glob) {
-      cmd = `find ${escapeShellArg(searchPath)} -type f -name ${escapeShellArg(glob)} -exec grep -nH ${escapeShellArg(pattern)} {} \\; 2>/dev/null || true`;
-    } else {
-      cmd = `grep -rnH ${escapeShellArg(pattern)} ${escapeShellArg(searchPath)} 2>/dev/null || true`;
-    }
+      if (!glob) {
+        return matches.map((match) => ({
+          path: this.normalizeReturnedPath(match.file, searchPath),
+          line: match.line,
+          text: match.content,
+        }));
+      }
 
-    const result = await this.runCommand(cmd);
+      const globMatches = await sandbox.fs.searchFiles(searchPath, glob);
+      const allowedPaths = new Set(
+        globMatches.files.map((file) => this.normalizeReturnedPath(file, searchPath))
+      );
 
-    if (!result.stdout.trim()) {
+      return matches
+        .map((match) => ({
+          path: this.normalizeReturnedPath(match.file, searchPath),
+          line: match.line,
+          text: match.content,
+        }))
+        .filter((match) => allowedPaths.has(match.path));
+    } catch {
       return [];
     }
-
-    const matches: GrepMatch[] = [];
-    const lines = result.stdout.trim().split("\n");
-
-    for (const line of lines) {
-      const match = line.match(/^(.+?):(\d+):(.*)$/);
-      if (match && match[1] && match[2] && match[3] !== undefined) {
-        matches.push({
-          path: match[1],
-          line: parseInt(match[2], 10),
-          text: match[3],
-        });
-      }
-    }
-
-    return matches;
   }
 
   async globInfo(pattern: string, path?: string): Promise<FileInfo[]> {
     const searchPath = path ? this.resolvePath(path) : this.rootDir;
+    try {
+      const sandbox = await this.getSandbox();
+      const results = await sandbox.fs.searchFiles(searchPath, pattern);
+      if (!results.files.length) {
+        return [];
+      }
 
-    const result = await this.runCommand(
-      `find ${escapeShellArg(searchPath)} -name ${escapeShellArg(pattern)} -printf '%p\\t%s\\t%T@\\t%y\\n' 2>/dev/null || true`
-    );
+      const detailedResults = await Promise.all(
+        results.files.map(async (filePath) => {
+          const resolvedFilePath = this.normalizeReturnedPath(filePath, searchPath);
+          const details = await sandbox.fs.getFileDetails(resolvedFilePath).catch(() => null);
+          return {
+            path: resolvedFilePath,
+            is_dir: details?.isDir,
+            size: details?.size,
+            modified_at: details?.modTime
+              ? this.normalizeTimestamp(details.modTime)
+              : undefined,
+          } satisfies FileInfo;
+        })
+      );
 
-    if (!result.stdout.trim()) {
+      return detailedResults;
+    } catch {
       return [];
     }
-
-    const files: FileInfo[] = [];
-    const lines = result.stdout.trim().split("\n");
-
-    for (const line of lines) {
-      const [filePath, size, mtime, type] = line.split("\t");
-      if (!filePath) continue;
-
-      files.push({
-        path: filePath,
-        is_dir: type === "d",
-        size: size ? parseInt(size, 10) : undefined,
-        modified_at: mtime
-          ? new Date(parseFloat(mtime) * 1000).toISOString()
-          : undefined,
-      });
-    }
-
-    return files;
   }
 
   async write(filePath: string, content: string, encoding: BufferEncoding = "utf-8"): Promise<WriteResult> {
     const resolvedPath = this.resolvePath(filePath);
 
     try {
-      const parentDir = resolvedPath.substring(0, resolvedPath.lastIndexOf("/"));
-      await this.runCommand(`mkdir -p ${escapeShellArg(parentDir)}`);
       const sandbox = await this.getSandbox();
+      const existing = await this.getFileDetailsOrNull(sandbox, resolvedPath);
+      if (existing) {
+        return {
+          error: `Cannot write to ${resolvedPath} because it already exists. Read and then make an edit, or write to a new path.`,
+          path: resolvedPath,
+        };
+      }
+
+      const parentDir = this.getParentDir(resolvedPath);
+      await this.ensureDirectory(sandbox, parentDir);
       await sandbox.fs.uploadFile(Buffer.from(content, encoding), resolvedPath);
 
       const fileData = await this.readRaw(filePath);
@@ -323,6 +415,210 @@ export class SandboxFilesystemBackend implements FilesystemBackend {
     return string.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   }
 
+  async gitClone(params: {
+    url: string;
+    path: string;
+    branch?: string;
+    commitId?: string;
+    username?: string;
+    password?: string;
+  }) {
+    const sandbox = await this.getSandbox();
+    const targetPath = this.resolvePath(params.path);
+    await sandbox.git.clone(
+      params.url,
+      targetPath,
+      params.branch,
+      params.commitId,
+      params.username,
+      params.password
+    );
+    return {
+      success: true,
+      path: targetPath,
+    };
+  }
+
+  async gitStatus(path: string) {
+    const sandbox = await this.getSandbox();
+    return sandbox.git.status(this.resolvePath(path));
+  }
+
+  async gitBranches(path: string) {
+    const sandbox = await this.getSandbox();
+    return sandbox.git.branches(this.resolvePath(path));
+  }
+
+  async gitCreateBranch(path: string, name: string) {
+    const sandbox = await this.getSandbox();
+    await sandbox.git.createBranch(this.resolvePath(path), name);
+    return {
+      success: true,
+    };
+  }
+
+  async gitDeleteBranch(path: string, name: string) {
+    const sandbox = await this.getSandbox();
+    await sandbox.git.deleteBranch(this.resolvePath(path), name);
+    return {
+      success: true,
+    };
+  }
+
+  async gitCheckoutBranch(path: string, branch: string) {
+    const sandbox = await this.getSandbox();
+    await sandbox.git.checkoutBranch(this.resolvePath(path), branch);
+    return {
+      success: true,
+    };
+  }
+
+  async gitAdd(path: string, files: string[]) {
+    const sandbox = await this.getSandbox();
+    await sandbox.git.add(this.resolvePath(path), files);
+    return {
+      success: true,
+    };
+  }
+
+  async gitCommit(path: string, params: {
+    message: string;
+    author: string;
+    email: string;
+    allowEmpty?: boolean;
+  }) {
+    const sandbox = await this.getSandbox();
+    return sandbox.git.commit(
+      this.resolvePath(path),
+      params.message,
+      params.author,
+      params.email,
+      params.allowEmpty
+    );
+  }
+
+  async gitPush(path: string, username?: string, password?: string) {
+    const sandbox = await this.getSandbox();
+    await sandbox.git.push(this.resolvePath(path), username, password);
+    return {
+      success: true,
+    };
+  }
+
+  async gitPull(path: string, username?: string, password?: string) {
+    const sandbox = await this.getSandbox();
+    await sandbox.git.pull(this.resolvePath(path), username, password);
+    return {
+      success: true,
+    };
+  }
+
+  async lspStart(languageId: string, projectPath: string) {
+    const resolvedProjectPath = this.resolvePath(projectPath);
+    await this.getOrCreateLspServer(languageId, resolvedProjectPath);
+    return {
+      languageId,
+      projectPath: resolvedProjectPath,
+      started: true,
+    };
+  }
+
+  async lspStop(languageId: string, projectPath: string) {
+    const resolvedProjectPath = this.resolvePath(projectPath);
+    const key = this.buildLspCacheKey(languageId, resolvedProjectPath);
+    const cache = this.getLspCache();
+    const entry = cache.get(key);
+    if (!entry) {
+      return {
+        languageId,
+        projectPath: resolvedProjectPath,
+        stopped: false,
+        running: false,
+      };
+    }
+
+    await entry.server.stop();
+    cache.delete(key);
+
+    return {
+      languageId,
+      projectPath: resolvedProjectPath,
+      stopped: true,
+      running: false,
+    };
+  }
+
+  async lspCompletions(params: {
+    languageId: string;
+    projectPath: string;
+    filePath: string;
+    line: number;
+    character: number;
+  }) {
+    const resolvedProjectPath = this.resolvePath(params.projectPath);
+    const resolvedFilePath = this.resolvePath(params.filePath);
+    const server = await this.getOrCreateLspServer(params.languageId, resolvedProjectPath);
+    await server.didOpen(resolvedFilePath).catch(() => {});
+    return server.completions(resolvedFilePath, {
+      line: params.line,
+      character: params.character,
+    });
+  }
+
+  async lspDocumentSymbols(languageId: string, projectPath: string, filePath: string) {
+    const resolvedProjectPath = this.resolvePath(projectPath);
+    const resolvedFilePath = this.resolvePath(filePath);
+    const server = await this.getOrCreateLspServer(languageId, resolvedProjectPath);
+    await server.didOpen(resolvedFilePath).catch(() => {});
+    return server.documentSymbols(resolvedFilePath);
+  }
+
+  async lspSandboxSymbols(languageId: string, projectPath: string, query: string) {
+    const resolvedProjectPath = this.resolvePath(projectPath);
+    const server = await this.getOrCreateLspServer(languageId, resolvedProjectPath);
+    return server.sandboxSymbols(query);
+  }
+
+  async saveFilesToSandbox(messages: UIMessage[]): Promise<void> {
+    const uploadDir = "/workspace/uploads";
+    await this.exec(`mkdir -p ${escapeShellArg(uploadDir)}`);
+
+    for (const msg of messages) {
+      for (const part of msg.parts) {
+        if (!isFileUIPart(part)) continue;
+
+        const { url, filename } = part;
+        if (!filename) continue;
+        const safeFilename = this.sanitizeFilename(filename);
+        const filePath = `${uploadDir}/${safeFilename}`;
+
+        try {
+          if (url.startsWith("data:")) {
+            const base64Match = url.match(/^data:[^;]+;base64,(.+)$/);
+            if (base64Match?.[1]) {
+              const binaryContent = atob(base64Match[1]);
+              await this.write(filePath, binaryContent, "binary");
+              continue;
+            }
+          }
+          if (url.startsWith("http://") || url.startsWith("https://")) {
+            if (!url.startsWith("https://")) {
+              throw new Error("Only https URLs are allowed for sandbox downloads");
+            }
+            const result = await this.exec(
+              `curl -L --fail --silent --show-error --connect-timeout 5 --max-time 20 --max-filesize 52428800 ${escapeShellArg(url)} -o ${escapeShellArg(filePath)}`
+            );
+            if (!result.success) {
+              throw new Error(`Failed to curl ${url}: ${result.stderr}`);
+            }
+          }
+        } catch {
+          // silently ignore sandbox file save failures
+        }
+      }
+    }
+  }
+
   async exec(command: string, options?: {
     timeout?: number;
     cwd?: string;
@@ -334,28 +630,21 @@ export class SandboxFilesystemBackend implements FilesystemBackend {
     stderr: string;
     exitCode: number;
   }> {
+    const sandbox = await this.getSandbox();
     const cwd = options?.cwd ? this.resolvePath(options.cwd) : this.rootDir;
     const cmd = `cd ${escapeShellArg(cwd)} && ${command}`;
+    const timeoutMs = options?.timeout
+      ? Math.max(1, Math.ceil(options.timeout))
+      : undefined;
     const streamLogs = options?.streamLogs;
-
-    if (!streamLogs) {
-      const result = await this.runCommand(cmd, { timeoutSeconds: options?.timeout });
-
-      return {
-        success: result.success,
-        stdout: result.stdout,
-        stderr: result.stderr,
-        exitCode: result.success ? 0 : 1,
-      };
-    }
-
-    const sandbox = await this.getSandbox();
     const sessionId = `exec_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
     await sandbox.process.createSession(sessionId);
 
     let stdout = "";
     let stderr = "";
     let commandId: string | undefined;
+    let logStreamPromise: Promise<void> | undefined;
+    const startedAt = Date.now();
 
     try {
       const runResponse = await sandbox.process.executeSessionCommand(sessionId, {
@@ -367,10 +656,10 @@ export class SandboxFilesystemBackend implements FilesystemBackend {
       if (!commandId) {
         const fallbackStdout = runResponse.stdout ?? "";
         const fallbackStderr = runResponse.stderr ?? "";
-        if (fallbackStdout) {
+        if (fallbackStdout && streamLogs) {
           streamLogs({ type: "stdout", message: fallbackStdout });
         }
-        if (fallbackStderr) {
+        if (fallbackStderr && streamLogs) {
           streamLogs({ type: "stderr", message: fallbackStderr });
         }
         return {
@@ -381,28 +670,28 @@ export class SandboxFilesystemBackend implements FilesystemBackend {
         };
       }
 
-      const logStreamPromise = sandbox.process
-        .getSessionCommandLogs(
-          sessionId,
-          commandId,
-          (chunk) => {
-            if (!chunk) return;
-            stdout += chunk;
-            streamLogs({ type: "stdout", message: chunk });
-          },
-          (chunk) => {
-            if (!chunk) return;
-            stderr += chunk;
-            streamLogs({ type: "stderr", message: chunk });
-          }
-        )
-        .catch((error) => {
-          const message = error instanceof Error ? error.message : String(error);
-          streamLogs({ type: "error", message: `log stream error: ${message}` });
-        });
+      if (streamLogs) {
+        logStreamPromise = sandbox.process
+          .getSessionCommandLogs(
+            sessionId,
+            commandId,
+            (chunk) => {
+              if (!chunk) return;
+              stdout += chunk;
+              streamLogs({ type: "stdout", message: chunk });
+            },
+            (chunk) => {
+              if (!chunk) return;
+              stderr += chunk;
+              streamLogs({ type: "stderr", message: chunk });
+            }
+          )
+          .catch((error) => {
+            const message = error instanceof Error ? error.message : String(error);
+            streamLogs({ type: "error", message: `log stream error: ${message}` });
+          });
+      }
 
-      const timeoutMs = options?.timeout ? Math.max(1, Math.ceil(options.timeout * 1000)) : undefined;
-      const startedAt = Date.now();
       let exitCode = 1;
 
       while (true) {
@@ -422,7 +711,15 @@ export class SandboxFilesystemBackend implements FilesystemBackend {
         await new Promise((resolve) => setTimeout(resolve, 200));
       }
 
-      await logStreamPromise;
+      if (streamLogs) {
+        await logStreamPromise;
+      } else {
+        const logs = await sandbox.process
+          .getSessionCommandLogs(sessionId, commandId)
+          .catch(() => null);
+        stdout = logs?.stdout ?? "";
+        stderr = logs?.stderr ?? "";
+      }
 
       return {
         success: exitCode === 0,
@@ -433,5 +730,11 @@ export class SandboxFilesystemBackend implements FilesystemBackend {
     } finally {
       await sandbox.process.deleteSession(sessionId).catch(() => {});
     }
+  }
+
+  private sanitizeFilename(filename: string): string {
+    const base = filename.split(/[\\/]/).pop() ?? "file";
+    const sanitized = base.replace(/[\u0000-\u001F\u007F]/g, "_").trim();
+    return sanitized.length > 0 ? sanitized : "file";
   }
 }

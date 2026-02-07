@@ -180,11 +180,270 @@ Important:
     },
   });
 
+  const gitCloneTool = createWrappedTool({
+    name: "git_clone",
+    description: "Clone a Git repository using Daytona Git APIs",
+    parameters: z.object({
+      url: z.string().describe("Repository URL"),
+      path: z.string().describe("Target path where the repository should be cloned"),
+      branch: z.string().optional().describe("Optional branch name to clone"),
+      commit_id: z.string().optional().describe("Optional commit id to checkout after clone"),
+      username: z.string().optional().describe("Optional Git username for authentication"),
+      password: z.string().optional().describe("Optional Git password/token for authentication"),
+    }),
+    store,
+    toolCallConfig: {
+      maxDuration: 15 * 60 * 1000,
+      allowAgentSetDuration: true,
+      allowBackground: true,
+    },
+    execute: async (args) => {
+      return backend.gitClone({
+        url: args.url as string,
+        path: args.path as string,
+        branch: args.branch as string | undefined,
+        commitId: args.commit_id as string | undefined,
+        username: args.username as string | undefined,
+        password: args.password as string | undefined,
+      });
+    },
+  });
+
+  const gitStatusTool = createTool({
+    name: "git_status",
+    description: "Get Git status for a repository",
+    parameters: z.object({
+      path: z.string().describe("Path to the repository root"),
+    }),
+    execute: async ({ path }) => {
+      return backend.gitStatus(path);
+    },
+  });
+
+  const gitBranchesTool = createTool({
+    name: "git_branches",
+    description: "List Git branches for a repository",
+    parameters: z.object({
+      path: z.string().describe("Path to the repository root"),
+    }),
+    execute: async ({ path }) => {
+      return backend.gitBranches(path);
+    },
+  });
+
+  const gitCreateBranchTool = createTool({
+    name: "git_create_branch",
+    description: "Create a Git branch",
+    parameters: z.object({
+      path: z.string().describe("Path to the repository root"),
+      name: z.string().describe("Branch name to create"),
+    }),
+    execute: async ({ path, name }) => {
+      return backend.gitCreateBranch(path, name);
+    },
+  });
+
+  const gitDeleteBranchTool = createTool({
+    name: "git_delete_branch",
+    description: "Delete a Git branch",
+    parameters: z.object({
+      path: z.string().describe("Path to the repository root"),
+      name: z.string().describe("Branch name to delete"),
+    }),
+    execute: async ({ path, name }) => {
+      return backend.gitDeleteBranch(path, name);
+    },
+  });
+
+  const gitCheckoutBranchTool = createTool({
+    name: "git_checkout_branch",
+    description: "Checkout a Git branch",
+    parameters: z.object({
+      path: z.string().describe("Path to the repository root"),
+      branch: z.string().describe("Branch name to checkout"),
+    }),
+    execute: async ({ path, branch }) => {
+      return backend.gitCheckoutBranch(path, branch);
+    },
+  });
+
+  const gitAddTool = createTool({
+    name: "git_add",
+    description: "Stage files in a Git repository",
+    parameters: z.object({
+      path: z.string().describe("Path to the repository root"),
+      files: z.array(z.string()).min(1).describe("List of file paths to stage"),
+    }),
+    execute: async ({ path, files }) => {
+      return backend.gitAdd(path, files);
+    },
+  });
+
+  const gitCommitTool = createTool({
+    name: "git_commit",
+    description: "Create a Git commit from staged changes",
+    parameters: z.object({
+      path: z.string().describe("Path to the repository root"),
+      message: z.string().describe("Commit message"),
+      author: z.string().describe("Author name"),
+      email: z.string().describe("Author email"),
+      allow_empty: z.boolean().default(false).describe("Allow empty commit"),
+    }),
+    execute: async ({ path, message, author, email, allow_empty }) => {
+      return backend.gitCommit(path, {
+        message,
+        author,
+        email,
+        allowEmpty: allow_empty,
+      });
+    },
+  });
+
+  const gitPushTool = createWrappedTool({
+    name: "git_push",
+    description: "Push commits to the remote repository using Daytona Git APIs",
+    parameters: z.object({
+      path: z.string().describe("Path to the repository root"),
+      username: z.string().optional().describe("Optional Git username"),
+      password: z.string().optional().describe("Optional Git password/token"),
+    }),
+    store,
+    toolCallConfig: {
+      maxDuration: 10 * 60 * 1000,
+      allowAgentSetDuration: true,
+      allowBackground: true,
+    },
+    execute: async (args) => {
+      return backend.gitPush(
+        args.path as string,
+        args.username as string | undefined,
+        args.password as string | undefined
+      );
+    },
+  });
+
+  const gitPullTool = createWrappedTool({
+    name: "git_pull",
+    description: "Pull updates from the remote repository using Daytona Git APIs",
+    parameters: z.object({
+      path: z.string().describe("Path to the repository root"),
+      username: z.string().optional().describe("Optional Git username"),
+      password: z.string().optional().describe("Optional Git password/token"),
+    }),
+    store,
+    toolCallConfig: {
+      maxDuration: 10 * 60 * 1000,
+      allowAgentSetDuration: true,
+      allowBackground: true,
+    },
+    execute: async (args) => {
+      return backend.gitPull(
+        args.path as string,
+        args.username as string | undefined,
+        args.password as string | undefined
+      );
+    },
+  });
+
+  const lspStartTool = createTool({
+    name: "lsp_start",
+    description: "Start or reuse a Language Server for a project",
+    parameters: z.object({
+      language_id: z.enum(["typescript", "javascript", "python"]).describe("LSP language id"),
+      project_path: z.string().describe("Project root path for the LSP server"),
+    }),
+    execute: async ({ language_id, project_path }) => {
+      return backend.lspStart(language_id, project_path);
+    },
+  });
+
+  const lspStopTool = createTool({
+    name: "lsp_stop",
+    description: "Stop a running Language Server for a project",
+    parameters: z.object({
+      language_id: z.enum(["typescript", "javascript", "python"]).describe("LSP language id"),
+      project_path: z.string().describe("Project root path for the LSP server"),
+    }),
+    execute: async ({ language_id, project_path }) => {
+      return backend.lspStop(language_id, project_path);
+    },
+  });
+
+  const lspCompletionsTool = createTool({
+    name: "lsp_completions",
+    description: "Get code completion suggestions from Language Server Protocol",
+    parameters: z.object({
+      language_id: z.enum(["typescript", "javascript", "python"]).describe("LSP language id"),
+      project_path: z.string().describe("Project root path for the LSP server"),
+      file_path: z.string().describe("File path for completion"),
+      line: z.number().int().min(0).describe("Zero-based line number"),
+      character: z.number().int().min(0).describe("Zero-based character index"),
+    }),
+    execute: async ({ language_id, project_path, file_path, line, character }) => {
+      return backend.lspCompletions({
+        languageId: language_id,
+        projectPath: project_path,
+        filePath: file_path,
+        line,
+        character,
+      });
+    },
+  });
+
+  const lspDocumentSymbolsTool = createTool({
+    name: "lsp_document_symbols",
+    description: "Get symbols for a file from Language Server Protocol",
+    parameters: z.object({
+      language_id: z.enum(["typescript", "javascript", "python"]).describe("LSP language id"),
+      project_path: z.string().describe("Project root path for the LSP server"),
+      file_path: z.string().describe("File path to inspect"),
+    }),
+    execute: async ({ language_id, project_path, file_path }) => {
+      return backend.lspDocumentSymbols(language_id, project_path, file_path);
+    },
+  });
+
+  const lspSandboxSymbolsTool = createTool({
+    name: "lsp_sandbox_symbols",
+    description: "Search symbols across the sandbox using Language Server Protocol",
+    parameters: z.object({
+      language_id: z.enum(["typescript", "javascript", "python"]).describe("LSP language id"),
+      project_path: z.string().describe("Project root path for the LSP server"),
+      query: z.string().describe("Symbol query"),
+    }),
+    execute: async ({ language_id, project_path, query }) => {
+      return backend.lspSandboxSymbols(language_id, project_path, query);
+    },
+  });
+
   return createToolkit({
     name: "sandbox",
     description: "Sandbox tools for executing commands and managing files in an isolated environment",
     instructions: SANDBOX_INSTRUCTIONS(backend.rootDir),
-    tools: [bashTool, lsTool, readFileTool, writeFileTool, editFileTool, globTool, grepTool],
+    tools: [
+      bashTool,
+      lsTool,
+      readFileTool,
+      writeFileTool,
+      editFileTool,
+      globTool,
+      grepTool,
+      gitCloneTool,
+      gitStatusTool,
+      gitBranchesTool,
+      gitCreateBranchTool,
+      gitDeleteBranchTool,
+      gitCheckoutBranchTool,
+      gitAddTool,
+      gitCommitTool,
+      gitPushTool,
+      gitPullTool,
+      lspStartTool,
+      lspStopTool,
+      lspCompletionsTool,
+      lspDocumentSymbolsTool,
+      lspSandboxSymbolsTool,
+    ],
   });
 }
 
@@ -192,13 +451,15 @@ export const SANDBOX_INSTRUCTIONS = (rootDir: string) => `You have access to an 
 
 ## Tool Usage
 
-You have access to filesystem tools (read_file, write_file, edit_file, ls, glob, grep) and can delegate complex subtasks to specialized subagents via the task tool.
+You have access to filesystem tools (read_file, write_file, edit_file, ls, glob, grep), Git tools (git_*), and LSP tools (lsp_*).
 
 Guidelines:
 - Read files before modifying them to understand existing code
 - Use grep/glob to locate relevant files before diving in
 - Prefer editing existing files over creating new ones
 - Make minimal, focused changes that solve the specific problem
+- Prefer dedicated Git tools over bash for clone/status/branching/commit/push/pull
+- Prefer LSP tools for symbol search and completions in TypeScript/JavaScript/Python projects
 
 ## Code Execution (Sandbox)
 
@@ -211,6 +472,7 @@ You can execute code in isolated Daytona sandboxes. This provides a secure envir
 Sandbox guidelines:
 - Use sandboxes for any code that needs to run, not just for viewing
 - Prefer streaming output for long-running commands to provide real-time feedback
+- Use bash when an operation is not covered by dedicated filesystem/Git/LSP tools
 - Clean up resources when done (delete files, stop processes)
 - Handle command failures gracefully and report errors clearly
 - Never execute untrusted code without sandboxing it first
