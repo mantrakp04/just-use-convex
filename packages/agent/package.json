@@ -18,6 +18,7 @@
     "@composio/core": "^0.5.5",
     "@composio/vercel": "^0.5.5",
     "@just-use-convex/backend": "workspace:*",
+    "@just-use-convex/env": "workspace:*",
     "@openrouter/ai-sdk-provider": "^2.1.1",
     "@voltagent/core": "^2.3.3",
     "agents": "^0.3.10",
