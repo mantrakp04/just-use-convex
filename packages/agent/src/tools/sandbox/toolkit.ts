@@ -234,74 +234,50 @@ Important:
     },
   });
 
-  const lspStartTool = createTool({
-    name: "lsp_start",
-    description: "Start or reuse a Language Server for a project",
+  const lspTool = createTool({
+    name: "lsp",
+    description: "Run Language Server Protocol operations. Server startup is automatic based on language_id and project_path.",
     parameters: z.object({
+      operation: z
+        .enum(["completions", "document_symbols", "sandbox_symbols", "start", "stop"])
+        .describe("LSP operation to run"),
       language_id: z.enum(["typescript", "javascript", "python"]).describe("LSP language id"),
       project_path: z.string().describe("Project root path for the LSP server"),
+      file_path: z.string().optional().describe("File path (required for completions and document_symbols)"),
+      line: z.number().int().min(0).optional().describe("Zero-based line number (required for completions)"),
+      character: z.number().int().min(0).optional().describe("Zero-based character index (required for completions)"),
+      query: z.string().optional().describe("Symbol query (required for sandbox_symbols)"),
     }),
-    execute: async ({ language_id, project_path }) => {
-      return backend.lspStart(language_id, project_path);
-    },
-  });
+    execute: async (args) => {
+      const { operation, language_id, project_path, file_path, line, character, query } = args;
 
-  const lspStopTool = createTool({
-    name: "lsp_stop",
-    description: "Stop a running Language Server for a project",
-    parameters: z.object({
-      language_id: z.enum(["typescript", "javascript", "python"]).describe("LSP language id"),
-      project_path: z.string().describe("Project root path for the LSP server"),
-    }),
-    execute: async ({ language_id, project_path }) => {
-      return backend.lspStop(language_id, project_path);
-    },
-  });
-
-  const lspCompletionsTool = createTool({
-    name: "lsp_completions",
-    description: "Get code completion suggestions from Language Server Protocol",
-    parameters: z.object({
-      language_id: z.enum(["typescript", "javascript", "python"]).describe("LSP language id"),
-      project_path: z.string().describe("Project root path for the LSP server"),
-      file_path: z.string().describe("File path for completion"),
-      line: z.number().int().min(0).describe("Zero-based line number"),
-      character: z.number().int().min(0).describe("Zero-based character index"),
-    }),
-    execute: async ({ language_id, project_path, file_path, line, character }) => {
-      return backend.lspCompletions({
-        languageId: language_id,
-        projectPath: project_path,
-        filePath: file_path,
-        line,
-        character,
-      });
-    },
-  });
-
-  const lspDocumentSymbolsTool = createTool({
-    name: "lsp_document_symbols",
-    description: "Get symbols for a file from Language Server Protocol",
-    parameters: z.object({
-      language_id: z.enum(["typescript", "javascript", "python"]).describe("LSP language id"),
-      project_path: z.string().describe("Project root path for the LSP server"),
-      file_path: z.string().describe("File path to inspect"),
-    }),
-    execute: async ({ language_id, project_path, file_path }) => {
-      return backend.lspDocumentSymbols(language_id, project_path, file_path);
-    },
-  });
-
-  const lspSandboxSymbolsTool = createTool({
-    name: "lsp_sandbox_symbols",
-    description: "Search symbols across the sandbox using Language Server Protocol",
-    parameters: z.object({
-      language_id: z.enum(["typescript", "javascript", "python"]).describe("LSP language id"),
-      project_path: z.string().describe("Project root path for the LSP server"),
-      query: z.string().describe("Symbol query"),
-    }),
-    execute: async ({ language_id, project_path, query }) => {
-      return backend.lspSandboxSymbols(language_id, project_path, query);
+      switch (operation) {
+        case "start":
+          return backend.lspStart(language_id, project_path);
+        case "stop":
+          return backend.lspStop(language_id, project_path);
+        case "completions":
+          if (!file_path || line === undefined || character === undefined) {
+            throw new Error("completions requires file_path, line, and character");
+          }
+          return backend.lspCompletions({
+            languageId: language_id,
+            projectPath: project_path,
+            filePath: file_path,
+            line,
+            character,
+          });
+        case "document_symbols":
+          if (!file_path) {
+            throw new Error("document_symbols requires file_path");
+          }
+          return backend.lspDocumentSymbols(language_id, project_path, file_path);
+        case "sandbox_symbols":
+          if (!query) {
+            throw new Error("sandbox_symbols requires query");
+          }
+          return backend.lspSandboxSymbols(language_id, project_path, query);
+      }
     },
   });
 
@@ -317,11 +293,7 @@ Important:
       editFileTool,
       globTool,
       grepTool,
-      lspStartTool,
-      lspStopTool,
-      lspCompletionsTool,
-      lspDocumentSymbolsTool,
-      lspSandboxSymbolsTool,
+      lspTool,
     ],
   });
 }
@@ -331,14 +303,14 @@ The workdir is resolved dynamically from the sandbox filesystem (Daytona).
 
 ## Tool Usage
 
-You have access to filesystem tools (read_file, write_file, edit_file, ls, glob, grep) and LSP tools (lsp_*).
+You have access to filesystem tools (read_file, write_file, edit_file, ls, glob, grep) and a single LSP tool (lsp).
 
 Guidelines:
 - Read files before modifying them to understand existing code
 - Use grep/glob to locate relevant files before diving in
 - Prefer editing existing files over creating new ones
 - Make minimal, focused changes that solve the specific problem
-- Prefer LSP tools for symbol search and completions in TypeScript/JavaScript/Python projects
+- Prefer the lsp tool for symbol search and completions in TypeScript/JavaScript/Python projects
 
 ## Code Execution (Sandbox)
 
