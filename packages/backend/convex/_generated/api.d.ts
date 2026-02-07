@@ -28,6 +28,7 @@ import type * as privateData from "../privateData.js";
 import type * as sandboxes_aggregates from "../sandboxes/aggregates.js";
 import type * as sandboxes_functions from "../sandboxes/functions.js";
 import type * as sandboxes_index from "../sandboxes/index.js";
+import type * as sandboxes_indexDaytona from "../sandboxes/indexDaytona.js";
 import type * as sandboxes_stats from "../sandboxes/stats.js";
 import type * as sandboxes_types from "../sandboxes/types.js";
 import type * as shared_aggregates from "../shared/aggregates.js";
@@ -73,6 +74,7 @@ declare const fullApi: ApiFromModules<{
   "sandboxes/aggregates": typeof sandboxes_aggregates;
   "sandboxes/functions": typeof sandboxes_functions;
   "sandboxes/index": typeof sandboxes_index;
+  "sandboxes/indexDaytona": typeof sandboxes_indexDaytona;
   "sandboxes/stats": typeof sandboxes_stats;
   "sandboxes/types": typeof sandboxes_types;
   "shared/aggregates": typeof shared_aggregates;

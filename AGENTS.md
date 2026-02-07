@@ -160,6 +160,7 @@ File-based TanStack Router:
 - whenever implementing something for convex, analyze adjecent and relevant files for similar pattern implementation
 - whenever working with external libraries always query context7 for their relevant docs
 - for Daytona sandbox backend code, avoid adding fallback/sanitization guardrails unless explicitly requested
+- chat sandbox is optional; when sandboxId is present, agent must assume sandbox already exists (no agent-side provisioning fallback)
 
 ## Background & Subagents
 

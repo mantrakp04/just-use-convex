@@ -2,6 +2,10 @@ import { z } from "zod";
 import { defineEntFromTable } from "convex-ents";
 import { Table } from "convex-helpers/server";
 import { convexToZodFields, zodToConvexFields } from "convex-helpers/server/zod4";
+import type { Trigger } from "convex-helpers/server/triggers";
+import type { GenericMutationCtx } from "convex/server";
+import { internal } from "../_generated/api";
+import type { DataModel } from "../_generated/dataModel";
 
 export const sandboxesZodSchema = {
   organizationId: z.string(),
@@ -35,3 +39,20 @@ const sandboxesTable = Sandboxes.table
 // 1:many relationship - one sandbox has many chats
 export const sandboxesEnt = defineEntFromTable(sandboxesTable)
   .edges("chats", { to: "chats", ref: "sandboxId" });
+
+type MutationCtx = GenericMutationCtx<DataModel>;
+
+export const sandboxDaytonaTrigger: Trigger<MutationCtx, DataModel, "sandboxes"> = async (ctx, change) => {
+  if (change.operation === "insert") {
+    await ctx.scheduler.runAfter(0, internal.sandboxes.indexDaytona.provision, {
+      sandboxId: change.id,
+    });
+    return;
+  }
+
+  if (change.operation === "delete") {
+    await ctx.scheduler.runAfter(0, internal.sandboxes.indexDaytona.destroy, {
+      sandboxId: change.id,
+    });
+  }
+};

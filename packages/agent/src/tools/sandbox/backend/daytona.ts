@@ -43,21 +43,7 @@ export async function getSandbox(env: typeof worker.Env, sandboxName: string): P
 
   const sandboxPromise = (async () => {
     const daytona = getDaytonaClient(env);
-
-    try {
-      return await daytona.get(sandboxName);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      if (!/404|not found/i.test(message)) {
-        throw error;
-      }
-
-      return daytona.create({
-        name: sandboxName,
-        language: "typescript",
-        snapshot: "daytona-medium",
-      });
-    }
+    return daytona.get(sandboxName);
   })();
 
   daytonaState.sandboxByName.set(sandboxName, sandboxPromise);

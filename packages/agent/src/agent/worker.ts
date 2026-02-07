@@ -135,7 +135,7 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, AgentArgs> {
     const subagents = [
       ...(filesystemBackend ? [createSandboxToolkit(filesystemBackend, {
         store: this.backgroundTaskStore,
-      })].map((toolkit) => 
+      })].map((toolkit) =>
         new Agent({
           name: toolkit.name,
           purpose: toolkit.description,
@@ -144,7 +144,7 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, AgentArgs> {
           tools: toolkit.tools,
         })
       ) : []),
-    ]
+    ];
 
     const agent = new PlanAgent({
       name: "Assistant",

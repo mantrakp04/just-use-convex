@@ -11,6 +11,7 @@
     "check-types": "tsc --noEmit --project convex"
   },
   "dependencies": {
+    "@daytonaio/sdk": "^0.139.0",
     "@convex-dev/aggregate": "^0.2.1",
     "@convex-dev/better-auth": "^0.10.10",
     "@convex-dev/migrations": "^0.3.1",
