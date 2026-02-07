@@ -1,5 +1,4 @@
 import { routeAgentRequest, type Connection, type ConnectionContext, callable } from "agents";
-export { Sandbox } from "@cloudflare/sandbox";
 import { AIChatAgent, type OnChatMessageOptions } from "@cloudflare/ai-chat";
 import { generateText, type StreamTextOnFinishCallback, type ToolSet, Output, type UIMessage, isFileUIPart, createUIMessageStreamResponse, createUIMessageStream } from "ai";
 import { PlanAgent, setWaitUntil, AgentRegistry, createVoltOpsClient, createVoltAgentObservability, createPlanningToolkit } from "@voltagent/core";
@@ -153,7 +152,7 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, ChatState> {
             const base64Match = url.match(/^data:[^;]+;base64,(.+)$/);
             if (base64Match?.[1]) {
               const binaryContent = atob(base64Match[1]);
-              await this.sandboxBackend.write(filePath, binaryContent);
+              await this.sandboxBackend.write(filePath, binaryContent, "binary");
               continue;
             }
           }
@@ -367,7 +366,9 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, ChatState> {
       );
     }
 
-    const filesystemBackend = this.sandboxId ? new SandboxFilesystemBackend(this.env, this.sandboxId) : undefined;
+    const filesystemBackend = this.sandboxId && this.env.DAYTONA_API_KEY
+      ? new SandboxFilesystemBackend(this.env, this.sandboxId)
+      : undefined;
     this.sandboxBackend = filesystemBackend ?? null;
     if (filesystemBackend) {
       // sandbox backend ready

@@ -1,4 +1,4 @@
-import { getSandbox } from "@cloudflare/sandbox";
+import { Daytona } from "@daytonaio/sdk";
 import {
   createTool,
   createToolkit,
@@ -24,11 +24,15 @@ function escapeShellArg(arg: string): string {
 }
 
 export class SandboxFilesystemBackend implements FilesystemBackend {
-  public sandbox: ReturnType<typeof getSandbox>;
+  private static daytonaClient: Daytona | null = null;
+  private static sandboxByName = new Map<string, ReturnType<Daytona["get"]>>();
+  private env: typeof worker.Env;
+  private sandboxName: string;
   public rootDir: string;
 
   constructor(env: typeof worker.Env, sandboxName: string) {
-    this.sandbox = getSandbox(env.Sandbox, sandboxName);
+    this.env = env;
+    this.sandboxName = sandboxName;
     this.rootDir = env.SANDBOX_ROOT_DIR;
   }
 
@@ -47,11 +51,81 @@ export class SandboxFilesystemBackend implements FilesystemBackend {
     return escapeShellArg(arg);
   }
 
+  private getDaytonaClient(): Daytona {
+    if (SandboxFilesystemBackend.daytonaClient) {
+      return SandboxFilesystemBackend.daytonaClient;
+    }
+
+    SandboxFilesystemBackend.daytonaClient = new Daytona({
+      apiKey: this.env.DAYTONA_API_KEY,
+      ...(this.env.DAYTONA_API_URL ? { apiUrl: this.env.DAYTONA_API_URL } : {}),
+      ...(this.env.DAYTONA_TARGET ? { target: this.env.DAYTONA_TARGET } : {}),
+    });
+
+    return SandboxFilesystemBackend.daytonaClient;
+  }
+
+  private async getSandbox() {
+    const cached = SandboxFilesystemBackend.sandboxByName.get(this.sandboxName);
+    if (cached) {
+      return cached;
+    }
+
+    const sandboxPromise = (async () => {
+      const daytona = this.getDaytonaClient();
+
+      try {
+        return await daytona.get(this.sandboxName);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        if (!/404|not found/i.test(message)) {
+          throw error;
+        }
+
+        return daytona.create({
+          name: this.sandboxName,
+          language: "typescript",
+          envVars: {
+            NODE_ENV: this.env.NODE_ENV ?? "production",
+          },
+        });
+      }
+    })();
+
+    SandboxFilesystemBackend.sandboxByName.set(this.sandboxName, sandboxPromise);
+    try {
+      return await sandboxPromise;
+    } catch (error) {
+      SandboxFilesystemBackend.sandboxByName.delete(this.sandboxName);
+      throw error;
+    }
+  }
+
+  private async runCommand(command: string, options?: { cwd?: string; timeoutSeconds?: number }) {
+    const sandbox = await this.getSandbox();
+    const cwd = options?.cwd ? this.resolvePath(options.cwd) : this.rootDir;
+    const timeoutSeconds = options?.timeoutSeconds
+      ? Math.max(1, Math.ceil(options.timeoutSeconds))
+      : undefined;
+    const response = await sandbox.process.executeCommand(command, cwd, undefined, timeoutSeconds);
+    const exitCode = response.exitCode ?? 0;
+    const result = response.result ?? "";
+    const stdout = typeof result === "string" ? result : JSON.stringify(result);
+    const stderr = exitCode === 0 ? "" : stdout;
+
+    return {
+      success: exitCode === 0,
+      stdout,
+      stderr,
+      exitCode,
+    };
+  }
+
   async lsInfo(path: string): Promise<FileInfo[]> {
     const resolvedPath = this.resolvePath(path);
 
     try {
-      const result = await this.sandbox.exec(
+      const result = await this.runCommand(
         `ls -la --time-style=+%Y-%m-%dT%H:%M:%S ${this.escapeShellArg(resolvedPath)} 2>/dev/null || echo "[]"`
       );
 
@@ -111,7 +185,7 @@ export class SandboxFilesystemBackend implements FilesystemBackend {
       }
     }
 
-    const result = await this.sandbox.exec(cmd);
+    const result = await this.runCommand(cmd);
 
     if (!result.success) {
       throw new Error(`Failed to read file: ${result.stderr}`);
@@ -124,8 +198,8 @@ export class SandboxFilesystemBackend implements FilesystemBackend {
     const resolvedPath = this.resolvePath(filePath);
 
     const [contentResult, statResult] = await Promise.all([
-      this.sandbox.exec(`cat ${this.escapeShellArg(resolvedPath)}`),
-      this.sandbox.exec(
+      this.runCommand(`cat ${this.escapeShellArg(resolvedPath)}`),
+      this.runCommand(
         `stat -c '%Y' ${this.escapeShellArg(resolvedPath)} 2>/dev/null || echo "0"`
       ),
     ]);
@@ -160,7 +234,7 @@ export class SandboxFilesystemBackend implements FilesystemBackend {
       cmd = `grep -rnH ${this.escapeShellArg(pattern)} ${this.escapeShellArg(searchPath)} 2>/dev/null || true`;
     }
 
-    const result = await this.sandbox.exec(cmd);
+    const result = await this.runCommand(cmd);
 
     if (!result.stdout.trim()) {
       return [];
@@ -187,7 +261,7 @@ export class SandboxFilesystemBackend implements FilesystemBackend {
   async globInfo(pattern: string, path?: string): Promise<FileInfo[]> {
     const searchPath = path ? this.resolvePath(path) : this.rootDir;
 
-    const result = await this.sandbox.exec(
+    const result = await this.runCommand(
       `find ${this.escapeShellArg(searchPath)} -name ${this.escapeShellArg(pattern)} -printf '%p\\t%s\\t%T@\\t%y\\n' 2>/dev/null || true`
     );
 
@@ -215,7 +289,7 @@ export class SandboxFilesystemBackend implements FilesystemBackend {
     return files;
   }
 
-  async write(filePath: string, content: string): Promise<WriteResult> {
+  async write(filePath: string, content: string, encoding: BufferEncoding = "utf-8"): Promise<WriteResult> {
     const resolvedPath = this.resolvePath(filePath);
 
     try {
@@ -224,8 +298,9 @@ export class SandboxFilesystemBackend implements FilesystemBackend {
         0,
         resolvedPath.lastIndexOf("/")
       );
-      await this.sandbox.exec(`mkdir -p ${this.escapeShellArg(parentDir)}`);
-      await this.sandbox.writeFile(resolvedPath, content);
+      await this.runCommand(`mkdir -p ${this.escapeShellArg(parentDir)}`);
+      const sandbox = await this.getSandbox();
+      await sandbox.fs.uploadFile(Buffer.from(content, encoding), resolvedPath);
 
       const fileData = await this.readRaw(filePath);
 
@@ -275,7 +350,8 @@ export class SandboxFilesystemBackend implements FilesystemBackend {
         : currentContent.replace(oldString, newString);
 
       // Write back
-      await this.sandbox.writeFile(resolvedPath, newContent);
+      const sandbox = await this.getSandbox();
+      await sandbox.fs.uploadFile(Buffer.from(newContent, "utf-8"), resolvedPath);
 
       const fileData = await this.readRaw(filePath);
 
@@ -306,7 +382,7 @@ export class SandboxFilesystemBackend implements FilesystemBackend {
     const cwd = options?.cwd ? this.resolvePath(options.cwd) : this.rootDir;
     const cmd = `cd ${this.escapeShellArg(cwd)} && ${command}`;
 
-    const result = await this.sandbox.exec(cmd);
+    const result = await this.runCommand(cmd, { timeoutSeconds: options?.timeout });
 
     return {
       success: result.success,
@@ -331,7 +407,7 @@ Guidelines:
 
 ## Code Execution (Sandbox)
 
-You can execute code in isolated Cloudflare Sandbox containers. This provides a secure environment for:
+You can execute code in isolated Daytona sandboxes. This provides a secure environment for:
 - Running shell commands and scripts
 - Installing dependencies (npm, pip, etc.)
 - Executing code in various languages (Python, Node.js, etc.)

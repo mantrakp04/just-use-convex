@@ -14,7 +14,7 @@
     "@ai-sdk/openai": "^3.0.25",
     "@ai-sdk/openai-compatible": "^1.0.32",
     "@cloudflare/ai-chat": "^0.0.4",
-    "@cloudflare/sandbox": "^0.7.0",
+    "@daytonaio/sdk": "^0.139.0",
     "@composio/core": "^0.5.5",
     "@composio/vercel": "^0.5.5",
     "@just-use-convex/backend": "workspace:*",

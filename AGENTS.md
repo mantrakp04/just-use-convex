@@ -56,6 +56,7 @@ User uses casual language ("bro", "dawg", "ugh"). Keep responses terse and actio
 
 - **Infer types from existing packages** — never create custom types
 - **Check existing patterns** in codebase before implementing
+- **Use Context7 for third-party SDK API verification** before integrating
 - **Keep responses terse** and actionable
 - **Use memo with custom comparison** for streaming optimization
 - **Use `useSyncExternalStore`** for shared mutable state
@@ -156,6 +157,30 @@ File-based TanStack Router:
 
 - for anything related to implementation or research make use of background subagents
 - parallelize as much stuff you can, todos -> each todo is a subagent, make them background whenever possible
+
+## Review Flow
+
+- fetch all PR comments from `greptile`, `cubic`, and `codex`
+- normalize comments into a single actionable list with file + line context
+- spawn a background subagent to validate each comment (real issue vs noise/outdated)
+- fix every validated comment in code, following existing project patterns
+- run required checks after fixes (`bun check-types` minimum)
+- post a concise end summary with:
+  - validated + fixed comments
+  - rejected comments with reason
+  - checks run and status
+
+## Self-Updating Scratchpad
+
+- treat this `AGENTS.md` as a living scratchpad
+- on every new user input, evaluate whether it contains durable guidance worth remembering:
+  - instruction/preference
+  - implementation pattern
+  - workflow/process rule
+  - recurring project context
+- if the input is durable and non-conflicting, update `AGENTS.md` in the same task
+- if it conflicts with existing rules, keep the newest explicit user instruction and remove/adjust the conflicting older rule
+- keep updates concise and structured (avoid noisy or one-off notes)
 
 ## Common Issues
 
