@@ -174,6 +174,7 @@ File-based TanStack Router:
 - do not couple PTY terminal session lifecycle to SSH access `expiresInMinutes`
 - for Daytona sandbox backend code, avoid adding fallback/sanitization guardrails unless explicitly requested
 - chat sandbox is optional; when sandboxId is present, agent must assume sandbox already exists (no agent-side provisioning fallback)
+- for sandbox backend helper modules, prefer consolidating small shared helpers into `backend/utils.ts`
 
 ## Background & Subagents
 

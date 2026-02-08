@@ -28,9 +28,10 @@ import { createAiClient } from "../client";
 import { SYSTEM_PROMPT, TASK_PROMPT } from "../prompt";
 import { createAskUserToolkit } from "../tools/ask-user";
 import {
+  SandboxFilesystemBackend,
   SandboxTerminalAgentBase,
-} from "../tools/sandbox/backend/terminal";
-import { SandboxFilesystemBackend, createSandboxToolkit } from "../tools/sandbox";
+  createSandboxToolkit,
+} from "../tools/sandbox";
 import { createWebSearchToolkit } from "../tools/websearch";
 import { parseStreamToUI } from "../utils/fullStreamParser";
 import {
