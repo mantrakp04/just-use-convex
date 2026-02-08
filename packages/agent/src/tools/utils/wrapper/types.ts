@@ -30,6 +30,37 @@ export type BackgroundTask = {
   abortController?: AbortController;
 };
 
+export type ToolOutputLog = {
+  id: string;
+  toolCallId: string;
+  toolName: string;
+  content: string;
+  createdAt: number;
+};
+
+export type ToolOutputLogCreateInput = {
+  toolCallId: string;
+  toolName: string;
+  content: string;
+};
+
+export type ToolOutputLogCreateResult = {
+  logId: string;
+  size: number;
+  totalLines: number;
+};
+
+export type ToolOutputLogReadResult = {
+  logId: string;
+  content: string;
+  size: number;
+  totalLines: number;
+  offset: number;
+  lines: number;
+  hasMore: boolean;
+  nextOffset: number;
+};
+
 export interface BackgroundTaskStoreApi {
   waitUntil: (promise: Promise<unknown>) => void;
   create(toolName: string, args: Record<string, unknown>, toolCallId: string): BackgroundTask;
@@ -42,6 +73,12 @@ export interface BackgroundTaskStoreApi {
     offset?: number,
     limit?: number
   ): { logs: BackgroundTaskLog[]; total: number; hasMore: boolean };
+  createOutputLog(input: ToolOutputLogCreateInput): ToolOutputLogCreateResult;
+  readOutputLog(
+    id: string,
+    offset?: number,
+    lines?: number
+  ): ToolOutputLogReadResult | undefined;
   cancel(id: string): { cancelled: boolean; previousStatus: BackgroundTaskStatus | null };
 }
 
@@ -75,6 +112,8 @@ export type ToolCallConfig = {
   maxDuration?: number;
   allowAgentSetDuration?: boolean;
   allowBackground?: boolean;
+  maxOutputTokens?: number;
+  allowAgentSetMaxOutputTokens?: boolean;
 };
 
 export type WrappedExecuteOptions = ToolExecuteOptions & {
@@ -127,5 +166,14 @@ export type WrappedExecuteFactoryOptions = {
   toolName: string;
   execute: (args: Record<string, unknown>, opts?: ToolExecuteOptions) => unknown | Promise<unknown>;
   config: ToolCallConfig;
+  postExecute?: (
+    context: {
+      result: unknown;
+      toolCallId: string;
+      toolName: string;
+      toolArgs: Record<string, unknown>;
+      maxOutputTokens: number;
+    }
+  ) => Promise<unknown> | unknown;
   beforeFailureHooks?: BeforeFailureHook[];
 };

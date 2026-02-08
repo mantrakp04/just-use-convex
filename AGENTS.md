@@ -163,6 +163,7 @@ File-based TanStack Router:
 - always run the typecheck at the end and iterate over it until finished
 - do not shy away from refactoring bad patterns, be proactive
 - avoid defining new types; infer and derive from existing types/packages (use `Pick`/`Omit` and TS utility types)
+- keep shared/custom types centralized in `types.ts` files (avoid inline object type blocks in implementation files)
 - if you change server-side code, always verify affected client-side usage (and vice versa)
 - keep codebase DRY
 - cleanup stale code when changing methods/approach

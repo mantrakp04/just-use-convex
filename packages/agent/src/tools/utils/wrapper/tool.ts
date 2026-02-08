@@ -9,6 +9,7 @@ import type {
 } from "./types";
 
 export const DEFAULT_MAX_DURATION_MS = 30 * 60 * 1000;
+export const DEFAULT_MAX_OUTPUT_TOKENS = 32_000;
 
 export function augmentParametersSchema(
   shape: ZodRawShape,
@@ -32,6 +33,17 @@ export function augmentParametersSchema(
       .describe("Run in background and return immediately with a backgroundTaskId.");
   }
 
+  if (config.allowAgentSetMaxOutputTokens !== false && !("maxOutputTokens" in nextShape)) {
+    nextShape.maxOutputTokens = z
+      .number()
+      .int()
+      .positive()
+      .max(config.maxOutputTokens ?? DEFAULT_MAX_OUTPUT_TOKENS)
+      .optional()
+      .default(config.maxOutputTokens ?? DEFAULT_MAX_OUTPUT_TOKENS)
+      .describe("Optional max tool output size in tokens before truncation.");
+  }
+
   return z.object(nextShape);
 }
 
@@ -39,6 +51,7 @@ export function createWrappedExecute({
   toolName,
   execute,
   config,
+  postExecute,
   beforeFailureHooks = [],
   startBackground,
 }: WrappedExecuteFactoryOptions & { startBackground?: StartBackgroundTask }) {
@@ -51,10 +64,27 @@ export function createWrappedExecute({
       shouldRunInBackground,
       maxAllowedDuration,
       effectiveTimeout,
+      effectiveMaxOutputTokens,
     } = splitToolArgs(rawArgs, config);
 
     const toolCallId = resolveToolCallId(options);
-    const execution = createExecutionSession({ execute, toolArgs, options });
+    const execution = createExecutionSession({
+      execute: async (args, executeOptions) => {
+        const result = await execute(args, executeOptions);
+        if (!postExecute) {
+          return result;
+        }
+        return await postExecute({
+          result,
+          toolCallId,
+          toolName,
+          toolArgs,
+          maxOutputTokens: effectiveMaxOutputTokens,
+        });
+      },
+      toolArgs,
+      options,
+    });
 
     if (shouldRunInBackground) {
       if (!startBackground) {
@@ -216,6 +246,7 @@ function splitToolArgs(args: Record<string, unknown>, config: ToolCallConfig) {
 
   let requestedTimeout: number | undefined;
   let shouldRunInBackground = false;
+  let requestedMaxOutputTokens: number | undefined;
 
   if (config.allowAgentSetDuration) {
     const timeout = normalizeDuration(args.timeout);
@@ -230,18 +261,34 @@ function splitToolArgs(args: Record<string, unknown>, config: ToolCallConfig) {
     delete toolArgs.background;
   }
 
+  if (config.allowAgentSetMaxOutputTokens !== false) {
+    const maxOutputTokens = normalizeTokenCount(args.maxOutputTokens);
+    if (maxOutputTokens !== undefined) {
+      requestedMaxOutputTokens = maxOutputTokens;
+      delete toolArgs.maxOutputTokens;
+    }
+  }
+
   const maxAllowedDuration =
     normalizeDuration(config.maxDuration, DEFAULT_MAX_DURATION_MS) ?? DEFAULT_MAX_DURATION_MS;
   const effectiveTimeout =
     requestedTimeout !== undefined
       ? Math.min(requestedTimeout, maxAllowedDuration)
       : maxAllowedDuration;
+  const maxAllowedOutputTokens =
+    normalizeTokenCount(config.maxOutputTokens, DEFAULT_MAX_OUTPUT_TOKENS) ??
+    DEFAULT_MAX_OUTPUT_TOKENS;
+  const effectiveMaxOutputTokens =
+    requestedMaxOutputTokens !== undefined
+      ? Math.min(requestedMaxOutputTokens, maxAllowedOutputTokens)
+      : maxAllowedOutputTokens;
 
   return {
     toolArgs,
     shouldRunInBackground,
     maxAllowedDuration,
     effectiveTimeout,
+    effectiveMaxOutputTokens,
   };
 }
 
@@ -307,4 +354,11 @@ function normalizeDuration(value: unknown, fallback?: number): number | undefine
     return fallback;
   }
   return Math.max(0, Math.floor(value));
+}
+
+function normalizeTokenCount(value: unknown, fallback?: number): number | undefined {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return fallback;
+  }
+  return Math.max(1, Math.floor(value));
 }

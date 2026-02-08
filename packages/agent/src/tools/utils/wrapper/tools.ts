@@ -16,6 +16,7 @@ When a tool is executed with \`background: true\`, it runs asynchronously and re
 - **get_background_task_logs**: Check progress, view logs, get results, and optionally wait for completion
 - **cancel_background_task**: Abort a running task
 - **list_background_tasks**: See all tasks and their status
+- **read_logs**: Read oversized tool output logs by log ID
 
 ## Workflow
 
@@ -23,6 +24,7 @@ When a tool is executed with \`background: true\`, it runs asynchronously and re
 2. Get the returned \`backgroundTaskId\`
 3. Use \`get_background_task_logs\` to poll progress or wait for completion
 4. Cancel if needed with \`cancel_background_task\`
+5. Use \`read_logs\` when a tool reports truncated output with a log ID
 
 Tasks persist in memory for the agent session. Use \`list_background_tasks\` to see all tasks.
 `;
@@ -147,10 +149,40 @@ Useful for checking what tasks are running or have completed.`,
     },
   });
 
+  const readLogsTool = createTool({
+    name: "read_logs",
+    description: `Read oversized tool output logs by log ID.
+
+Use this when a tool response says output was truncated and includes a logId.`,
+    parameters: z.object({
+      logId: z.string().describe("The output log ID returned by a truncated tool result"),
+      offset: z
+        .number()
+        .int()
+        .nonnegative()
+        .default(0)
+        .describe("Line offset to start reading from (default: 0)"),
+      lines: z
+        .number()
+        .int()
+        .positive()
+        .default(200)
+        .describe("Max number of lines to return (default: 200)"),
+    }),
+    execute: async ({ logId, offset, lines }) => {
+      const result = store.readOutputLog(logId, offset, lines);
+      if (!result) {
+        return { error: `Log not found: ${logId}` };
+      }
+      return result;
+    },
+  });
+
   return [
     getBackgroundTaskLogsTool,
     cancelBackgroundTaskTool,
     listBackgroundTasksTool,
+    readLogsTool,
   ];
 }
 

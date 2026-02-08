@@ -6,13 +6,19 @@ import type {
   BackgroundTaskStatus,
   BackgroundTaskStoreApi,
   RunInBackgroundOptions,
+  ToolOutputLog,
+  ToolOutputLogCreateInput,
+  ToolOutputLogCreateResult,
+  ToolOutputLogReadResult,
 } from "./types";
 
 const DEFAULT_TASK_RETENTION_MS = 60 * 60 * 1000;
 
 export class BackgroundTaskStore implements BackgroundTaskStoreApi {
   private tasks = new Map<string, BackgroundTask>();
+  private outputLogs = new Map<string, ToolOutputLog>();
   private idCounter = 0;
+  private outputLogCounter = 0;
 
   constructor(readonly waitUntil: (promise: Promise<unknown>) => void) {}
 
@@ -101,6 +107,54 @@ export class BackgroundTaskStore implements BackgroundTaskStoreApi {
     return { cancelled: false, previousStatus };
   }
 
+  createOutputLog(input: ToolOutputLogCreateInput): ToolOutputLogCreateResult {
+    const logId = this.generateOutputLogId();
+    const content = input.content;
+    const log: ToolOutputLog = {
+      id: logId,
+      toolCallId: input.toolCallId,
+      toolName: input.toolName,
+      content,
+      createdAt: Date.now(),
+    };
+    this.outputLogs.set(logId, log);
+
+    return {
+      logId,
+      size: content.length,
+      totalLines: countLines(content),
+    };
+  }
+
+  readOutputLog(
+    id: string,
+    offset = 0,
+    lines = 200
+  ): ToolOutputLogReadResult | undefined {
+    const log = this.outputLogs.get(id);
+    if (!log) {
+      return undefined;
+    }
+
+    const allLines = log.content.split(/\r?\n/);
+    const totalLines = allLines.length;
+    const safeOffset = Math.max(0, Math.floor(offset));
+    const safeLines = Math.max(1, Math.floor(lines));
+    const sliced = allLines.slice(safeOffset, safeOffset + safeLines);
+    const nextOffset = safeOffset + sliced.length;
+
+    return {
+      logId: log.id,
+      content: sliced.join("\n"),
+      size: log.content.length,
+      totalLines,
+      offset: safeOffset,
+      lines: safeLines,
+      hasMore: nextOffset < totalLines,
+      nextOffset,
+    };
+  }
+
   cleanup(maxAgeMs = DEFAULT_TASK_RETENTION_MS): void {
     const now = Date.now();
 
@@ -112,11 +166,22 @@ export class BackgroundTaskStore implements BackgroundTaskStoreApi {
         this.tasks.delete(id);
       }
     }
+
+    for (const [id, log] of this.outputLogs) {
+      if (now - log.createdAt > maxAgeMs) {
+        this.outputLogs.delete(id);
+      }
+    }
   }
 
   private generateId(): string {
     this.idCounter += 1;
     return `bg_${Date.now()}_${this.idCounter}`;
+  }
+
+  private generateOutputLogId(): string {
+    this.outputLogCounter += 1;
+    return `log_${Date.now()}_${this.outputLogCounter}`;
   }
 }
 
@@ -228,4 +293,11 @@ function writeStdIoLogs(
   if (!hasStderr && typeof output.stderr === "string" && output.stderr.length > 0) {
     store.addLog(taskId, { type: "stderr", message: output.stderr });
   }
+}
+
+function countLines(content: string): number {
+  if (content.length === 0) {
+    return 0;
+  }
+  return content.split(/\r?\n/).length;
 }
