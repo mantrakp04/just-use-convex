@@ -12,6 +12,7 @@ const agentWorkerNamespace = DurableObjectNamespace("agent-worker", {
 });
 
 const SANDBOX_IMAGE = "docker.io/cloudflare/sandbox:0.7.0";
+const WRANGLER_MIGRATION_TAG = "alchemy:v6";
 
 const sandboxContainer = await Container<import("@cloudflare/sandbox").Sandbox>("sandbox", {
   className: "Sandbox",
@@ -69,35 +70,35 @@ await WranglerJson({
           }
         }
       }
-      // Keep AgentWorker in v1 and add Sandbox in a separate tag (v2).
-      // Durable Object migration tags are immutable once deployed.
       if (spec.migrations) {
+        const newSqliteClasses = new Set<string>();
+        const newClasses = new Set<string>();
+
         for (const migration of spec.migrations) {
-          if (migration.tag === "v1" && migration.new_classes?.includes("Sandbox")) {
-            migration.new_classes = migration.new_classes.filter((c: string) => c !== "Sandbox");
+          for (const className of migration.new_sqlite_classes ?? []) {
+            newSqliteClasses.add(className);
           }
-          if (migration.tag === "v1" && migration.new_sqlite_classes?.includes("Sandbox")) {
-            migration.new_sqlite_classes = migration.new_sqlite_classes.filter((c: string) => c !== "Sandbox");
-          }
-          if (migration.new_classes?.includes("Sandbox")) {
-            migration.new_classes = migration.new_classes.filter((c: string) => c !== "Sandbox");
-          }
-          if (migration.tag === "v2") {
-            migration.new_sqlite_classes = migration.new_sqlite_classes || [];
-            if (!migration.new_sqlite_classes.includes("Sandbox")) {
-              migration.new_sqlite_classes.push("Sandbox");
+          for (const className of migration.new_classes ?? []) {
+            if (!newSqliteClasses.has(className)) {
+              newClasses.add(className);
             }
           }
         }
-        const hasSandboxMigration = spec.migrations.some(
-          (migration) => migration.new_sqlite_classes?.includes("Sandbox")
-        );
-        if (!hasSandboxMigration) {
-          spec.migrations.push({
-            tag: "v2",
-            new_sqlite_classes: ["Sandbox"],
-          });
+
+        if (!newSqliteClasses.has("AgentWorker")) {
+          newSqliteClasses.add("AgentWorker");
         }
+        if (!newSqliteClasses.has("Sandbox")) {
+          newSqliteClasses.add("Sandbox");
+        }
+
+        spec.migrations = [
+          {
+            tag: WRANGLER_MIGRATION_TAG,
+            ...(newSqliteClasses.size > 0 ? { new_sqlite_classes: [...newSqliteClasses] } : {}),
+            ...(newClasses.size > 0 ? { new_classes: [...newClasses] } : {}),
+          },
+        ];
       }
       return spec;
     },
