@@ -272,7 +272,7 @@ export const MessageItem = memo(function MessageItem({
             {isUser && (messageText || messageFiles.length > 0) && onEditMessage && (
               <EditMessageButton onStartEdit={handleStartEdit} />
             )}
-            {isAssistant && onRegenerate && (
+            {onRegenerate && (
               <RegenerateButton onRegenerate={handleRegenerate} />
             )}
             {messageText && <CopyButton text={messageText} />}

@@ -62,16 +62,6 @@ export const CreateChatSshAccessResult = z.object({
     host: z.string(),
     command: z.string(),
   }),
-  explorer: z.object({
-    path: z.string(),
-    entries: z.array(z.object({
-      name: z.string(),
-      path: z.string(),
-      isDir: z.boolean(),
-      size: z.number(),
-      modifiedAt: z.number(),
-    })),
-  }),
 });
 
 export const CreateChatPreviewAccessResult = z.object({

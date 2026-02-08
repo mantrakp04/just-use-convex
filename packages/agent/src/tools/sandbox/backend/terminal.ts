@@ -238,3 +238,41 @@ export async function closeSshTerminal({ sessions, terminalId }: CloseSshTermina
   await closeSshTerminalSession(sessions, terminalId, "Closed by client");
   return { ok: true };
 }
+
+export type ListFilesParams = {
+  env: typeof worker.Env;
+  sandboxName: string;
+  path?: string;
+};
+
+function normalizeModTime(value: unknown): number {
+  if (typeof value === "number") return value;
+  if (typeof value === "string") {
+    const parsed = Date.parse(value);
+    return Number.isNaN(parsed) ? 0 : parsed;
+  }
+  if (value instanceof Date) return value.getTime();
+  return 0;
+}
+
+export async function listFiles({ env, sandboxName, path }: ListFilesParams) {
+  if (!env.DAYTONA_API_KEY) {
+    throw new Error("DAYTONA_API_KEY is not configured");
+  }
+
+  const sandbox = await getSandbox(env, sandboxName);
+  const workdir = await sandbox.getWorkDir();
+  const targetPath = path ?? workdir ?? "/";
+  const files = await sandbox.fs.listFiles(targetPath);
+
+  return {
+    path: targetPath,
+    entries: files.map((file) => ({
+      name: file.name,
+      path: targetPath === "/" ? `/${file.name}` : `${targetPath.replace(/\/$/, "")}/${file.name}`,
+      isDir: file.isDir,
+      size: file.size ?? 0,
+      modifiedAt: normalizeModTime(file.modTime),
+    })),
+  };
+}

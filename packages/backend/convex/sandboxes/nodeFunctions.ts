@@ -31,13 +31,6 @@ function getDaytonaClient() {
   return daytonaClient;
 }
 
-function joinExplorerPath(basePath: string, entryName: string) {
-  if (basePath === "/") {
-    return `/${entryName}`;
-  }
-  return `${basePath.replace(/\/$/, "")}/${entryName}`;
-}
-
 function normalizeModTime(value: unknown): number | undefined {
   if (typeof value === "number") {
     return value;
@@ -137,17 +130,11 @@ async function createChatSshAccessFunction(ctx: zActionCtx, args: z.infer<typeof
   await sandbox.waitUntilStarted();
   const expiresInMinutes = args.expiresInMinutes ?? 2;
 
-  const [sshAccess, workdir] = await Promise.all([
-    sandbox.createSshAccess(expiresInMinutes),
-    sandbox.getWorkDir(),
-  ]);
+  const sshAccess = await sandbox.createSshAccess(expiresInMinutes);
   const sshExpiresAt = normalizeModTime(sshAccess.expiresAt);
   if (sshExpiresAt === undefined) {
     throw new Error("Daytona returned an invalid SSH expiration timestamp");
   }
-
-  const explorerPath = workdir ?? "/";
-  const explorerEntries = await sandbox.fs.listFiles(explorerPath);
 
   return {
     chatId: chat._id,
@@ -159,16 +146,6 @@ async function createChatSshAccessFunction(ctx: zActionCtx, args: z.infer<typeof
       expiresInMinutes,
       host: "ssh.app.daytona.io",
       command: `ssh ${sshAccess.token}@ssh.app.daytona.io`,
-    },
-    explorer: {
-      path: explorerPath,
-      entries: explorerEntries.map((entry) => ({
-        name: entry.name,
-        path: joinExplorerPath(explorerPath, entry.name),
-        isDir: entry.isDir,
-        size: entry.size ?? 0,
-        modifiedAt: normalizeModTime(entry.modTime) ?? 0,
-      })),
     },
   };
 }

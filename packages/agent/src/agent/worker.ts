@@ -31,6 +31,7 @@ import { createAskUserToolkit } from "../tools/ask-user";
 import {
   closeSshTerminal as closeSshTerminalSession,
   createSshTerminalSessions,
+  listFiles as listSandboxFiles,
   openSshTerminal as openSshTerminalSession,
   readSshTerminal as readSshTerminalSession,
   resizeSshTerminal as resizeSshTerminalSession,
@@ -388,6 +389,19 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, AgentArgs> {
     return closeSshTerminalSession({
       sessions: this.sshTerminalSessions,
       terminalId: params.terminalId,
+    });
+  }
+
+  @callable()
+  async listFiles(params?: { path?: string }) {
+    await this._init();
+    if (!this.sandboxId) {
+      throw new Error("This chat does not have a sandbox attached");
+    }
+    return listSandboxFiles({
+      env: this.env,
+      sandboxName: this.sandboxId,
+      path: params?.path,
     });
   }
 

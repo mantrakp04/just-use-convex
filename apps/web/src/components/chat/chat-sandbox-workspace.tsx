@@ -1,8 +1,6 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import { toast } from "sonner";
+import { type RefObject, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ExternalLink, FileIcon, FolderIcon, LaptopIcon, RefreshCw } from "lucide-react";
-import type { Terminal as XtermTerminal } from "xterm";
-import type { ChatSshSessionState } from "@/hooks/use-sandbox";
+import type { ChatSshSessionState, ChatExplorerState } from "@/hooks/use-sandbox";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -14,14 +12,10 @@ import {
 } from "@/components/ui/dropdown-menu";
 import "xterm/css/xterm.css";
 
-const TERMINAL_BACKGROUND = "#0b0f19";
-
-type XtermTerminalWriteData = Extract<Parameters<XtermTerminal["write"]>[0], string>;
-type XtermTerminalInputData = Extract<Parameters<Parameters<XtermTerminal["onData"]>[0]>[0], string>;
-type XtermTerminalResizeEvent = Parameters<Parameters<XtermTerminal["onResize"]>[0]>[0];
-
 type ChatSandboxWorkspaceProps = {
   sshSession: ChatSshSessionState;
+  explorer: ChatExplorerState;
+  onRefreshExplorer: () => void;
   previewPort: number | undefined;
   previewUrl: string | undefined;
   isConnectingPreview: boolean;
@@ -29,13 +23,16 @@ type ChatSandboxWorkspaceProps = {
   onCreatePreviewAccess: () => Promise<unknown>;
   onCopySshCommand: () => Promise<void>;
   onOpenInEditor: (editor: "vscode" | "cursor") => Promise<void>;
-  agent: {
-    call: (method: string, args?: unknown[]) => Promise<unknown>;
-  } | null;
+  onReconnectTerminal: () => void;
+  onFocusTerminal: () => void;
+  terminalContainerRef: RefObject<HTMLDivElement | null>;
+  terminalBackground: string;
 };
 
 export function ChatSandboxWorkspace({
   sshSession,
+  explorer,
+  onRefreshExplorer,
   previewPort,
   previewUrl,
   isConnectingPreview,
@@ -43,215 +40,37 @@ export function ChatSandboxWorkspace({
   onCreatePreviewAccess,
   onCopySshCommand,
   onOpenInEditor,
-  agent,
+  onReconnectTerminal,
+  onFocusTerminal,
+  terminalContainerRef,
+  terminalBackground,
 }: ChatSandboxWorkspaceProps) {
   const [activeTab, setActiveTab] = useState<"preview" | "terminal" | "explorer">("preview");
-  const [terminalReloadKey, setTerminalReloadKey] = useState(0);
-  const terminalContainerRef = useRef<HTMLDivElement | null>(null);
-  const terminalRef = useRef<XtermTerminal | null>(null);
-  const terminalIdRef = useRef<string | null>(null);
-  const terminalCursorRef = useRef(0);
-  const terminalInputBufferRef = useRef<XtermTerminalInputData>("");
-  const terminalWriteInFlightRef = useRef(false);
-  const terminalWriteErroredRef = useRef(false);
+  const iframeRef = useRef<HTMLIFrameElement | null>(null);
+
+  const refreshPreview = useCallback(() => {
+    if (iframeRef.current) {
+      const src = iframeRef.current.src;
+      iframeRef.current.src = "";
+      iframeRef.current.src = src;
+    }
+  }, []);
 
   const sortedEntries = useMemo(() => {
-    const entries = sshSession?.explorer.entries ?? [];
+    const entries = explorer?.entries ?? [];
     return [...entries].sort((a, b) => {
       if (a.isDir !== b.isDir) {
         return a.isDir ? -1 : 1;
       }
       return a.name.localeCompare(b.name);
     });
-  }, [sshSession?.explorer.entries]);
-
-  useEffect(() => {
-    if (!agent || !terminalContainerRef.current) {
-      return;
-    }
-
-    let isCancelled = false;
-    let pollTimer: ReturnType<typeof setInterval> | null = null;
-    let writeTimer: ReturnType<typeof setInterval> | null = null;
-    let resizeObserver: ResizeObserver | null = null;
-    let terminalDispose: (() => void) | null = null;
-
-    const setupTerminal = async () => {
-      const [{ Terminal }, { FitAddon }] = await Promise.all([
-        import("xterm"),
-        import("@xterm/addon-fit"),
-      ]);
-      if (isCancelled || !terminalContainerRef.current) {
-        return;
-      }
-
-      const term = new Terminal({
-        cursorBlink: true,
-        convertEol: true,
-        scrollback: 20000,
-        fontSize: 12,
-        fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
-        theme: {
-          background: TERMINAL_BACKGROUND,
-          foreground: "#e5e7eb",
-          cursor: "#f9fafb",
-        },
-      });
-      const fitAddon = new FitAddon();
-      term.loadAddon(fitAddon);
-      term.open(terminalContainerRef.current);
-      fitAddon.fit();
-      term.focus();
-      term.writeln("Connecting to sandbox shell through agent proxy...");
-      term.attachCustomKeyEventHandler((event) => {
-        if (event.type === "keydown" && event.key === "Tab") {
-          event.preventDefault();
-          event.stopPropagation();
-          return true;
-        }
-        return true;
-      });
-      terminalRef.current = term;
-
-      terminalDispose = () => {
-        term.dispose();
-      };
-
-      const openResponse = await agent.call("openSshTerminal", [{
-        cols: term.cols,
-        rows: term.rows,
-      }]) as { terminalId?: string };
-      if (isCancelled) {
-        const terminalId = openResponse?.terminalId;
-        if (terminalId) {
-          void agent.call("closeSshTerminal", [{ terminalId }]).catch(() => undefined);
-        }
-        return;
-      }
-
-      const terminalId = openResponse?.terminalId;
-      if (!terminalId) {
-        term.writeln("\r\nFailed to open SSH terminal session.");
-        return;
-      }
-      terminalIdRef.current = terminalId;
-      terminalCursorRef.current = 0;
-      terminalInputBufferRef.current = "";
-      terminalWriteInFlightRef.current = false;
-      terminalWriteErroredRef.current = false;
-
-      term.onData((data: XtermTerminalInputData) => {
-        terminalInputBufferRef.current += data;
-      });
-
-      writeTimer = setInterval(() => {
-        const pendingInput = terminalInputBufferRef.current;
-        if (!pendingInput || !terminalIdRef.current || terminalWriteInFlightRef.current) {
-          return;
-        }
-        terminalWriteInFlightRef.current = true;
-        terminalInputBufferRef.current = "";
-        void agent.call("writeSshTerminal", [{
-          terminalId: terminalIdRef.current,
-          data: pendingInput,
-        }]).then(() => {
-          terminalWriteErroredRef.current = false;
-        }).catch(() => {
-          if (!terminalWriteErroredRef.current) {
-            term.writeln("\r\n[input unavailable]");
-            terminalWriteErroredRef.current = true;
-          }
-          terminalInputBufferRef.current = pendingInput + terminalInputBufferRef.current;
-        }).finally(() => {
-          terminalWriteInFlightRef.current = false;
-        });
-      }, 25);
-
-      resizeObserver = new ResizeObserver(() => {
-        fitAddon.fit();
-        if (!terminalIdRef.current) {
-          return;
-        }
-        void agent.call("resizeSshTerminal", [{
-          terminalId: terminalIdRef.current,
-          cols: term.cols,
-          rows: term.rows,
-        } satisfies XtermTerminalResizeEvent & { terminalId: string }]).catch(() => undefined);
-      });
-      resizeObserver.observe(terminalContainerRef.current);
-
-      pollTimer = setInterval(() => {
-        if (!terminalIdRef.current) {
-          return;
-        }
-
-        void agent.call("readSshTerminal", [{
-          terminalId: terminalIdRef.current,
-          offset: terminalCursorRef.current,
-        }]).then((result) => {
-          const response = result as {
-            data?: XtermTerminalWriteData;
-            offset?: number;
-            closed?: boolean;
-            closeReason?: string | null;
-          };
-          if (response.data) {
-            term.write(response.data);
-          }
-          if (typeof response.offset === "number") {
-            terminalCursorRef.current = response.offset;
-          }
-
-          if (response.closed) {
-            const reason = response.closeReason ? `: ${response.closeReason}` : "";
-            term.writeln(`\r\n[session closed${reason}]`);
-            if (pollTimer) {
-              clearInterval(pollTimer);
-              pollTimer = null;
-            }
-            if (writeTimer) {
-              clearInterval(writeTimer);
-              writeTimer = null;
-            }
-          }
-        }).catch(() => undefined);
-      }, 120);
-    };
-
-    void setupTerminal().catch(() => {
-      toast.error("Failed to initialize terminal");
-    });
-
-    return () => {
-      isCancelled = true;
-      if (pollTimer) {
-        clearInterval(pollTimer);
-      }
-      if (writeTimer) {
-        clearInterval(writeTimer);
-      }
-      resizeObserver?.disconnect();
-
-      const terminalId = terminalIdRef.current;
-      terminalIdRef.current = null;
-      terminalCursorRef.current = 0;
-      terminalInputBufferRef.current = "";
-      terminalWriteInFlightRef.current = false;
-      terminalWriteErroredRef.current = false;
-      if (terminalId) {
-        void agent.call("closeSshTerminal", [{ terminalId }]).catch(() => undefined);
-      }
-
-      terminalRef.current = null;
-      terminalDispose?.();
-    };
-  }, [agent, terminalReloadKey]);
+  }, [explorer?.entries]);
 
   useEffect(() => {
     if (activeTab === "terminal") {
-      terminalRef.current?.focus();
+      onFocusTerminal();
     }
-  }, [activeTab]);
+  }, [activeTab, onFocusTerminal]);
 
   return (
     <div className="h-full border-l bg-background">
@@ -271,7 +90,7 @@ export function ChatSandboxWorkspace({
               type="button"
               variant="ghost"
               size="icon-sm"
-              onClick={() => setTerminalReloadKey((value) => value + 1)}
+              onClick={onReconnectTerminal}
               aria-label="Reconnect terminal session"
             >
               <RefreshCw className="size-3" />
@@ -298,18 +117,31 @@ export function ChatSandboxWorkspace({
 
         <TabsContent value="preview" className="mt-0 flex min-h-0 flex-1 flex-col p-3">
           <div className="mb-2 flex items-center gap-2">
-            <Input
-              type="number"
-              min={1}
-              max={65535}
-              value={previewPort ?? ""}
-              onChange={(event) => {
-                const nextPort = Number(event.target.value);
-                onPreviewPortChange(Number.isFinite(nextPort) && nextPort > 0 ? nextPort : undefined);
-              }}
-              placeholder="3000"
-              className="h-8"
-            />
+            <div className="flex h-8 flex-1 items-center overflow-hidden rounded-md border bg-muted/50 text-sm">
+              <span className="shrink-0 pl-2.5 text-muted-foreground">http://localhost:</span>
+              <Input
+                type="number"
+                min={1}
+                max={65535}
+                value={previewPort ?? ""}
+                onChange={(event) => {
+                  const nextPort = Number(event.target.value);
+                  onPreviewPortChange(Number.isFinite(nextPort) && nextPort > 0 ? nextPort : undefined);
+                }}
+                placeholder="3000"
+                className="h-full w-20 border-0 bg-transparent px-0.5 shadow-none focus-visible:ring-0"
+              />
+            </div>
+            <Button
+              type="button"
+              size="icon-sm"
+              variant="ghost"
+              onClick={refreshPreview}
+              disabled={!previewUrl}
+              aria-label="Refresh preview"
+            >
+              <RefreshCw className="size-3.5" />
+            </Button>
             <Button
               type="button"
               size="sm"
@@ -320,9 +152,9 @@ export function ChatSandboxWorkspace({
               {isConnectingPreview ? "Connecting..." : "Connect"}
             </Button>
           </div>
-          <Input value={previewUrl ?? ""} readOnly placeholder="https://..." className="mb-2 h-8" />
           <div className="min-h-0 flex-1 overflow-hidden rounded-md border">
             <iframe
+              ref={iframeRef}
               className="h-full w-full"
               src={previewUrl || undefined}
               title="Sandbox Preview"
@@ -339,7 +171,7 @@ export function ChatSandboxWorkspace({
                 type="button"
                 variant="outline"
                 size="sm"
-                onClick={() => setTerminalReloadKey((value) => value + 1)}
+                onClick={onReconnectTerminal}
               >
                 Reload
               </Button>
@@ -351,7 +183,7 @@ export function ChatSandboxWorkspace({
           <div
             ref={terminalContainerRef}
             className="min-h-0 flex-1 overflow-hidden rounded-md border"
-            style={{ backgroundColor: TERMINAL_BACKGROUND }}
+            style={{ backgroundColor: terminalBackground }}
           />
           {sshSession && (
             <div className="mt-2 text-xs text-muted-foreground">
@@ -361,7 +193,12 @@ export function ChatSandboxWorkspace({
         </TabsContent>
 
         <TabsContent value="explorer" className="mt-0 min-h-0 flex-1 p-3">
-          <div className="mb-2 text-xs text-muted-foreground">{sshSession?.explorer.path ?? "/"}</div>
+          <div className="mb-2 flex items-center justify-between">
+            <span className="text-xs text-muted-foreground">{explorer?.path ?? "/"}</span>
+            <Button type="button" variant="ghost" size="icon-sm" onClick={onRefreshExplorer} aria-label="Refresh file explorer">
+              <RefreshCw className="size-3" />
+            </Button>
+          </div>
           <div className="h-full overflow-auto rounded-md border">
             {sortedEntries.length === 0 ? (
               <div className="p-3 text-sm text-muted-foreground">No files found.</div>

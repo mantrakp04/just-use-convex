@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { Bot } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { Id } from "@just-use-convex/backend/convex/_generated/dataModel";
 import { useOpenRouterModels, type OpenRouterModel } from "@/hooks/use-openrouter-models";
 import { ChatInput } from "@/components/chat";
@@ -41,7 +41,9 @@ function ChatPage() {
   const typedChatId = chatId as Id<"chats">;
   const { chat, agent, settings, setSettings, isReady } = useAgentInstance(chatId);
   const { groupedModels, models } = useOpenRouterModels();
-  const sandbox = useChatSandbox(typedChatId);
+  const sandbox = useChatSandbox(typedChatId, agent);
+  const chatContentRef = useRef<HTMLDivElement>(null);
+  const [isPanelResizing, setIsPanelResizing] = useState(false);
   const [headerHeight, setHeaderHeight] = useState(0);
 
   const selectedModel = useMemo(
@@ -83,6 +85,56 @@ function ChatPage() {
     handleEditMessage,
   } = useChat(chat, agent);
 
+  useEffect(() => {
+    // Find StickToBottom's internal scroll container via the role="log" element
+    const scrollEl = chatContentRef.current
+      ?.querySelector('[role="log"]')
+      ?.firstElementChild as HTMLElement | null;
+
+    // Save scroll ratio before the width change causes content reflow
+    let scrollRatio: number | null = null;
+    if (scrollEl) {
+      const maxScroll = scrollEl.scrollHeight - scrollEl.clientHeight;
+      if (maxScroll > 0 && scrollEl.scrollTop > 0) {
+        scrollRatio = scrollEl.scrollTop / maxScroll;
+      }
+    }
+
+    // Disable StickToBottom's resize handling so it doesn't fight our restoration
+    setIsPanelResizing(true);
+
+    // Restore scroll position proportionally as content reflows from the width change
+    if (scrollRatio !== null && scrollEl) {
+      const restoreScroll = () => {
+        const newMaxScroll = scrollEl.scrollHeight - scrollEl.clientHeight;
+        if (newMaxScroll > 0) {
+          scrollEl.scrollTop = scrollRatio! * newMaxScroll;
+        }
+      };
+
+      const observer = new ResizeObserver(restoreScroll);
+      observer.observe(scrollEl);
+
+      const timeout = setTimeout(() => {
+        restoreScroll();
+        observer.disconnect();
+        setIsPanelResizing(false);
+      }, 300);
+
+      return () => {
+        observer.disconnect();
+        clearTimeout(timeout);
+        setIsPanelResizing(false);
+      };
+    }
+
+    const timeout = setTimeout(() => setIsPanelResizing(false), 300);
+    return () => {
+      clearTimeout(timeout);
+      setIsPanelResizing(false);
+    };
+  }, [sandbox.isOpen]);
+
   if (!isReady || !chat) {
     return (
       <div className="flex h-svh flex-col">
@@ -94,8 +146,8 @@ function ChatPage() {
   }
 
   const chatContent = (
-    <div className="flex h-full w-full flex-col @container/chat-column">
-      <Conversation className="flex-1">
+    <div ref={chatContentRef} className="flex h-full w-full flex-col @container/chat-column">
+      <Conversation className="flex-1" resize={isPanelResizing ? undefined : "smooth"}>
         <ConversationContent>
           {messages.length === 0 ? (
             <ConversationEmptyState
@@ -158,20 +210,19 @@ function ChatPage() {
     </div>
   );
 
-  if (!sandbox.isOpen) {
-    return chatContent;
-  }
-
   return (
-    <div className="h-full w-full">
-      <ResizablePanelGroup orientation="horizontal" className="h-full w-full">
-        <ResizablePanel defaultSize={25} minSize={20}>
-          {chatContent}
-        </ResizablePanel>
-        <ResizableHandle withHandle />
-        <ResizablePanel defaultSize={75} minSize={25}>
+    <ResizablePanelGroup orientation="horizontal" className="h-full w-full">
+      <ResizablePanel defaultSize={sandbox.isOpen ? 65 : 100} minSize={20}>
+        {chatContent}
+      </ResizablePanel>
+      {sandbox.isOpen && (
+        <>
+          <ResizableHandle withHandle className="z-10" />
+          <ResizablePanel defaultSize={35} minSize={25}>
           <ChatSandboxWorkspace
             sshSession={sandbox.sshSession}
+            explorer={sandbox.explorer}
+            onRefreshExplorer={() => void sandbox.refreshExplorer()}
             previewPort={sandbox.previewPort}
             previewUrl={sandbox.previewUrl}
             isConnectingPreview={sandbox.isConnectingPreview}
@@ -179,10 +230,14 @@ function ChatPage() {
             onCreatePreviewAccess={sandbox.createPreviewAccess}
             onCopySshCommand={sandbox.copySshCommand}
             onOpenInEditor={sandbox.openInEditor}
-            agent={agent}
+            onReconnectTerminal={sandbox.reconnectTerminal}
+            onFocusTerminal={sandbox.focusTerminal}
+            terminalContainerRef={sandbox.terminalContainerRef}
+            terminalBackground={sandbox.terminalBackground}
           />
-        </ResizablePanel>
-      </ResizablePanelGroup>
-    </div>
+          </ResizablePanel>
+        </>
+      )}
+    </ResizablePanelGroup>
   );
 }
