@@ -89,10 +89,27 @@ Returns the task status, logs, and pagination info.`,
           await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
         }
 
+        const latestTask = store.get(taskId);
+        if (!latestTask) {
+          return { error: `Task not found: ${taskId}` };
+        }
+
+        if (TERMINAL_STATUSES.includes(latestTask.status)) {
+          const { logs, total, hasMore } = store.getLogs(taskId, offset, limit);
+          const minimalLogs = logs.map(({ type, message }) => ({ type, message }));
+          return { ...buildTaskResult(latestTask), logs: minimalLogs, total, hasMore };
+        }
+
+        const { logs, total, hasMore } = store.getLogs(taskId, offset, limit);
+        const minimalLogs = logs.map(({ type, message }) => ({ type, message }));
         return {
           taskId,
           status: "wait_timeout",
+          taskStatus: latestTask.status,
           message: `Task did not complete within ${timeoutMs}ms`,
+          logs: minimalLogs,
+          total,
+          hasMore,
         };
       }
 
@@ -116,11 +133,15 @@ Attempts to abort the task execution. Only works for tasks that are still runnin
       taskId: z.string().describe("The background task ID to cancel"),
     }),
     execute: async ({ taskId }) => {
-      const { cancelled, previousStatus } = store.cancel(taskId);
+      const { cancelled, previousStatus, reason } = store.cancel(taskId);
       if (previousStatus === null) {
         return { error: `Task not found: ${taskId}` };
       }
-      return { taskId, cancelled };
+      return {
+        taskId,
+        cancelled,
+        ...(reason ? { reason } : {}),
+      };
     },
   });
 

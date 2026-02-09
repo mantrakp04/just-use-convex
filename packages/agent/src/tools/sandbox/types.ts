@@ -49,14 +49,17 @@ export const writeParameters = z.object({
 
 export const editParameters = z.object({
   path: sandboxPathSchema,
-  oldText: z.string().describe("Exact text to replace."),
+  oldText: z.string().min(1).describe("Exact text to replace."),
   newText: z.string().describe("Replacement text."),
   replaceAll: z.boolean().default(false),
 });
 
 export const globParameters = z.object({
   path: sandboxPathSchema.default("."),
-  pattern: z.string().min(1).describe("Glob pattern like **/*.ts"),
+  pattern: z
+    .string()
+    .min(1)
+    .describe("Glob pattern supporting *, ?, [], and ** (for example: **/*.ts)."),
 });
 
 export const grepParameters = z.object({
@@ -159,6 +162,10 @@ export const exposeServiceParameters = z.object({
     .min(1)
     .optional()
     .describe("Optional signed token to revoke before returning preview links."),
+  checkConnectivity: z
+    .boolean()
+    .default(false)
+    .describe("Optionally check whether the sandbox service is currently listening on this port."),
 });
 
 export type LsInput = z.infer<typeof lsParameters>;

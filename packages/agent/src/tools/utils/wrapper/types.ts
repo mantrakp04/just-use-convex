@@ -79,7 +79,11 @@ export interface BackgroundTaskStoreApi {
     offset?: number,
     lines?: number
   ): ToolOutputLogReadResult | undefined;
-  cancel(id: string): { cancelled: boolean; previousStatus: BackgroundTaskStatus | null };
+  cancel(id: string): {
+    cancelled: boolean;
+    previousStatus: BackgroundTaskStatus | null;
+    reason?: string;
+  };
 }
 
 export type BackgroundTaskResult = {
@@ -113,7 +117,6 @@ export type ToolCallConfig = {
   allowAgentSetDuration?: boolean;
   allowBackground?: boolean;
   maxOutputTokens?: number;
-  allowAgentSetMaxOutputTokens?: boolean;
 };
 
 export type WrappedExecuteOptions = ToolExecuteOptions & {

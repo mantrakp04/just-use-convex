@@ -9,6 +9,7 @@ import type {
   XtermResizeInput,
   XtermWriteInput,
 } from "./types";
+import type { WrappedExecuteOptions } from "../utils/wrapper";
 
 export async function getOrCreatePtySession(
   sandboxSession: SandboxSessionState,
@@ -152,25 +153,45 @@ export async function resizePty(
 export async function closePtySession(
   sandboxSession: SandboxSessionState,
   input: XtermCloseInput
-): Promise<{ terminalId: string; closed: boolean }> {
+): Promise<{ terminalId: string; closed: boolean; reason?: string }> {
   const ptySession = sandboxSession.ptySessions.get(input.terminalId);
   if (!ptySession) {
-    await sandboxSession.sandbox.process.killPtySession(input.terminalId).catch(
-      () => undefined
-    );
+    let killError: unknown | null = null;
+    const closed = await sandboxSession.sandbox.process.killPtySession(input.terminalId).then(
+      () => true
+    ).catch((error: unknown) => {
+      killError = error;
+      return false;
+    });
     return {
       terminalId: input.terminalId,
-      closed: false,
+      closed,
+      ...(closed
+        ? {}
+        : {
+            reason: isTerminalNotFoundError(killError)
+              ? "terminal not found"
+              : "close operation failed",
+          }),
     };
   }
 
   ptySession.closed = true;
-  await Promise.all([
-    ptySession.handle.disconnect().catch(() => undefined),
-    sandboxSession.sandbox.process.killPtySession(input.terminalId).catch(
-      () => undefined
-    ),
+  const [disconnectResult, killResult] = await Promise.allSettled([
+    ptySession.handle.disconnect(),
+    sandboxSession.sandbox.process.killPtySession(input.terminalId),
   ]);
+  const failed =
+    disconnectResult.status === "rejected" && killResult.status === "rejected";
+
+  if (failed) {
+    return {
+      terminalId: input.terminalId,
+      closed: false,
+      reason: "close operation failed",
+    };
+  }
+
   sandboxSession.ptySessions.delete(input.terminalId);
   return {
     terminalId: input.terminalId,
@@ -180,7 +201,10 @@ export async function closePtySession(
 
 export async function execOnPty(
   sandboxSession: SandboxSessionState,
-  input: ExecInput
+  input: ExecInput,
+  options?: Pick<WrappedExecuteOptions, "streamLogs" | "log"> & {
+    abortSignal?: AbortSignal;
+  }
 ): Promise<ExecOutput> {
   const ptySession = await getOrCreatePtySession(sandboxSession, {
     terminalId: input.terminalId,
@@ -193,6 +217,7 @@ export async function execOnPty(
   return await nextQueueTask(ptySession, async () => {
     const marker = `__JUC_EXIT_${Date.now()}_${Math.random().toString(36).slice(2)}`;
     const commandStart = ptySession.output.length;
+    let streamedLength = 0;
     const normalizedCommand = input.command.endsWith("\n")
       ? input.command
       : `${input.command}\n`;
@@ -202,8 +227,34 @@ export async function execOnPty(
 
     const deadline = Date.now() + input.timeoutMs;
     while (Date.now() <= deadline) {
+      if (options?.abortSignal?.aborted) {
+        const output = ptySession.output.slice(commandStart);
+        streamedLength = streamExecOutputDelta({
+          options,
+          marker,
+          parsed: { result: null, dataUpToMarker: output },
+          streamedLength,
+          force: true,
+        });
+        return {
+          terminalId: ptySession.id,
+          command: input.command,
+          output,
+          exitCode: null,
+          success: false,
+          timedOut: false,
+          error: "PTY command was aborted",
+        };
+      }
+
       const dataSinceCommand = ptySession.output.slice(commandStart);
       const parsed = extractExecResult(dataSinceCommand, marker);
+      streamedLength = streamExecOutputDelta({
+        options,
+        marker,
+        parsed,
+        streamedLength,
+      });
       if (parsed.result) {
         return {
           ...parsed.result,
@@ -213,6 +264,13 @@ export async function execOnPty(
       }
 
       if (ptySession.closed) {
+        streamedLength = streamExecOutputDelta({
+          options,
+          marker,
+          parsed: { result: null, dataUpToMarker: parsed.dataUpToMarker },
+          streamedLength,
+          force: true,
+        });
         return {
           terminalId: ptySession.id,
           command: input.command,
@@ -227,10 +285,18 @@ export async function execOnPty(
       await delay(50);
     }
 
+    const timedOutOutput = ptySession.output.slice(commandStart);
+    streamedLength = streamExecOutputDelta({
+      options,
+      marker,
+      parsed: { result: null, dataUpToMarker: timedOutOutput },
+      streamedLength,
+      force: true,
+    });
     return {
       terminalId: ptySession.id,
       command: input.command,
-      output: ptySession.output.slice(commandStart),
+      output: timedOutOutput,
       exitCode: null,
       success: false,
       timedOut: true,
@@ -289,8 +355,59 @@ function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+function streamExecOutputDelta({
+  options,
+  marker,
+  parsed,
+  streamedLength,
+  force = false,
+}: {
+  options: Pick<WrappedExecuteOptions, "streamLogs" | "log"> | undefined;
+  marker: string;
+  parsed: ReturnType<typeof extractExecResult>;
+  streamedLength: number;
+  force?: boolean;
+}): number {
+  const streamLogs = options?.streamLogs ?? options?.log;
+  if (!streamLogs) {
+    return streamedLength;
+  }
+
+  const data = parsed.dataUpToMarker;
+  const maxLength = force || parsed.result
+    ? data.length
+    : Math.max(0, data.length - getMarkerGuardLength(marker));
+  const nextLength = Math.max(
+    streamedLength,
+    Math.min(maxLength, data.length)
+  );
+  if (nextLength <= streamedLength) {
+    return streamedLength;
+  }
+
+  const delta = data.slice(streamedLength, nextLength);
+  if (delta.length > 0) {
+    streamLogs({ type: "stdout", message: delta });
+  }
+  return nextLength;
+}
+
+function getMarkerGuardLength(marker: string): number {
+  // Keep a small trailing buffer to avoid streaming partial marker text.
+  return marker.length + 16;
+}
+
 function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function isTerminalNotFoundError(error: unknown): boolean {
+  if (!(error instanceof Error)) {
+    return false;
+  }
+
+  const message = error.message.toLowerCase();
+  return message.includes("not found") || message.includes("no such") || message.includes("404");
 }
 
 function nextQueueTask<T>(

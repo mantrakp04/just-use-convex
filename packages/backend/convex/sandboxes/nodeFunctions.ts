@@ -11,7 +11,7 @@ import { api } from "../_generated/api";
 import * as types from "./types";
 
 let daytonaClient: Daytona | null = null;
-const SANDBOX_VOLUME_MOUNT_PATH = "/home/daytona/volume";
+const SANDBOX_VOLUME_MOUNT_PATH = "/home/daytona";
 
 function getDaytonaClient() {
   if (daytonaClient) {
@@ -55,9 +55,8 @@ export const provision = internalAction({
   },
   handler: async (_ctx, args) => {
     const sandboxName = args.sandboxId;
-    const volumeName = getSandboxVolumeName(sandboxName);
+    const volumeName = sandboxName;
     const daytona = getDaytonaClient();
-    const volume = await daytona.volume.get(volumeName, true);
 
     try {
       await daytona.get(sandboxName);
@@ -66,6 +65,19 @@ export const provision = internalAction({
       if (!(error instanceof DaytonaNotFoundError)) {
         throw error;
       }
+    }
+
+    let volume = await daytona.volume.get(volumeName, true);
+
+    let count = 0;
+    while (volume.state !== "ready" && count < 10) {
+      if (volume.state === "error") {
+        throw new Error(`Volume '${volumeName}' entered error state: ${volume.errorReason ?? "unknown reason"}`);
+      }
+
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+      volume = await daytona.volume.get(volumeName, false);
+      count++;
     }
 
     await daytona.create({
@@ -88,7 +100,7 @@ export const destroy = internalAction({
   },
   handler: async (_ctx, args) => {
     const daytona = getDaytonaClient();
-    const volumeName = getSandboxVolumeName(args.sandboxId);
+    const volumeName = args.sandboxId;
 
     try {
       const sandbox = await daytona.get(args.sandboxId);
@@ -204,6 +216,3 @@ async function createChatPreviewAccessFunction(ctx: zActionCtx, args: z.infer<ty
   };
 }
 
-function getSandboxVolumeName(sandboxId: string) {
-  return `sandbox-${sandboxId}`;
-}

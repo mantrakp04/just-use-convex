@@ -13,6 +13,7 @@ import { sanitizeFilename } from "../../agent/messages";
 import {
   createWrappedTool,
   type BackgroundTaskStoreApi,
+  type WrappedExecuteOptions,
 } from "../utils/wrapper";
 import type { worker } from "../../../alchemy.run";
 import {
@@ -65,7 +66,7 @@ type SandboxToolkitOptions = {
 
 const SANDBOX_TOOLKIT_INSTRUCTIONS = `You can operate directly on the chat sandbox.
 
-- Paths are sandbox paths and can be relative to workdir.
+- Paths are sandbox paths and can be relative to workdir. \`/workspace/*\` is accepted as an alias for \`workspace/*\`.
 - PTY sessions are get-or-create by terminalId.
 - LSP has a single active session per sandbox: reused for same language, recreated on language change.
 - Use \`exec\` for command execution via PTY.
@@ -73,18 +74,18 @@ const SANDBOX_TOOLKIT_INSTRUCTIONS = `You can operate directly on the chat sandb
 - Standard preview auth uses \`x-daytona-preview-token\`; signed preview auth is embedded in the URL.
 - LSP lifecycle is managed automatically.`;
 
+const DEFAULT_TOOL_MAX_DURATION_MS = 30 * 60 * 1000;
 const DEFAULT_TOOL_CALL_CONFIG = {
-  maxDuration: 30 * 60 * 1000,
+  maxDuration: DEFAULT_TOOL_MAX_DURATION_MS,
   allowAgentSetDuration: true,
   allowBackground: true,
 } as const;
+const EXEC_PROMOTED_CONTINUATION_TIMEOUT_MS = DEFAULT_TOOL_MAX_DURATION_MS;
 
 const INTERNAL_PTY_TERMINAL_ID = "__sandbox_internal__";
 const INTERNAL_PTY_TIMEOUT_MS = 20_000;
 const SANDBOX_UPLOADS_DIR = "workspace/uploads";
 const SANDBOX_UPLOADS_TEMP_DIR = "workspace/.tmp/uploads";
-const EDIT_RESULT_START_MARKER = "__JUC_EDIT_RESULT_START__";
-const EDIT_RESULT_END_MARKER = "__JUC_EDIT_RESULT_END__";
 const DAYTONA_PREVIEW_TOKEN_HEADER = "x-daytona-preview-token";
 
 export class SandboxFilesystemBackend {
@@ -168,16 +169,52 @@ export class SandboxFilesystemBackend {
     });
   }
 
+  private async checkServiceConnectivity(port: number) {
+    const command = [
+      "python3 - <<'PY'",
+      "import socket",
+      `port = ${port}`,
+      "sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)",
+      "sock.settimeout(1.0)",
+      "reachable = sock.connect_ex(('127.0.0.1', port)) == 0",
+      "sock.close()",
+      "print('reachable' if reachable else 'unreachable')",
+      "PY",
+    ].join("\n");
+
+    const result = await this.runInternalPtyCommand(command, 5_000);
+    if (!result.success || result.timedOut) {
+      return {
+        checked: true,
+        reachable: false,
+        warning: "Connectivity check failed while probing the sandbox port.",
+      };
+    }
+
+    const normalizedOutput = result.output.trim().split(/\r?\n/).at(-1) ?? "";
+    const reachable = normalizedOutput === "reachable";
+    return {
+      checked: true,
+      reachable,
+      ...(reachable
+        ? {}
+        : {
+            warning: `No service detected on port ${port}. Preview URL may return 502/timeout.`,
+          }),
+    };
+  }
+
   async listFiles(input: LsInput) {
-    const files = await this.ensureSandboxSession().sandbox.fs.listFiles(input.path);
+    const resolvedPath = normalizeSandboxPath(input.path);
+    const files = await this.ensureSandboxSession().sandbox.fs.listFiles(resolvedPath);
     if (!files) {
       throw new Error("Sandbox session not found");
     }
     return {
-      path: input.path,
+      path: resolvedPath,
       entries: files.map((file) => ({
         name: file.name,
-        path: joinSandboxPath(input.path, file.name),
+        path: joinSandboxPath(resolvedPath, file.name),
         isDir: file.isDir,
         size: file.size,
         modifiedAt: parseModTime(file.modTime),
@@ -187,7 +224,8 @@ export class SandboxFilesystemBackend {
   }
 
   async readFile(input: ReadInput) {
-    const contentBuffer = await this.ensureSandboxSession().sandbox.fs.downloadFile(input.path);
+    const resolvedPath = normalizeSandboxPath(input.path);
+    const contentBuffer = await this.ensureSandboxSession().sandbox.fs.downloadFile(resolvedPath);
     if (!contentBuffer) {
       throw new Error("Sandbox session not found");
     }
@@ -195,7 +233,7 @@ export class SandboxFilesystemBackend {
     const start = input.offset ?? 0;
     const end = input.limit !== undefined ? start + input.limit : undefined;
     return {
-      path: input.path,
+      path: resolvedPath,
       content: content.slice(start, end),
       size: content.length,
       offset: start,
@@ -204,10 +242,14 @@ export class SandboxFilesystemBackend {
   }
 
   async writeFile(input: WriteInput) {
-    await this.ensureParentDirectories(this.ensureSandboxSession().sandbox, input.path);
-    await this.ensureSandboxSession().sandbox.fs.uploadFile(Buffer.from(input.content), input.path);
+    const resolvedPath = normalizeSandboxPath(input.path);
+    await this.ensureParentDirectories(this.ensureSandboxSession().sandbox, resolvedPath);
+    await this.ensureSandboxSession().sandbox.fs.uploadFile(
+      Buffer.from(input.content),
+      resolvedPath
+    );
     return {
-      path: input.path,
+      path: resolvedPath,
       bytesWritten: Buffer.byteLength(input.content),
     };
   }
@@ -215,101 +257,66 @@ export class SandboxFilesystemBackend {
   async editFile(input: EditInput) {
     if (!input.oldText) {
       return {
-        path: input.path,
+        path: normalizeSandboxPath(input.path),
         edited: false,
         occurrences: 0,
         error: "oldText must not be empty",
       };
     }
 
-    const payload = Buffer.from(
-      JSON.stringify({
-        path: input.path,
-        oldText: input.oldText,
-        newText: input.newText,
-        replaceAll: input.replaceAll,
-      }),
-      "utf8"
-    ).toString("base64");
-
-    const command = [
-      "python3 - <<'PY'",
-      "import base64",
-      "import json",
-      "from pathlib import Path",
-      `payload = json.loads(base64.b64decode('${payload}').decode('utf-8'))`,
-      "path = Path(payload['path'])",
-      "old_text = payload['oldText']",
-      "new_text = payload['newText']",
-      "replace_all = payload['replaceAll']",
-      "text = path.read_text(encoding='utf-8')",
-      "occurrences = text.count(old_text)",
-      "edited = False",
-      "applied_occurrences = 0",
-      "if occurrences > 0:",
-      "    if replace_all:",
-      "        updated = text.replace(old_text, new_text)",
-      "        applied_occurrences = occurrences",
-      "    else:",
-      "        updated = text.replace(old_text, new_text, 1)",
-      "        applied_occurrences = 1",
-      "    path.write_text(updated, encoding='utf-8')",
-      "    edited = True",
-      `print('${EDIT_RESULT_START_MARKER}')`,
-      "print(json.dumps({'edited': edited, 'occurrences': applied_occurrences}))",
-      `print('${EDIT_RESULT_END_MARKER}')`,
-      "PY",
-    ].join("\n");
-
-    const result = await this.runInternalPtyCommand(command, 60_000);
-    if (!result.success || result.timedOut) {
-      throw new Error(createPtyCommandError("editFile", result));
+    const resolvedPath = normalizeSandboxPath(input.path);
+    const sandboxSession = this.ensureSandboxSession();
+    const contentBuffer = await sandboxSession.sandbox.fs.downloadFile(resolvedPath);
+    const content = contentBuffer.toString("utf8");
+    const occurrences = countSubstringOccurrences(content, input.oldText);
+    const appliedOccurrences = input.replaceAll ? occurrences : Math.min(occurrences, 1);
+    if (appliedOccurrences > 0) {
+      const updatedContent = input.replaceAll
+        ? content.split(input.oldText).join(input.newText)
+        : replaceFirstOccurrence(content, input.oldText, input.newText);
+      await sandboxSession.sandbox.fs.uploadFile(
+        Buffer.from(updatedContent, "utf8"),
+        resolvedPath
+      );
     }
-
-    const rawEditResult = extractMarkedContent(
-      result.output,
-      EDIT_RESULT_START_MARKER,
-      EDIT_RESULT_END_MARKER
-    );
-    if (!rawEditResult) {
-      throw new Error("editFile did not return a parsable result");
-    }
-
-    const parsed = JSON.parse(rawEditResult) as {
-      edited?: boolean;
-      occurrences?: number;
-    };
 
     return {
-      path: input.path,
-      edited: parsed.edited === true,
-      occurrences:
-        typeof parsed.occurrences === "number" ? parsed.occurrences : 0,
+      path: resolvedPath,
+      edited: appliedOccurrences > 0,
+      occurrences: appliedOccurrences,
     };
   }
 
   async globFiles(input: GlobInput) {
     const sandboxSession = this.ensureSandboxSession();
+    const resolvedPath = normalizeSandboxPath(input.path);
     const result = await sandboxSession.sandbox.fs.searchFiles(
-      input.path,
+      resolvedPath,
       input.pattern
-    );
+    ).catch((error: unknown) => {
+      if (isSandboxPathNotFoundError(error)) {
+        return null;
+      }
+      throw error;
+    });
+    const files = Array.isArray(result?.files) ? result?.files ?? [] : [];
     return {
-      path: input.path,
+      path: resolvedPath,
       pattern: input.pattern,
-      files: result.files,
-      count: result.files.length,
+      files,
+      count: files.length,
     };
   }
 
   async grepFiles(input: GrepInput) {
     const sandboxSession = this.ensureSandboxSession();
+    const resolvedPath = normalizeSandboxPath(input.path);
     const matches = await sandboxSession.sandbox.fs.findFiles(
-      input.path,
+      resolvedPath,
       input.pattern
     );
     return {
-      path: input.path,
+      path: resolvedPath,
       pattern: input.pattern,
       matches,
       count: matches.length,
@@ -325,9 +332,15 @@ export class SandboxFilesystemBackend {
     };
   }
 
-  async exec(input: ExecInput) {
+  async exec(input: ExecInput, options?: WrappedExecuteOptions) {
     const sandboxSession = this.ensureSandboxSession();
-    const result = await execOnPty(sandboxSession, input);
+    const result = await execOnPty(sandboxSession, {
+      ...input,
+      timeoutMs: resolveExecTimeoutMs(input.timeoutMs, options?.timeout),
+    }, {
+      streamLogs: options?.streamLogs ?? options?.log,
+      abortSignal: options?.toolContext?.abortSignal ?? options?.abortController?.signal,
+    });
     if (input.closeAfter) {
       await closePtySession(sandboxSession, { terminalId: result.terminalId });
     }
@@ -353,6 +366,9 @@ export class SandboxFilesystemBackend {
         ? sandbox.getSignedPreviewUrl(input.port, input.expiresInSeconds)
         : Promise.resolve(null),
     ]);
+    const connectivity = input.checkConnectivity
+      ? await this.checkServiceConnectivity(input.port)
+      : null;
 
     return {
       port: input.port,
@@ -360,6 +376,7 @@ export class SandboxFilesystemBackend {
       ...(revokedSignedToken ? { revokedSignedToken } : {}),
       ...(standardPreview ? { standard: buildStandardPreviewResult(standardPreview) } : {}),
       ...(signedPreview ? { signed: buildSignedPreviewResult(signedPreview, input) } : {}),
+      ...(connectivity ? { connectivity } : {}),
     };
   }
 
@@ -395,7 +412,25 @@ export class SandboxFilesystemBackend {
 
   async lspCompletions(input: LspCompletionsInput) {
     const sandboxSession = this.ensureSandboxSession();
-    return await getLspCompletions(sandboxSession, input);
+    const normalizedInput: LspCompletionsInput = {
+      ...input,
+      projectPath: normalizeSandboxPath(input.projectPath),
+      filePath: normalizeSandboxPath(input.filePath),
+    };
+
+    try {
+      return await getLspCompletions(sandboxSession, normalizedInput);
+    } catch (error) {
+      return {
+        languageId: normalizedInput.languageId,
+        filePath: normalizedInput.filePath,
+        line: normalizedInput.line,
+        character: normalizedInput.character,
+        completions: [],
+        error: "LSP server not available",
+        reason: buildLspErrorReason(normalizedInput.languageId, error),
+      };
+    }
   }
 
   async closeSandboxSession() {
@@ -498,7 +533,10 @@ function createSandboxTool(
     name: string;
     description: string;
     parameters: z.ZodObject<z.ZodRawShape>;
-    execute: (args: Record<string, unknown>) => Promise<unknown>;
+    execute: (
+      args: Record<string, unknown>,
+      toolOptions?: WrappedExecuteOptions
+    ) => Promise<unknown>;
   }
 ): BaseTool {
   if (options.store) {
@@ -516,7 +554,11 @@ function createSandboxTool(
     name: config.name,
     description: config.description,
     parameters: config.parameters,
-    execute: async (args) => await config.execute(args as Record<string, unknown>),
+    execute: async (args, toolOptions) =>
+      await config.execute(
+        args,
+        toolOptions
+      ),
   });
 }
 
@@ -565,7 +607,8 @@ export function createSandboxToolkit(
       name: "exec",
       description: "Execute a shell command through a PTY session.",
       parameters: execParameters,
-      execute: async (args) => await filesystemBackend.exec(execParameters.parse(args)),
+      execute: async (args, toolOptions) =>
+        await filesystemBackend.exec(execParameters.parse(args), toolOptions),
     }),
     createSandboxTool(options, {
       name: "expose_service",
@@ -735,6 +778,20 @@ export abstract class SandboxTerminalAgentBase<
   }
 }
 
+function resolveExecTimeoutMs(timeoutMs: number, wrappedTimeoutMs?: number): number {
+  const normalizedTimeoutMs = Math.max(1, Math.floor(timeoutMs));
+  if (typeof wrappedTimeoutMs !== "number" || !Number.isFinite(wrappedTimeoutMs)) {
+    return normalizedTimeoutMs;
+  }
+
+  const normalizedWrappedTimeoutMs = Math.max(1, Math.floor(wrappedTimeoutMs));
+  if (normalizedTimeoutMs > normalizedWrappedTimeoutMs) {
+    return normalizedTimeoutMs;
+  }
+
+  return Math.max(normalizedTimeoutMs, EXEC_PROMOTED_CONTINUATION_TIMEOUT_MS);
+}
+
 function parseModTime(modTime: string): number {
   const parsed = Date.parse(modTime);
   return Number.isNaN(parsed) ? Date.now() : parsed;
@@ -772,6 +829,21 @@ function decodeDataUrl(url: string): Buffer | null {
   return Buffer.from(decodeURIComponent(payload), "utf8");
 }
 
+function countSubstringOccurrences(content: string, needle: string): number {
+  if (!needle) {
+    return 0;
+  }
+  return content.split(needle).length - 1;
+}
+
+function replaceFirstOccurrence(content: string, oldText: string, newText: string): string {
+  const index = content.indexOf(oldText);
+  if (index < 0) {
+    return content;
+  }
+  return `${content.slice(0, index)}${newText}${content.slice(index + oldText.length)}`;
+}
+
 function createPtyCommandError(
   operation: string,
   result: Pick<ExecOutput, "success" | "timedOut" | "exitCode" | "error" | "output">
@@ -791,30 +863,6 @@ function createPtyCommandError(
     return `${operation} failed with exit code ${result.exitCode}`;
   }
   return `${operation} failed`;
-}
-
-function extractMarkedContent(
-  output: string,
-  startMarker: string,
-  endMarker: string
-): string | null {
-  const markerRegex = new RegExp(
-    `${escapeRegExp(startMarker)}\\r?\\n([\\s\\S]*?)\\r?\\n${escapeRegExp(endMarker)}`,
-    "g"
-  );
-  let match: RegExpExecArray | null = null;
-  let lastContent: string | null = null;
-  while (true) {
-    match = markerRegex.exec(output);
-    if (!match) {
-      break;
-    }
-    lastContent = match[1] ?? null;
-  }
-  if (!lastContent) {
-    return null;
-  }
-  return lastContent.trim();
 }
 
 function buildStandardPreviewResult(
@@ -857,6 +905,53 @@ function createTempFileName(messageId: string, index: number, filename: string):
   return `${safeMessageId}_${index}_${nonce}_${filename}`;
 }
 
-function escapeRegExp(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+function normalizeSandboxPath(path: string): string {
+  if (path === "/workspace") {
+    return "workspace";
+  }
+  if (path.startsWith("/workspace/")) {
+    return `workspace/${path.slice("/workspace/".length)}`;
+  }
+  if (path === "/home/daytona/workspace") {
+    return "workspace";
+  }
+  if (path.startsWith("/home/daytona/workspace/")) {
+    return `workspace/${path.slice("/home/daytona/workspace/".length)}`;
+  }
+  return path;
+}
+
+function getLspBinaryCandidates(languageId: string): string[] {
+  switch (languageId.toLowerCase()) {
+    case "typescript":
+    case "javascript":
+      return ["typescript-language-server", "vtsls"];
+    case "python":
+      return ["pylsp", "pyright-langserver", "basedpyright-langserver"];
+    default:
+      return [];
+  }
+}
+
+function isSandboxPathNotFoundError(error: unknown): boolean {
+  if (!(error instanceof Error)) {
+    return false;
+  }
+  const message = error.message.toLowerCase();
+  return message.includes("not found") || message.includes("no such file") || message.includes("404");
+}
+
+function buildLspErrorReason(languageId: string, error: unknown): string {
+  if (error instanceof Error && error.message.trim().length > 0) {
+    const message = error.message.trim();
+    const normalizedMessage = message.toLowerCase();
+    if (normalizedMessage.includes("not found") || normalizedMessage.includes("enoent")) {
+      const binaries = getLspBinaryCandidates(languageId);
+      if (binaries.length > 0) {
+        return `Server binary not found (${binaries.join(" or ")})`;
+      }
+    }
+    return message;
+  }
+  return "Unknown LSP startup failure";
 }

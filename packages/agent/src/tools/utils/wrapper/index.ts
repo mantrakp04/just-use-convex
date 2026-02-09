@@ -3,6 +3,7 @@ import { runInBackground } from "./background";
 import {
   createWrappedExecute,
   augmentParametersSchema,
+  DEFAULT_MAX_DURATION_MS,
   DEFAULT_MAX_OUTPUT_TOKENS,
   isZodObjectSchema,
 } from "./tool";
@@ -35,19 +36,22 @@ function createTimeoutPromotionHook(startBackgroundTask: StartBackgroundTask): B
     toolName,
     toolArgs,
     executionFactory,
+    config,
     maxAllowedDuration,
   }) => {
     if (!isToolTimeoutError(error)) {
       return undefined;
     }
 
+    const timeoutMs = resolveTimeoutPromotionDuration(config, maxAllowedDuration);
+
     return startBackgroundTask({
       toolCallId,
       toolName,
       toolArgs,
       executionFactory,
-      timeoutMs: maxAllowedDuration,
-      initialLog: `Foreground execution timed out. Continued in background for up to ${maxAllowedDuration}ms.`,
+      timeoutMs,
+      initialLog: `Foreground execution timed out. Continued in background for up to ${timeoutMs}ms.`,
     });
   };
 }
@@ -159,7 +163,12 @@ function createResultTruncationHook(store: BackgroundTaskStoreApi) {
       toolName,
       content: serialized,
     });
-    const truncated = withTruncationNote(serialized.slice(0, maxChars), logId, maxTokens);
+    const truncated = withTruncationNote(
+      serialized.slice(0, maxChars),
+      logId,
+      maxTokens,
+      totalLines
+    );
     const readLogs = { logId, offset: 0, lines: DEFAULT_READ_LOG_LINES };
 
     if (typeof result === "string") {
@@ -172,7 +181,12 @@ function createResultTruncationHook(store: BackgroundTaskStoreApi) {
         const fieldContent = result[largeField] as string;
         return {
           ...result,
-          [largeField]: withTruncationNote(fieldContent.slice(0, maxChars), logId, maxTokens),
+          [largeField]: withTruncationNote(
+            fieldContent.slice(0, maxChars),
+            logId,
+            maxTokens,
+            totalLines
+          ),
           _truncated: true,
           _readLogs: readLogs,
           _fullOutputSize: size,
@@ -186,7 +200,7 @@ function createResultTruncationHook(store: BackgroundTaskStoreApi) {
         _readLogs: readLogs,
         _fullOutputSize: size,
         _fullOutputLines: totalLines,
-        _note: `Output truncated. Use read_logs with logId "${logId}".`,
+        _note: `Output truncated (${totalLines} lines). Use read_logs with {"logId":"${logId}","offset":0,"lines":${DEFAULT_READ_LOG_LINES}} and paginate with offset.`,
       };
     }
 
@@ -217,10 +231,36 @@ function serializeResult(result: unknown): string {
   return String(result);
 }
 
-function withTruncationNote(content: string, logId: string, maxOutputTokens: number): string {
+function resolveTimeoutPromotionDuration(config: ToolCallConfig, maxAllowedDuration: number): number {
+  const configuredMaxDuration = normalizePositiveInt(config.maxDuration);
+  if (configuredMaxDuration !== undefined) {
+    return configuredMaxDuration;
+  }
+
+  const normalizedMaxAllowedDuration = normalizePositiveInt(maxAllowedDuration);
+  if (normalizedMaxAllowedDuration !== undefined) {
+    return normalizedMaxAllowedDuration;
+  }
+
+  return DEFAULT_MAX_DURATION_MS;
+}
+
+function normalizePositiveInt(value: unknown): number | undefined {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return undefined;
+  }
+  return Math.max(1, Math.floor(value));
+}
+
+function withTruncationNote(
+  content: string,
+  logId: string,
+  maxOutputTokens: number,
+  totalLines: number
+): string {
   return `${content}
 
-[Output truncated to ~${maxOutputTokens} tokens. Use read_logs with {"logId":"${logId}","offset":0,"lines":${DEFAULT_READ_LOG_LINES}}.]`;
+[Output truncated to ~${maxOutputTokens} tokens (${totalLines} lines). Use read_logs with {"logId":"${logId}","offset":0,"lines":${DEFAULT_READ_LOG_LINES}} and increase offset to paginate.]`;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

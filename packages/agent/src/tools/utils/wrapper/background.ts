@@ -89,10 +89,18 @@ export class BackgroundTaskStore implements BackgroundTaskStoreApi {
     };
   }
 
-  cancel(id: string): { cancelled: boolean; previousStatus: BackgroundTaskStatus | null } {
+  cancel(id: string): {
+    cancelled: boolean;
+    previousStatus: BackgroundTaskStatus | null;
+    reason?: string;
+  } {
     const task = this.tasks.get(id);
     if (!task) {
-      return { cancelled: false, previousStatus: null };
+      return {
+        cancelled: false,
+        previousStatus: null,
+        reason: "task not found",
+      };
     }
 
     const previousStatus = task.status;
@@ -101,10 +109,17 @@ export class BackgroundTaskStore implements BackgroundTaskStoreApi {
       task.status = "cancelled";
       task.completedAt = Date.now();
       this.addLog(id, { type: "info", message: "Task cancelled by user" });
-      return { cancelled: true, previousStatus };
+      return {
+        cancelled: true,
+        previousStatus,
+      };
     }
 
-    return { cancelled: false, previousStatus };
+    return {
+      cancelled: false,
+      previousStatus,
+      reason: `task already in terminal state: ${previousStatus}`,
+    };
   }
 
   createOutputLog(input: ToolOutputLogCreateInput): ToolOutputLogCreateResult {

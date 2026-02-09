@@ -33,17 +33,6 @@ export function augmentParametersSchema(
       .describe("Run in background and return immediately with a backgroundTaskId.");
   }
 
-  if (config.allowAgentSetMaxOutputTokens !== false && !("maxOutputTokens" in nextShape)) {
-    nextShape.maxOutputTokens = z
-      .number()
-      .int()
-      .positive()
-      .max(config.maxOutputTokens ?? DEFAULT_MAX_OUTPUT_TOKENS)
-      .optional()
-      .default(config.maxOutputTokens ?? DEFAULT_MAX_OUTPUT_TOKENS)
-      .describe("Optional max tool output size in tokens before truncation.");
-  }
-
   return z.object(nextShape);
 }
 
@@ -84,6 +73,7 @@ export function createWrappedExecute({
       },
       toolArgs,
       options,
+      executionTimeoutMs: effectiveTimeout,
     });
 
     if (shouldRunInBackground) {
@@ -148,9 +138,11 @@ function createExecutionSession({
   execute,
   toolArgs,
   options,
+  executionTimeoutMs,
 }: Pick<WrappedExecuteFactoryOptions, "execute"> & {
   toolArgs: Record<string, unknown>;
   options?: ToolExecuteOptions;
+  executionTimeoutMs: number;
 }) {
   type LogSink = NonNullable<WrappedExecuteOptions["streamLogs"]>;
   type LogEntry = Parameters<LogSink>[0];
@@ -222,7 +214,12 @@ function createExecutionSession({
       linkAbortSignal(backgroundSignal, abortController);
     }
 
-    const wrappedOptions = buildWrappedExecuteOptions(options, abortController, emitLog);
+    const wrappedOptions = buildWrappedExecuteOptions(
+      options,
+      abortController,
+      emitLog,
+      executionTimeoutMs
+    );
     executionPromise = Promise.resolve(execute(toolArgs, wrappedOptions));
     return executionPromise;
   };
@@ -246,12 +243,16 @@ function splitToolArgs(args: Record<string, unknown>, config: ToolCallConfig) {
 
   let requestedTimeout: number | undefined;
   let shouldRunInBackground = false;
-  let requestedMaxOutputTokens: number | undefined;
 
   if (config.allowAgentSetDuration) {
     const timeout = normalizeDuration(args.timeout);
-    if (timeout !== undefined) {
-      requestedTimeout = timeout;
+    const timeoutMs = timeout === undefined
+      ? normalizeDuration(args.timeoutMs)
+      : undefined;
+    const resolvedTimeout = timeout ?? timeoutMs;
+
+    if (resolvedTimeout !== undefined) {
+      requestedTimeout = resolvedTimeout;
       delete toolArgs.timeout;
     }
   }
@@ -261,27 +262,15 @@ function splitToolArgs(args: Record<string, unknown>, config: ToolCallConfig) {
     delete toolArgs.background;
   }
 
-  if (config.allowAgentSetMaxOutputTokens !== false) {
-    const maxOutputTokens = normalizeTokenCount(args.maxOutputTokens);
-    if (maxOutputTokens !== undefined) {
-      requestedMaxOutputTokens = maxOutputTokens;
-      delete toolArgs.maxOutputTokens;
-    }
-  }
-
   const maxAllowedDuration =
     normalizeDuration(config.maxDuration, DEFAULT_MAX_DURATION_MS) ?? DEFAULT_MAX_DURATION_MS;
   const effectiveTimeout =
     requestedTimeout !== undefined
       ? Math.min(requestedTimeout, maxAllowedDuration)
       : maxAllowedDuration;
-  const maxAllowedOutputTokens =
+  const effectiveMaxOutputTokens =
     normalizeTokenCount(config.maxOutputTokens, DEFAULT_MAX_OUTPUT_TOKENS) ??
     DEFAULT_MAX_OUTPUT_TOKENS;
-  const effectiveMaxOutputTokens =
-    requestedMaxOutputTokens !== undefined
-      ? Math.min(requestedMaxOutputTokens, maxAllowedOutputTokens)
-      : maxAllowedOutputTokens;
 
   return {
     toolArgs,
@@ -303,13 +292,15 @@ function resolveToolCallId(options?: ToolExecuteOptions): string {
 function buildWrappedExecuteOptions(
   options: ToolExecuteOptions | undefined,
   abortController: AbortController,
-  emitLog: NonNullable<WrappedExecuteOptions["streamLogs"]>
+  emitLog: NonNullable<WrappedExecuteOptions["streamLogs"]>,
+  timeoutMs: number
 ): WrappedExecuteOptions {
   const wrappedOptions: WrappedExecuteOptions = {
     ...(options ?? {}),
     abortController,
     streamLogs: emitLog,
     log: emitLog,
+    timeout: timeoutMs,
   };
 
   if (options?.toolContext) {
