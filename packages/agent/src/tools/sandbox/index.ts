@@ -9,13 +9,13 @@ import {
   type Toolkit,
 } from "@voltagent/core";
 import { z } from "zod";
-import { sanitizeFilename } from "../../agent/messages";
+import { sanitizeFilename } from "@just-use-convex/agent/src/agent/messages";
 import {
   createWrappedTool,
   type BackgroundTaskStoreApi,
   type WrappedExecuteOptions,
 } from "../utils/wrapper";
-import type { worker } from "../../../alchemy.run";
+import type { worker } from "@just-use-convex/agent/alchemy.run";
 import {
   closeAllLspSessions,
   getLspCompletions,

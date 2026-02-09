@@ -1,5 +1,5 @@
 import type { UIMessage } from "ai";
-import type { worker } from "../../alchemy.run";
+import type { worker } from "@just-use-convex/agent/alchemy.run";
 import type { Id } from "@just-use-convex/backend/convex/_generated/dataModel";
 import { embedTexts } from "../client";
 import { extractMessageText } from "./messages";

@@ -13,19 +13,19 @@
   "dependencies": {
     "@daytonaio/sdk": "^0.139.0",
     "@convex-dev/aggregate": "^0.2.1",
-    "@convex-dev/better-auth": "^0.10.10",
+    "@convex-dev/better-auth": "catalog:",
     "@convex-dev/migrations": "^0.3.1",
-    "@just-use-convex/env": "workspace:*",
     "better-auth": "catalog:",
-    "convex": "^1.31.7",
+    "convex": "catalog:",
     "convex-ents": "^0.18.1",
     "convex-helpers": "^0.1.111",
-    "dotenv": "^17.2.3",
-    "zod": "^4.3.6"
+    "dotenv": "catalog:",
+    "zod": "catalog:"
   },
   "devDependencies": {
+    "@just-use-convex/env": "workspace:*",
     "@just-use-convex/config": "workspace:*",
     "@types/node": "^24.10.11",
-    "typescript": "^5.9.3"
+    "typescript": "catalog:"
   }
 }
