@@ -1,6 +1,4 @@
-import { AIChatAgent } from "@cloudflare/ai-chat";
 import { Daytona, type Sandbox } from "@daytonaio/sdk";
-import { callable } from "agents";
 import { isFileUIPart, type UIMessage } from "ai";
 import {
   createTool,
@@ -83,7 +81,6 @@ const DEFAULT_TOOL_CALL_CONFIG = {
 const EXEC_PROMOTED_CONTINUATION_TIMEOUT_MS = DEFAULT_TOOL_MAX_DURATION_MS;
 
 const INTERNAL_PTY_TERMINAL_ID = "__sandbox_internal__";
-const INTERNAL_PTY_TIMEOUT_MS = 20_000;
 const SANDBOX_UPLOADS_DIR = "workspace/uploads";
 const SANDBOX_UPLOADS_TEMP_DIR = "workspace/.tmp/uploads";
 const DAYTONA_PREVIEW_TOKEN_HEADER = "x-daytona-preview-token";
@@ -159,12 +156,11 @@ export class SandboxFilesystemBackend {
     return this.sandboxSession;
   }
 
-  private async runInternalPtyCommand(command: string, timeoutMs = INTERNAL_PTY_TIMEOUT_MS) {
+  private async runInternalPtyCommand(command: string) {
     const sandboxSession = this.ensureSandboxSession();
     return await execOnPty(sandboxSession, {
       command,
       terminalId: INTERNAL_PTY_TERMINAL_ID,
-      timeoutMs,
       closeAfter: false,
     });
   }
@@ -182,7 +178,7 @@ export class SandboxFilesystemBackend {
       "PY",
     ].join("\n");
 
-    const result = await this.runInternalPtyCommand(command, 5_000);
+    const result = await this.runInternalPtyCommand(command);
     if (!result.success || result.timedOut) {
       return {
         checked: true,
@@ -336,7 +332,6 @@ export class SandboxFilesystemBackend {
     const sandboxSession = this.ensureSandboxSession();
     const result = await execOnPty(sandboxSession, {
       ...input,
-      timeoutMs: resolveExecTimeoutMs(input.timeoutMs, options?.timeout),
     }, {
       streamLogs: options?.streamLogs ?? options?.log,
       abortSignal: options?.toolContext?.abortSignal ?? options?.abortController?.signal,
@@ -431,6 +426,56 @@ export class SandboxFilesystemBackend {
         reason: buildLspErrorReason(normalizedInput.languageId, error),
       };
     }
+  }
+
+  async downloadFileBase64(input: { path: string }) {
+    const resolvedPath = normalizeSandboxPath(input.path);
+    const contentBuffer = await this.ensureSandboxSession().sandbox.fs.downloadFile(resolvedPath);
+    if (!contentBuffer) {
+      throw new Error("File not found");
+    }
+    return {
+      path: resolvedPath,
+      content: contentBuffer.toString("base64"),
+      size: contentBuffer.length,
+      encoding: "base64" as const,
+    };
+  }
+
+  async downloadFolderArchive(input: { path: string }) {
+    const resolvedPath = normalizeSandboxPath(input.path);
+    const archivePath = `/tmp/_archive_${Date.now()}.tar.gz`;
+
+    const result = await this.runInternalPtyCommand(
+      `tar -czf ${shellQuote(archivePath)} -C ${shellQuote(resolvedPath)} .`,
+    );
+    if (!result.success || result.timedOut) {
+      throw new Error("Failed to create archive");
+    }
+
+    try {
+      const contentBuffer = await this.ensureSandboxSession().sandbox.fs.downloadFile(archivePath);
+      return {
+        path: resolvedPath,
+        content: contentBuffer.toString("base64"),
+        size: contentBuffer.length,
+        encoding: "base64" as const,
+        archiveType: "tar.gz" as const,
+      };
+    } finally {
+      void this.runInternalPtyCommand(`rm -f ${shellQuote(archivePath)}`).catch(() => undefined);
+    }
+  }
+
+  async deleteEntry(input: { path: string }) {
+    const resolvedPath = normalizeSandboxPath(input.path);
+    const result = await this.runInternalPtyCommand(
+      `rm -rf ${shellQuote(resolvedPath)}`,
+    );
+    if (!result.success || result.timedOut) {
+      throw new Error("Failed to delete entry");
+    }
+    return { path: resolvedPath, deleted: true };
   }
 
   async closeSandboxSession() {
@@ -650,146 +695,6 @@ export function createSandboxToolkit(
     instructions: SANDBOX_TOOLKIT_INSTRUCTIONS,
     tools,
   });
-}
-
-export abstract class SandboxTerminalAgentBase<
-  State = unknown,
-> extends AIChatAgent<typeof worker.Env, State> {
-  private terminalBackend: SandboxFilesystemBackend | null = null;
-  private terminalBackendSandboxId: string | null = null;
-
-  protected abstract initSandboxAccess(): Promise<void>;
-  protected abstract getSandboxIdForTerminal(): string | null;
-
-  private async getTerminalBackend(): Promise<SandboxFilesystemBackend> {
-    await this.initSandboxAccess();
-    const sandboxId = this.getSandboxIdForTerminal();
-    if (!sandboxId) {
-      throw new Error("No sandbox attached to this chat");
-    }
-
-    if (this.terminalBackend && this.terminalBackendSandboxId === sandboxId) {
-      return this.terminalBackend;
-    }
-
-    if (this.terminalBackend) {
-      await this.terminalBackend.closeSandboxSession().catch(() => undefined);
-    }
-
-    const backend = new SandboxFilesystemBackend(this.env, sandboxId);
-    this.terminalBackend = backend;
-    this.terminalBackendSandboxId = sandboxId;
-    return this.terminalBackend;
-  }
-
-  @callable()
-  async listFiles(input?: { path?: string }) {
-    const backend = await this.getTerminalBackend();
-    return await backend.listFiles({
-      path: input?.path ?? ".",
-    });
-  }
-
-  @callable()
-  async openPtyTerminal(input?: {
-    terminalId?: string;
-    cols?: number;
-    rows?: number;
-    cwd?: string;
-    envs?: Record<string, string>;
-  }) {
-    const backend = await this.getTerminalBackend();
-    const response = await backend.openPtySession({
-      terminalId: input?.terminalId,
-      cols: input?.cols,
-      rows: input?.rows,
-      cwd: input?.cwd,
-      envs: input?.envs,
-    });
-    return { terminalId: response.terminalId };
-  }
-
-  @callable()
-  async readPtyTerminal(input: {
-    terminalId: string;
-    offset?: number;
-    cols?: number;
-    rows?: number;
-    cwd?: string;
-    envs?: Record<string, string>;
-  }) {
-    const backend = await this.getTerminalBackend();
-    return await backend.readPtySession({
-      terminalId: input.terminalId,
-      offset: input.offset ?? 0,
-      cols: input.cols,
-      rows: input.rows,
-      cwd: input.cwd,
-      envs: input.envs,
-    });
-  }
-
-  @callable()
-  async writePtyTerminal(input: {
-    terminalId: string;
-    data: string;
-    cols?: number;
-    rows?: number;
-    cwd?: string;
-    envs?: Record<string, string>;
-  }) {
-    const backend = await this.getTerminalBackend();
-    return await backend.writePtySession({
-      terminalId: input.terminalId,
-      data: input.data,
-      cols: input.cols,
-      rows: input.rows,
-      cwd: input.cwd,
-      envs: input.envs,
-    });
-  }
-
-  @callable()
-  async resizePtyTerminal(input: {
-    terminalId: string;
-    cols: number;
-    rows: number;
-  }) {
-    const backend = await this.getTerminalBackend();
-    return await backend.resizePtySession({
-      terminalId: input.terminalId,
-      cols: input.cols,
-      rows: input.rows,
-    });
-  }
-
-  @callable()
-  async listPtyTerminalSessions() {
-    const backend = await this.getTerminalBackend();
-    return await backend.listPtySessions();
-  }
-
-  @callable()
-  async closePtyTerminal(input: { terminalId: string }) {
-    const backend = await this.getTerminalBackend();
-    return await backend.closePtySession({
-      terminalId: input.terminalId,
-    });
-  }
-}
-
-function resolveExecTimeoutMs(timeoutMs: number, wrappedTimeoutMs?: number): number {
-  const normalizedTimeoutMs = Math.max(1, Math.floor(timeoutMs));
-  if (typeof wrappedTimeoutMs !== "number" || !Number.isFinite(wrappedTimeoutMs)) {
-    return normalizedTimeoutMs;
-  }
-
-  const normalizedWrappedTimeoutMs = Math.max(1, Math.floor(wrappedTimeoutMs));
-  if (normalizedTimeoutMs > normalizedWrappedTimeoutMs) {
-    return normalizedTimeoutMs;
-  }
-
-  return Math.max(normalizedTimeoutMs, EXEC_PROMOTED_CONTINUATION_TIMEOUT_MS);
 }
 
 function parseModTime(modTime: string): number {

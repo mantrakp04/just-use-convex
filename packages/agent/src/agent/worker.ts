@@ -1,5 +1,5 @@
 import { type Connection, type ConnectionContext, callable } from "agents";
-import { type OnChatMessageOptions } from "@cloudflare/ai-chat";
+import { AIChatAgent, type OnChatMessageOptions } from "@cloudflare/ai-chat";
 import {
   createUIMessageStream,
   createUIMessageStreamResponse,
@@ -29,7 +29,6 @@ import { SYSTEM_PROMPT, TASK_PROMPT } from "../prompt";
 import { createAskUserToolkit } from "../tools/ask-user";
 import {
   SandboxFilesystemBackend,
-  SandboxTerminalAgentBase,
   createSandboxToolkit,
 } from "../tools/sandbox";
 import { createWebSearchToolkit } from "../tools/websearch";
@@ -48,8 +47,10 @@ import {
   indexMessagesInVectorStore,
 } from "./vectorize";
 import { createVectorizeToolkit } from "../tools/vectorize";
+import { SandboxTerminal } from "./sandbox-terminal";
+import type { worker } from "@just-use-convex/agent/alchemy.run";
 
-export class AgentWorker extends SandboxTerminalAgentBase<AgentArgs> {
+export class AgentWorker extends AIChatAgent<typeof worker.Env, AgentArgs> {
   private convexAdapter: ConvexAdapter | null = null;
   private planAgent: PlanAgent | null = null;
   private sandboxId: string | null = null;
@@ -104,6 +105,9 @@ export class AgentWorker extends SandboxTerminalAgentBase<AgentArgs> {
       this.chatDoc = chat;
       if (chat.sandbox) {
         this.sandboxId = chat.sandbox._id;
+        this.sandboxBackend = new SandboxFilesystemBackend(this.env, this.sandboxId);
+        const terminal = new SandboxTerminal(async () => this.sandboxBackend!);
+        this._attachRoutes(terminal);
       }
     }
 
@@ -130,14 +134,9 @@ export class AgentWorker extends SandboxTerminalAgentBase<AgentArgs> {
       );
     }
 
-    const filesystemBackend = this.sandboxId && this.env.DAYTONA_API_KEY
-      ? new SandboxFilesystemBackend(this.env, this.sandboxId)
-      : undefined;
-    this.sandboxBackend = filesystemBackend ?? null;
-
     const subagents = [
-      ...(filesystemBackend ? [
-        createSandboxToolkit(filesystemBackend, {
+      ...(this.sandboxBackend ? [
+        createSandboxToolkit(this.sandboxBackend, {
           store: this.backgroundTaskStore,
         }),
         createVectorizeToolkit(this.env, this.chatDoc?.memberId),
@@ -159,6 +158,9 @@ export class AgentWorker extends SandboxTerminalAgentBase<AgentArgs> {
       tools: withBackgroundTaskTools([
         createWebSearchToolkit(),
         createAskUserToolkit(),
+        ...(this.sandboxBackend ? [createSandboxToolkit(this.sandboxBackend, {
+          store: this.backgroundTaskStore,
+        })] : []),
       ], this.backgroundTaskStore),
       planning: false,
       task: {
@@ -181,7 +183,7 @@ export class AgentWorker extends SandboxTerminalAgentBase<AgentArgs> {
           },
         },
       },
-      subagents,
+      // subagents,
       filesystem: false,
       maxSteps: 100,
       ...(this.env.VOLTAGENT_PUBLIC_KEY && this.env.VOLTAGENT_SECRET_KEY ? {
@@ -301,15 +303,15 @@ export class AgentWorker extends SandboxTerminalAgentBase<AgentArgs> {
 
   @callable()
   async updateMessages(messages: Parameters<typeof this.persistMessages>[0]) {
-    const keepIds = new Set(messages.map((m) => m.id));
+    const keepIds = new Set(messages.map((message) => message.id));
 
     const existingMessages = this.messages;
     const deletedMessageIds: string[] = [];
     await Promise.all(
-      existingMessages.map(async (msg) => {
-        if (!keepIds.has(msg.id)) {
-          await this.sql`DELETE FROM cf_ai_chat_agent_messages WHERE id = ${msg.id}`;
-          deletedMessageIds.push(msg.id);
+      existingMessages.map(async (message) => {
+        if (!keepIds.has(message.id)) {
+          await this.sql`DELETE FROM cf_ai_chat_agent_messages WHERE id = ${message.id}`;
+          deletedMessageIds.push(message.id);
         }
       })
     );
@@ -323,14 +325,6 @@ export class AgentWorker extends SandboxTerminalAgentBase<AgentArgs> {
     }
 
     await this.persistMessages(messages);
-  }
-
-  protected async initSandboxAccess(): Promise<void> {
-    await this._init();
-  }
-
-  protected getSandboxIdForTerminal(): string | null {
-    return this.sandboxId;
   }
 
   override async onChatMessage(
@@ -404,6 +398,26 @@ export class AgentWorker extends SandboxTerminalAgentBase<AgentArgs> {
     } catch (error) {
       console.error("onChatMessage failed", error);
       return new Response("Internal Server Error", { status: 500 });
+    }
+  }
+
+  private _attachRoutes<T extends object>(instance: T): void {
+    const methodNames = Object.getOwnPropertyNames(instance.constructor.prototype)
+      .filter((name) => name !== "constructor") as Array<keyof T>;
+
+    for (const methodName of methodNames) {
+      const method = instance[methodName];
+      if (typeof method !== "function") {
+        continue;
+      }
+
+      const bound = method.bind(instance);
+      callable()(bound as (this: unknown, ...args: unknown[]) => unknown, {} as ClassMethodDecoratorContext);
+      Object.defineProperty(this, methodName, {
+        value: bound,
+        writable: false,
+        configurable: true,
+      });
     }
   }
 }

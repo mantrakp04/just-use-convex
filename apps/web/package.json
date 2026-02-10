@@ -14,6 +14,7 @@
     "@cloudflare/ai-chat": "^0.0.4",
     "@convex-dev/better-auth": "catalog:",
     "@convex-dev/react-query": "^0.1.0",
+    "@just-use-convex/agent": "workspace:*",
     "@radix-ui/react-use-controllable-state": "^1.2.2",
     "@rive-app/react-webgl2": "^4.26.2",
     "@streamdown/cjk": "^1.0.1",

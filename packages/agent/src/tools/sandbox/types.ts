@@ -83,7 +83,6 @@ export const ptySessionCreateParameters = z.object({
 export const execParameters = z.object({
   command: z.string().min(1).describe("Shell command to execute in PTY."),
   terminalId: terminalIdSchema.optional(),
-  timeoutMs: z.number().int().positive().default(20_000),
   cols: z.number().int().positive().optional(),
   rows: z.number().int().positive().optional(),
   cwd: z.string().min(1).optional(),

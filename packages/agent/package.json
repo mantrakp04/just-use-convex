@@ -30,7 +30,6 @@
     "zod-to-json-schema": "^3.25.1"
   },
   "devDependencies": {
-    "@just-use-convex/agent": "workspace:*",
     "@just-use-convex/backend": "workspace:*",
     "@just-use-convex/env": "workspace:*",
     "@cloudflare/workers-types": "^4.20260205.0",

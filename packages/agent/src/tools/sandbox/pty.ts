@@ -39,12 +39,13 @@ export async function getOrCreatePtySession(
   const handle = await sandboxSession.sandbox.process.connectPty(terminalId, {
     onData,
   }).catch(async () => {
+    await ensurePtyStartupFiles(sandboxSession);
     return await sandboxSession.sandbox.process.createPty({
       id: terminalId,
       cols: input.cols,
       rows: input.rows,
       cwd: input.cwd,
-      envs: input.envs,
+      envs: resolvePtyEnvs(input.envs),
       onData,
     });
   });
@@ -54,12 +55,16 @@ export async function getOrCreatePtySession(
   ptySession = {
     id: terminalId,
     handle,
-    output: pendingOutput,
+    output: normalizeBootstrapOutput(pendingOutput),
     closed: false,
     closeReason: null,
     exitCode: null,
     commandQueue: Promise.resolve(),
   };
+
+  if (hasZshNewUserInstallPrompt(pendingOutput)) {
+    await ptySession.handle.sendInput("0\n").catch(() => undefined);
+  }
 
   sandboxSession.ptySessions.set(terminalId, ptySession);
   void handle.wait().then((result) => {
@@ -225,65 +230,62 @@ export async function execOnPty(
 
     await ptySession.handle.sendInput(`${normalizedCommand}${markerCommand}`);
 
-    const deadline = Date.now() + input.timeoutMs;
-    while (Date.now() <= deadline) {
-      if (options?.abortSignal?.aborted) {
-        const output = ptySession.output.slice(commandStart);
-        streamedLength = streamExecOutputDelta({
-          options,
-          marker,
-          parsed: { result: null, dataUpToMarker: output },
-          streamedLength,
-          force: true,
-        });
-        return {
-          terminalId: ptySession.id,
-          command: input.command,
-          output,
-          exitCode: null,
-          success: false,
-          timedOut: false,
-          error: "PTY command was aborted",
-        };
-      }
-
-      const dataSinceCommand = ptySession.output.slice(commandStart);
-      const parsed = extractExecResult(dataSinceCommand, marker);
+    while (!options?.abortSignal?.aborted) {
+      const output = ptySession.output.slice(commandStart);
       streamedLength = streamExecOutputDelta({
         options,
         marker,
-        parsed,
+        parsed: { result: null, dataUpToMarker: output },
         streamedLength,
+        force: true,
       });
-      if (parsed.result) {
-        return {
-          ...parsed.result,
-          terminalId: ptySession.id,
-          command: input.command,
-        };
-      }
-
-      if (ptySession.closed) {
-        streamedLength = streamExecOutputDelta({
-          options,
-          marker,
-          parsed: { result: null, dataUpToMarker: parsed.dataUpToMarker },
-          streamedLength,
-          force: true,
-        });
-        return {
-          terminalId: ptySession.id,
-          command: input.command,
-          output: parsed.dataUpToMarker,
-          exitCode: ptySession.exitCode,
-          success: ptySession.exitCode === 0,
-          timedOut: false,
-          ...(ptySession.closeReason ? { error: ptySession.closeReason } : {}),
-        };
-      }
-
-      await delay(50);
+      return {
+        terminalId: ptySession.id,
+        command: input.command,
+        output,
+        exitCode: null,
+        success: false,
+        timedOut: false,
+        error: "PTY command was aborted",
+      };
     }
+
+    const dataSinceCommand = ptySession.output.slice(commandStart);
+    const parsed = extractExecResult(dataSinceCommand, marker);
+    streamedLength = streamExecOutputDelta({
+      options,
+      marker,
+      parsed,
+      streamedLength,
+    });
+    if (parsed.result) {
+      return {
+        ...parsed.result,
+        terminalId: ptySession.id,
+        command: input.command,
+      };
+    }
+
+    if (ptySession.closed) {
+      streamedLength = streamExecOutputDelta({
+        options,
+        marker,
+        parsed: { result: null, dataUpToMarker: parsed.dataUpToMarker },
+        streamedLength,
+        force: true,
+      });
+      return {
+        terminalId: ptySession.id,
+        command: input.command,
+        output: parsed.dataUpToMarker,
+        exitCode: ptySession.exitCode,
+        success: ptySession.exitCode === 0,
+        timedOut: false,
+        ...(ptySession.closeReason ? { error: ptySession.closeReason } : {}),
+      };
+    }
+
+    await delay(50);
 
     const timedOutOutput = ptySession.output.slice(commandStart);
     streamedLength = streamExecOutputDelta({
@@ -300,7 +302,7 @@ export async function execOnPty(
       exitCode: null,
       success: false,
       timedOut: true,
-      error: `PTY command timed out after ${input.timeoutMs}ms`,
+      error: "PTY command timed out",
     };
   });
 }
@@ -408,6 +410,62 @@ function isTerminalNotFoundError(error: unknown): boolean {
 
   const message = error.message.toLowerCase();
   return message.includes("not found") || message.includes("no such") || message.includes("404");
+}
+
+function resolvePtyEnvs(envs: PtySessionCreateInput["envs"]) {
+  return {
+    ZDOTDIR: "/tmp",
+    ZSH_COMPDUMP: "/tmp/.zcompdump",
+    ...(envs ?? {}),
+  };
+}
+
+async function ensurePtyStartupFiles(sandboxSession: SandboxSessionState) {
+  const zshrc = [
+    "# Generated by just-use-convex PTY bootstrap",
+    "export ZSH_DISABLE_COMPFIX=true",
+    "export ZSH_COMPDUMP=${ZSH_COMPDUMP:-/tmp/.zcompdump}",
+    "PROMPT='%n@sandbox:%~$ '",
+    "RPROMPT=''",
+    "",
+  ].join("\n");
+  const bashrc = [
+    "# Generated by just-use-convex PTY bootstrap",
+    "export PS1='\\u@sandbox:\\w\\$ '",
+    "",
+  ].join("\n");
+
+  await sandboxSession.sandbox.process.executeCommand(
+    `cat > /tmp/.zshrc << 'RCEOF'\n${zshrc}RCEOF`
+  ).catch(() => undefined);
+  await sandboxSession.sandbox.process.executeCommand(
+    `cat > /tmp/.bashrc << 'RCEOF'\n${bashrc}RCEOF`
+  ).catch(() => undefined);
+}
+
+function normalizeBootstrapOutput(output: string) {
+  return stripCompdumpIoErrors(stripZshNewUserInstallPrompt(output));
+}
+
+function hasZshNewUserInstallPrompt(output: string) {
+  return output.includes("This is the Z Shell configuration function for new users,");
+}
+
+function stripZshNewUserInstallPrompt(output: string) {
+  if (!hasZshNewUserInstallPrompt(output)) {
+    return output;
+  }
+  return output.replace(
+    /This is the Z Shell configuration function for new users,[\s\S]*?--- Type one of the keys in parentheses ---[^\n]*\n?/g,
+    ""
+  );
+}
+
+function stripCompdumpIoErrors(output: string) {
+  return output
+    .split("\n")
+    .filter((line) => !line.includes("compdump:") || !line.includes("write error: Input/output error"))
+    .join("\n");
 }
 
 function nextQueueTask<T>(

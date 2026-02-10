@@ -20,6 +20,7 @@ import { AskUserDisplay } from "@/components/chat/ask-user-display";
 import { ChatSandboxWorkspace } from "@/components/chat/chat-sandbox-workspace";
 import { useChatSandbox } from "@/hooks/use-sandbox";
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
+import { useHeader } from "@/hooks/use-header";
 
 export const Route = createFileRoute("/(protected)/chats/$chatId")({
   component: ChatPage,
@@ -44,7 +45,8 @@ function ChatPage() {
   const sandbox = useChatSandbox(typedChatId, agent);
   const chatContentRef = useRef<HTMLDivElement>(null);
   const [isPanelResizing, setIsPanelResizing] = useState(false);
-
+  const { headerHeight } = useHeader();
+  
   const selectedModel = useMemo(
     () => models.find((m: OpenRouterModel) => m.slug === settings.model),
     [models, settings.model]
@@ -117,7 +119,7 @@ function ChatPage() {
 
   if (!isReady || !chat) {
     return (
-      <div className="fixed inset-0 z-0 h-svh w-full">
+      <div className="h-full w-full">
         <ChatLoadingSkeleton />
       </div>
     );
@@ -130,6 +132,7 @@ function ChatPage() {
           {messages.length === 0 ? (
             <ConversationEmptyState
               icon={<Bot className="size-12 opacity-50" />}
+              style={{ marginTop: headerHeight }}
               title="Start a conversation"
               description="Ask me anything or share files to get started"
             />
@@ -199,13 +202,22 @@ function ChatPage() {
           <ChatSandboxWorkspace
             sshSession={sandbox.sshSession}
             explorer={sandbox.explorer}
+            terminalSessions={sandbox.terminalSessions}
+            activeTerminalId={sandbox.activeTerminalId}
             onRefreshExplorer={() => void sandbox.refreshExplorer()}
+            onNavigateExplorer={(path) => void sandbox.navigateExplorer(path)}
+            onDownloadFile={(path, name) => void sandbox.downloadFile(path, name)}
+            onDownloadFolder={(path, name) => void sandbox.downloadFolder(path, name)}
+            onDeleteEntry={(path) => void sandbox.deleteEntry(path)}
+            onRefreshTerminalSessions={() => void sandbox.refreshTerminalSessions()}
+            onSwitchTerminalSession={sandbox.switchTerminalSession}
+            onCreateTerminalSession={sandbox.createTerminalSession}
+            onCloseTerminalSession={sandbox.closeTerminalSession}
             previewPort={sandbox.previewPort}
             previewUrl={sandbox.previewUrl}
             isConnectingPreview={sandbox.isConnectingPreview}
             onPreviewPortChange={sandbox.setPreviewPort}
             onCreatePreviewAccess={sandbox.createPreviewAccess}
-            onCopySshCommand={sandbox.copySshCommand}
             onOpenInEditor={sandbox.openInEditor}
             onReconnectTerminal={sandbox.reconnectTerminal}
             onFocusTerminal={sandbox.focusTerminal}

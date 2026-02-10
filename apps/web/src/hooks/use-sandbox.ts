@@ -6,6 +6,7 @@ import type { FunctionReturnType } from "convex/server";
 import { useAction } from "convex/react";
 import { toast } from "sonner";
 import type { Terminal as XtermTerminal } from "xterm";
+import type { SandboxFilesystemBackend } from "@just-use-convex/agent/src/tools/sandbox";
 
 type ChatSshSession = FunctionReturnType<typeof api.sandboxes.nodeFunctions.createChatSshAccess>;
 type XtermTerminalWriteData = Extract<Parameters<XtermTerminal["write"]>[0], string>;
@@ -24,6 +25,8 @@ export type ExplorerState = {
   path: string;
   entries: ExplorerEntry[];
 };
+
+export type TerminalSession = Awaited<ReturnType<SandboxFilesystemBackend["listPtySessions"]>>["sessions"][number];
 
 const TERMINAL_BACKGROUND = "#0b0f19";
 
@@ -48,6 +51,8 @@ export function useChatSandbox(
   const terminalInputBufferRef = useRef<XtermTerminalInputData>("");
   const terminalWriteInFlightRef = useRef(false);
   const terminalWriteErroredRef = useRef(false);
+  const [terminalSessions, setTerminalSessions] = useState<TerminalSession[]>([]);
+  const [activeTerminalId, setActiveTerminalId] = useState<string | null>(null);
 
   const createSshMutation = useMutation({
     mutationFn: async ({
@@ -113,52 +118,94 @@ export function useChatSandbox(
     return preview;
   }, [chatId, createPreviewMutation, previewPort]);
 
-  const copySshCommand = useCallback(async () => {
-    const nextSession = sshSession ?? await createSshAccess();
-    if (!nextSession?.ssh.command) {
-      return;
-    }
-
-    try {
-      await navigator.clipboard.writeText(nextSession.ssh.command);
-      toast.success("SSH command copied");
-    } catch {
-      toast.error("Failed to copy SSH command");
-    }
-  }, [createSshAccess, sshSession]);
-
   const openInEditor = useCallback(
     async (editor: "vscode" | "cursor") => {
-      const nextSession = await createSshAccess();
-      if (!nextSession?.ssh.command) {
+      const isExpired = sshSession && Date.now() >= sshSession.ssh.expiresAt;
+      const session = (!sshSession || isExpired) ? await createSshAccess() : sshSession;
+      if (!session?.ssh) {
         return;
       }
 
-      try {
-        await navigator.clipboard.writeText(nextSession.ssh.command);
-        toast.success("SSH command copied");
-      } catch {
-        toast.error("Failed to copy SSH command");
-      }
+      const { token, host } = session.ssh;
+      const scheme = editor === "vscode" ? "vscode" : "cursor";
+      const uri = `${scheme}://vscode-remote/ssh-remote+${token}@${host}/home/daytona/workspace`;
 
-      if (typeof window === "undefined") {
-        return;
+      if (typeof window !== "undefined") {
+        window.open(uri, "_blank");
       }
-
-      window.location.href = editor === "vscode" ? "vscode://" : "cursor://";
     },
-    [createSshAccess]
+    [createSshAccess, sshSession]
   );
 
   const refreshExplorer = useCallback(async (path?: string) => {
     if (!agent) return;
     try {
-      const result = await agent.call("listFiles", [path ? { path } : undefined]) as ExplorerState;
+      const resolvedPath = path ?? explorer?.path ?? ".";
+      const result = await agent.call("listFiles", [{ path: resolvedPath }]) as ExplorerState;
       setExplorer(result);
     } catch {
       // ignore - sandbox may not be ready yet
     }
+  }, [agent, explorer?.path]);
+
+  const navigateExplorer = useCallback(async (path: string) => {
+    await refreshExplorer(path);
+  }, [refreshExplorer]);
+
+  const downloadFile = useCallback(async (path: string, name: string) => {
+    if (!agent) return;
+    try {
+      const result = await agent.call("downloadFile", [{ path }]) as {
+        content: string;
+        encoding: string;
+        size: number;
+      };
+      const bytes = Uint8Array.from(atob(result.content), (c) => c.charCodeAt(0));
+      const blob = new Blob([bytes]);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = name;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      toast.error("Failed to download file");
+    }
   }, [agent]);
+
+  const downloadFolder = useCallback(async (path: string, name: string) => {
+    if (!agent) return;
+    try {
+      const result = await agent.call("downloadFolder", [{ path }]) as {
+        content: string;
+        encoding: string;
+        archiveType: string;
+      };
+      const bytes = Uint8Array.from(atob(result.content), (c) => c.charCodeAt(0));
+      const blob = new Blob([bytes], { type: "application/gzip" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${name}.tar.gz`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      toast.error("Failed to download folder");
+    }
+  }, [agent]);
+
+  const deleteEntry = useCallback(async (path: string) => {
+    if (!agent) return;
+    try {
+      await agent.call("deleteEntry", [{ path }]);
+      if (explorer) {
+        await refreshExplorer(explorer.path);
+      }
+      toast.success("Deleted successfully");
+    } catch {
+      toast.error("Failed to delete");
+    }
+  }, [agent, explorer, refreshExplorer]);
 
   const reconnectSsh = useCallback(async () => {
     await createSshAccess();
@@ -166,6 +213,51 @@ export function useChatSandbox(
   const reconnectTerminal = useCallback(() => {
     setTerminalReloadKey((value) => value + 1);
   }, []);
+  const switchTerminalSession = useCallback((terminalId: string) => {
+    setActiveTerminalId(terminalId);
+    setTerminalReloadKey((value) => value + 1);
+  }, []);
+  const createTerminalSession = useCallback(() => {
+    const nextTerminalId = createTerminalSessionId();
+    setActiveTerminalId(nextTerminalId);
+    setTerminalReloadKey((value) => value + 1);
+  }, []);
+  const refreshTerminalSessions = useCallback(async () => {
+    if (!agent) {
+      return;
+    }
+    try {
+      const result = await agent.call("listPtyTerminalSessions") as { sessions?: TerminalSession[] };
+      const sessions = result.sessions ?? [];
+      setTerminalSessions(sessions);
+    } catch {
+      // ignore - sandbox may not be ready yet
+    }
+  }, [agent]);
+  const closeTerminalSession = useCallback(
+    async (terminalId: string) => {
+      if (!agent) {
+        return;
+      }
+      try {
+        await agent.call("closePtyTerminal", [{ terminalId }]);
+        const result = await agent.call("listPtyTerminalSessions") as { sessions?: TerminalSession[] };
+        const sessions = result.sessions ?? [];
+        setTerminalSessions(sessions);
+
+        if (activeTerminalId !== terminalId) {
+          return;
+        }
+
+        const nextTerminalId = sessions[0]?.id ?? createTerminalSessionId();
+        setActiveTerminalId(nextTerminalId);
+        setTerminalReloadKey((value) => value + 1);
+      } catch {
+        toast.error("Failed to close terminal session");
+      }
+    },
+    [agent, activeTerminalId]
+  );
   const focusTerminal = useCallback(() => {
     terminalRef.current?.focus();
   }, []);
@@ -188,7 +280,13 @@ export function useChatSandbox(
   }, [close, isOpen, open]);
 
   useEffect(() => {
-    if (!agent || !terminalContainerRef.current) {
+    if (isOpen && !activeTerminalId) {
+      setActiveTerminalId(createTerminalSessionId());
+    }
+  }, [isOpen, activeTerminalId]);
+
+  useEffect(() => {
+    if (!agent || !terminalContainerRef.current || !activeTerminalId) {
       return;
     }
 
@@ -240,6 +338,7 @@ export function useChatSandbox(
       };
 
       const openResponse = await agent.call("openPtyTerminal", [{
+        terminalId: activeTerminalId,
         cols: term.cols,
         rows: term.rows,
       }]) as { terminalId?: string };
@@ -261,6 +360,7 @@ export function useChatSandbox(
       terminalInputBufferRef.current = "";
       terminalWriteInFlightRef.current = false;
       terminalWriteErroredRef.current = false;
+      void refreshTerminalSessions();
 
       term.onData((data: XtermTerminalInputData) => {
         terminalInputBufferRef.current += data;
@@ -354,20 +454,22 @@ export function useChatSandbox(
       }
       resizeObserver?.disconnect();
 
-      const terminalId = terminalIdRef.current;
       terminalIdRef.current = null;
       terminalCursorRef.current = 0;
       terminalInputBufferRef.current = "";
       terminalWriteInFlightRef.current = false;
       terminalWriteErroredRef.current = false;
-      if (terminalId) {
-        void agent.call("closePtyTerminal", [{ terminalId }]).catch(() => undefined);
-      }
 
       terminalRef.current = null;
       terminalDispose?.();
     };
-  }, [agent, terminalReloadKey, isOpen]);
+  }, [agent, terminalReloadKey, isOpen, activeTerminalId, refreshTerminalSessions]);
+
+  useEffect(() => {
+    if (isOpen && !sshSession) {
+      void createSshAccess().catch(() => undefined);
+    }
+  }, [isOpen, sshSession, createSshAccess]);
 
   useEffect(() => {
     if (isOpen && agent && !explorer) {
@@ -376,12 +478,21 @@ export function useChatSandbox(
   }, [isOpen, agent, explorer, refreshExplorer]);
 
   useEffect(() => {
+    if (!isOpen || !agent) {
+      return;
+    }
+    void refreshTerminalSessions();
+  }, [isOpen, agent, refreshTerminalSessions, terminalReloadKey]);
+
+  useEffect(() => {
     setIsOpen(false);
     setSshSession(null);
     setExplorer(null);
     setPreviewPort(undefined);
     setPreviewUrl(undefined);
     setTerminalReloadKey(0);
+    setTerminalSessions([]);
+    setActiveTerminalId(null);
   }, [chatId]);
 
   return {
@@ -392,14 +503,23 @@ export function useChatSandbox(
     sshSession,
     explorer,
     refreshExplorer,
+    navigateExplorer,
+    downloadFile,
+    downloadFolder,
+    deleteEntry,
     previewPort,
     previewUrl,
     setPreviewPort,
     createPreviewAccess,
-    copySshCommand,
     openInEditor,
     reconnectSsh,
     reconnectTerminal,
+    switchTerminalSession,
+    createTerminalSession,
+    closeTerminalSession,
+    refreshTerminalSessions,
+    terminalSessions,
+    activeTerminalId,
     focusTerminal,
     terminalContainerRef,
     terminalBackground: TERMINAL_BACKGROUND,
@@ -410,3 +530,11 @@ export function useChatSandbox(
 
 export type ChatSshSessionState = ReturnType<typeof useChatSandbox>["sshSession"];
 export type ChatExplorerState = ReturnType<typeof useChatSandbox>["explorer"];
+export type ChatTerminalSessionsState = ReturnType<typeof useChatSandbox>["terminalSessions"];
+
+function createTerminalSessionId() {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+  return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
