@@ -17,6 +17,7 @@
     "@composio/core": "^0.5.5",
     "@composio/vercel": "^0.5.5",
     "@daytonaio/sdk": "^0.139.0",
+    "@daytonaio/toolbox-api-client": "^0.142.0",
     "@openrouter/ai-sdk-provider": "^2.1.1",
     "@voltagent/core": "^2.3.3",
     "agents": "^0.3.10",

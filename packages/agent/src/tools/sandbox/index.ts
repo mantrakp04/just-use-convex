@@ -1,1012 +1,321 @@
-import { AIChatAgent } from "@cloudflare/ai-chat";
-import { callable } from "agents";
-import { Daytona, type Sandbox } from "@daytonaio/sdk";
-import { isFileUIPart, type UIMessage } from "ai";
+import { type InterpreterContext } from '@daytonaio/toolbox-api-client';
+import { Daytona, type Sandbox } from '@daytonaio/sdk';
+import { createTool, type Toolkit } from '@voltagent/core';
+import { SandboxPtyService } from './pty';
 import {
-  createTool,
-  createToolkit,
-  type BaseTool,
-  type Toolkit,
-} from "@voltagent/core";
-import { z } from "zod";
-import { sanitizeFilename } from "@just-use-convex/agent/src/agent/messages";
-import {
-  createWrappedTool,
-  type BackgroundTaskStoreApi,
-  type TruncatedOutputStoreApi,
-  type WrappedExecuteOptions,
-} from "../utils/wrapper";
-import type { worker } from "@just-use-convex/agent/alchemy.run";
-import {
-  closeAllLspSessions,
-  getLspCompletions,
-} from "./lsp";
-import {
-  closeAllPtySessions,
-  closePtySession,
-  execOnPty,
-  getOrCreatePtySession,
-  listPtySessions,
-  readPtyOutput,
-  resizePty,
-  writeToPty,
-} from "./pty";
-import {
-  editParameters,
-  exposeServiceParameters,
-  execParameters,
-  globParameters,
-  grepParameters,
-  lsParameters,
-  lspCompletionsParameters,
-  readParameters,
-  writeParameters,
-  xtermCloseParameters,
-  type EditInput,
-  type ExecInput,
-  type ExecOutput,
-  type ExposeServiceInput,
-  type GlobInput,
-  type GrepInput,
-  type LsInput,
-  type LspCompletionsInput,
-  type PtySessionCreateInput,
-  type ReadInput,
-  type SandboxSessionState,
-  type WriteInput,
-  type XtermCloseInput,
-  type XtermListInput,
-  type XtermReadInput,
-  type XtermResizeInput,
-  type XtermWriteInput,
-} from "./types";
+  DEFAULT_LIST_OFFSET,
+  editSchema,
+  execSchema,
+  generateDownloadUrlSchema,
+  globSchema,
+  grepSchema,
+  listSchema,
+  readLogsSchema,
+  readSchema,
+  statefulCodeExecSchema,
+  writeSchema,
+} from './types';
 
-type SandboxToolkitOptions = {
-  store?: BackgroundTaskStoreApi;
-  outputStore?: TruncatedOutputStoreApi;
-};
+const daytona = new Daytona();
+const sandboxConnections = new Map<string, Sandbox>();
+const codeInterpreterContexts = new Map<string, InterpreterContext>();
 
-const SANDBOX_TOOLKIT_INSTRUCTIONS = `You can operate directly on the chat sandbox.
-
-- Paths are sandbox paths and can be relative to workdir. \`/workspace/*\` is accepted as an alias for \`workspace/*\`.
-- PTY sessions are get-or-create by terminalId.
-- LSP has a single active session per sandbox: reused for same language, recreated on language change.
-- Use \`exec\` for command execution via PTY.
-- Use \`expose_service\` to expose HTTP services on ports 3000-9999.
-- Standard preview auth uses \`x-daytona-preview-token\`; signed preview auth is embedded in the URL.
-- LSP lifecycle is managed automatically.`;
-
-const DEFAULT_TOOL_MAX_DURATION_MS = 30 * 60 * 1000;
-const DEFAULT_TOOL_CALL_CONFIG = {
-  maxDuration: DEFAULT_TOOL_MAX_DURATION_MS,
-  allowAgentSetDuration: true,
-  allowBackground: true,
-} as const;
-const INTERNAL_PTY_TERMINAL_ID = "__sandbox_internal__";
-const SANDBOX_UPLOADS_DIR = "workspace/uploads";
-const SANDBOX_UPLOADS_TEMP_DIR = "workspace/.tmp/uploads";
-const DAYTONA_PREVIEW_TOKEN_HEADER = "x-daytona-preview-token";
-
-export class SandboxFilesystemBackend {
-  private readonly daytona: Daytona;
-  private sandboxSession: SandboxSessionState | null = null;
-  public readonly ready: Promise<void>;
-
-  constructor(
-    env: typeof worker.Env,
-    private readonly sandboxId: string
-  ) {
-    this.daytona = new Daytona({
-      apiKey: env.DAYTONA_API_KEY,
-      ...(env.DAYTONA_API_URL ? { apiUrl: env.DAYTONA_API_URL } : {}),
-      ...(env.DAYTONA_TARGET ? { target: env.DAYTONA_TARGET } : {}),
-    });
-    this.ready = this.createSandboxSession().then(() => undefined);
-  }
-
-  private async createSandboxSession(): Promise<SandboxSessionState> {
-    const ensureSandboxStarted = async (sandbox: Sandbox) => {
-      await sandbox.start().catch(() => undefined);
-      await sandbox.waitUntilStarted().catch(() => undefined);
-    };
-
-    if (this.sandboxSession) {
-      await ensureSandboxStarted(this.sandboxSession.sandbox);
-      return this.sandboxSession;
-    }
-
-    const sandbox = await this.daytona.get(this.sandboxId);
-    await ensureSandboxStarted(sandbox);
-
-    const session: SandboxSessionState = {
-      id: this.sandboxId,
-      sandbox,
-      lspSession: null,
-      ptySessions: new Map(),
-    };
-    this.sandboxSession = session;
-    return session;
-  }
-
-  private async ensureParentDirectories(
-    sandbox: Sandbox,
-    path: string
-  ): Promise<void> {
-    const normalizedPath = path.replace(/\/+$/, "");
-    const parts = normalizedPath.split("/").filter(Boolean);
-    if (parts.length <= 1) {
-      return;
-    }
-
-    const parentParts = parts.slice(0, -1);
-    const isAbsolutePath = normalizedPath.startsWith("/");
-    let currentPath = isAbsolutePath ? "" : "";
-
-    for (const part of parentParts) {
-      currentPath = isAbsolutePath
-        ? `${currentPath}/${part}`
-        : currentPath.length > 0
-          ? `${currentPath}/${part}`
-          : part;
-      await sandbox.fs.createFolder(currentPath, "755").catch(() => undefined);
-    }
-  }
-
-  private ensureSandboxSession() {
-    if (!this.sandboxSession) {
-      throw new Error("Sandbox session not found");
-    }
-    return this.sandboxSession;
-  }
-
-  private async runInternalPtyCommand(command: string) {
-    const sandboxSession = this.ensureSandboxSession();
-    return await execOnPty(sandboxSession, {
-      command,
-      terminalId: INTERNAL_PTY_TERMINAL_ID,
-      closeAfter: false,
-    });
-  }
-
-  private async checkServiceConnectivity(port: number) {
-    const command = [
-      "python3 - <<'PY'",
-      "import socket",
-      `port = ${port}`,
-      "sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)",
-      "sock.settimeout(1.0)",
-      "reachable = sock.connect_ex(('127.0.0.1', port)) == 0",
-      "sock.close()",
-      "print('reachable' if reachable else 'unreachable')",
-      "PY",
-    ].join("\n");
-
-    const result = await this.runInternalPtyCommand(command);
-    if (!result.success || result.timedOut) {
-      return {
-        checked: true,
-        reachable: false,
-        warning: "Connectivity check failed while probing the sandbox port.",
-      };
-    }
-
-    const normalizedOutput = result.output.trim().split(/\r?\n/).at(-1) ?? "";
-    const reachable = normalizedOutput === "reachable";
-    return {
-      checked: true,
-      reachable,
-      ...(reachable
-        ? {}
-        : {
-            warning: `No service detected on port ${port}. Preview URL may return 502/timeout.`,
-          }),
-    };
-  }
-
-  async listFiles(input: LsInput) {
-    const resolvedPath = normalizeSandboxPath(input.path);
-    const files = await this.ensureSandboxSession().sandbox.fs.listFiles(resolvedPath);
-    if (!files) {
-      throw new Error("Sandbox session not found");
-    }
-    return {
-      path: resolvedPath,
-      entries: files.map((file) => ({
-        name: file.name,
-        path: joinSandboxPath(resolvedPath, file.name),
-        isDir: file.isDir,
-        size: file.size,
-        modifiedAt: parseModTime(file.modTime),
-        permissions: file.permissions,
-      })),
-    };
-  }
-
-  async readFile(input: ReadInput) {
-    const resolvedPath = normalizeSandboxPath(input.path);
-    const contentBuffer = await this.ensureSandboxSession().sandbox.fs.downloadFile(resolvedPath);
-    if (!contentBuffer) {
-      throw new Error("Sandbox session not found");
-    }
-    const content = contentBuffer.toString("utf8");
-    const start = input.offset ?? 0;
-    const end = input.limit !== undefined ? start + input.limit : undefined;
-    return {
-      path: resolvedPath,
-      content: content.slice(start, end),
-      size: content.length,
-      offset: start,
-      ...(input.limit !== undefined ? { limit: input.limit } : {}),
-    };
-  }
-
-  async writeFile(input: WriteInput) {
-    const resolvedPath = normalizeSandboxPath(input.path);
-    await this.ensureParentDirectories(this.ensureSandboxSession().sandbox, resolvedPath);
-    await this.ensureSandboxSession().sandbox.fs.uploadFile(
-      Buffer.from(input.content),
-      resolvedPath
-    );
-    return {
-      path: resolvedPath,
-      bytesWritten: Buffer.byteLength(input.content),
-    };
-  }
-
-  async editFile(input: EditInput) {
-    if (!input.oldText) {
-      return {
-        path: normalizeSandboxPath(input.path),
-        edited: false,
-        occurrences: 0,
-        error: "oldText must not be empty",
-      };
-    }
-
-    const resolvedPath = normalizeSandboxPath(input.path);
-    const sandboxSession = this.ensureSandboxSession();
-    const contentBuffer = await sandboxSession.sandbox.fs.downloadFile(resolvedPath);
-    const content = contentBuffer.toString("utf8");
-    const occurrences = countSubstringOccurrences(content, input.oldText);
-    const appliedOccurrences = input.replaceAll ? occurrences : Math.min(occurrences, 1);
-    if (appliedOccurrences > 0) {
-      const updatedContent = input.replaceAll
-        ? content.split(input.oldText).join(input.newText)
-        : replaceFirstOccurrence(content, input.oldText, input.newText);
-      await sandboxSession.sandbox.fs.uploadFile(
-        Buffer.from(updatedContent, "utf8"),
-        resolvedPath
-      );
-    }
-
-    return {
-      path: resolvedPath,
-      edited: appliedOccurrences > 0,
-      occurrences: appliedOccurrences,
-    };
-  }
-
-  async globFiles(input: GlobInput) {
-    const sandboxSession = this.ensureSandboxSession();
-    const resolvedPath = normalizeSandboxPath(input.path);
-    const result = await sandboxSession.sandbox.fs.searchFiles(
-      resolvedPath,
-      input.pattern
-    ).catch((error: unknown) => {
-      if (isSandboxPathNotFoundError(error)) {
-        return null;
-      }
-      throw error;
-    });
-    const files = Array.isArray(result?.files) ? result?.files ?? [] : [];
-    return {
-      path: resolvedPath,
-      pattern: input.pattern,
-      files,
-      count: files.length,
-    };
-  }
-
-  async grepFiles(input: GrepInput) {
-    const sandboxSession = this.ensureSandboxSession();
-    const resolvedPath = normalizeSandboxPath(input.path);
-    const matches = await sandboxSession.sandbox.fs.findFiles(
-      resolvedPath,
-      input.pattern
-    );
-    return {
-      path: resolvedPath,
-      pattern: input.pattern,
-      matches,
-      count: matches.length,
-    };
-  }
-
-  async openPtySession(input: PtySessionCreateInput) {
-    const sandboxSession = this.ensureSandboxSession();
-    const ptySession = await getOrCreatePtySession(sandboxSession, input);
-    return {
-      terminalId: ptySession.id,
-      created: true,
-    };
-  }
-
-  async exec(input: ExecInput, options?: WrappedExecuteOptions) {
-    const sandboxSession = this.ensureSandboxSession();
-    const result = await execOnPty(sandboxSession, {
-      ...input,
-    }, {
-      log: options?.log,
-      streamLogs: options?.streamLogs ?? options?.log,
-      abortSignal: options?.toolContext?.abortSignal ?? options?.abortController?.signal,
-    });
-    if (input.closeAfter) {
-      await closePtySession(sandboxSession, { terminalId: result.terminalId });
-    }
-    return result;
-  }
-
-  async exposeService(input: ExposeServiceInput) {
-    const sandboxSession = this.ensureSandboxSession();
-    const sandbox = sandboxSession.sandbox;
-    const revokedSignedToken = input.revokeSignedToken?.trim();
-    const shouldFetchStandard =
-      input.previewType === "standard" || input.previewType === "both";
-    const shouldFetchSigned =
-      input.previewType === "signed" || input.previewType === "both";
-
-    if (revokedSignedToken) {
-      await sandbox.expireSignedPreviewUrl(input.port, revokedSignedToken);
-    }
-
-    const [standardPreview, signedPreview] = await Promise.all([
-      shouldFetchStandard ? sandbox.getPreviewLink(input.port) : Promise.resolve(null),
-      shouldFetchSigned
-        ? sandbox.getSignedPreviewUrl(input.port, input.expiresInSeconds)
-        : Promise.resolve(null),
-    ]);
-    const connectivity = input.checkConnectivity
-      ? await this.checkServiceConnectivity(input.port)
-      : null;
-
-    return {
-      port: input.port,
-      previewType: input.previewType,
-      ...(revokedSignedToken ? { revokedSignedToken } : {}),
-      ...(standardPreview ? { standard: buildStandardPreviewResult(standardPreview) } : {}),
-      ...(signedPreview ? { signed: buildSignedPreviewResult(signedPreview, input) } : {}),
-      ...(connectivity ? { connectivity } : {}),
-    };
-  }
-
-  async readPtySession(
-    input: XtermReadInput &
-      Pick<XtermWriteInput, "cols" | "rows" | "cwd" | "envs">
-  ) {
-    const sandboxSession = this.ensureSandboxSession();
-    return await readPtyOutput(sandboxSession, input);
-  }
-
-  async writePtySession(input: XtermWriteInput) {
-    const sandboxSession = this.ensureSandboxSession();
-    return await writeToPty(sandboxSession, input);
-  }
-
-  async resizePtySession(input: XtermResizeInput) {
-    const sandboxSession = this.ensureSandboxSession();
-    return await resizePty(sandboxSession, input);
-  }
-
-  async listPtySessions(input: XtermListInput = {}) {
-    void input;
-    const sandboxSession = this.ensureSandboxSession();
-    const sessions = await listPtySessions(sandboxSession);
-    return { sessions };
-  }
-
-  async closePtySession(input: XtermCloseInput) {
-    const sandboxSession = this.ensureSandboxSession();
-    return await closePtySession(sandboxSession, input);
-  }
-
-  async lspCompletions(input: LspCompletionsInput) {
-    const sandboxSession = this.ensureSandboxSession();
-    const normalizedInput: LspCompletionsInput = {
-      ...input,
-      projectPath: normalizeSandboxPath(input.projectPath),
-      filePath: normalizeSandboxPath(input.filePath),
-    };
-
-    try {
-      return await getLspCompletions(sandboxSession, normalizedInput);
-    } catch (error) {
-      return {
-        languageId: normalizedInput.languageId,
-        filePath: normalizedInput.filePath,
-        line: normalizedInput.line,
-        character: normalizedInput.character,
-        completions: [],
-        error: "LSP server not available",
-        reason: buildLspErrorReason(normalizedInput.languageId, error),
-      };
-    }
-  }
-
-  async downloadFileBase64(input: { path: string }) {
-    const resolvedPath = normalizeSandboxPath(input.path);
-    const contentBuffer = await this.ensureSandboxSession().sandbox.fs.downloadFile(resolvedPath);
-    if (!contentBuffer) {
-      throw new Error("File not found");
-    }
-    return {
-      path: resolvedPath,
-      content: contentBuffer.toString("base64"),
-      size: contentBuffer.length,
-      encoding: "base64" as const,
-    };
-  }
-
-  async downloadFolderArchive(input: { path: string }) {
-    const resolvedPath = normalizeSandboxPath(input.path);
-    const archivePath = `/tmp/_archive_${Date.now()}.tar.gz`;
-
-    const result = await this.runInternalPtyCommand(
-      `tar -czf ${shellQuote(archivePath)} -C ${shellQuote(resolvedPath)} .`,
-    );
-    if (!result.success || result.timedOut) {
-      throw new Error("Failed to create archive");
-    }
-
-    try {
-      const contentBuffer = await this.ensureSandboxSession().sandbox.fs.downloadFile(archivePath);
-      return {
-        path: resolvedPath,
-        content: contentBuffer.toString("base64"),
-        size: contentBuffer.length,
-        encoding: "base64" as const,
-        archiveType: "tar.gz" as const,
-      };
-    } finally {
-      void this.runInternalPtyCommand(`rm -f ${shellQuote(archivePath)}`).catch(() => undefined);
-    }
-  }
-
-  async deleteEntry(input: { path: string }) {
-    const resolvedPath = normalizeSandboxPath(input.path);
-    const result = await this.runInternalPtyCommand(
-      `rm -rf ${shellQuote(resolvedPath)}`,
-    );
-    if (!result.success || result.timedOut) {
-      throw new Error("Failed to delete entry");
-    }
-    return { path: resolvedPath, deleted: true };
-  }
-
-  async closeSandboxSession() {
-    const sandboxSession = this.sandboxSession;
-    if (!sandboxSession) {
-      return;
-    }
-    await Promise.all([
-      closeAllPtySessions(sandboxSession),
-      closeAllLspSessions(sandboxSession),
-    ]);
-    this.sandboxSession = null;
-  }
-
-  private async loadAttachment(url: string): Promise<Buffer | null> {
-    const dataUrlContent = decodeDataUrl(url);
-    if (dataUrlContent) {
-      return dataUrlContent;
-    }
-
-    if (!url.startsWith("http://") && !url.startsWith("https://")) {
-      return null;
-    }
-
-    const response = await fetch(url);
-    if (!response.ok) {
-      return null;
-    }
-
-    const buffer = await response.arrayBuffer();
-    return Buffer.from(buffer);
-  }
-
-  async saveFilesToSandbox(messages: UIMessage[]) {
-    const sandboxSession = this.ensureSandboxSession();
-    let uploaded = 0;
-    let skipped = 0;
-    let errors = 0;
-
-    const ensureDirsResult = await this.runInternalPtyCommand(
-      `mkdir -p ${shellQuote(SANDBOX_UPLOADS_DIR)} ${shellQuote(SANDBOX_UPLOADS_TEMP_DIR)}`
-    );
-    if (!ensureDirsResult.success || ensureDirsResult.timedOut) {
-      throw new Error(
-        createPtyCommandError("saveFilesToSandbox mkdir", ensureDirsResult)
-      );
-    }
-
-    for (const message of messages) {
-      for (const [index, part] of message.parts.entries()) {
-        if (!isFileUIPart(part)) {
-          continue;
-        }
-
-        const payload = await this.loadAttachment(part.url).catch(() => null);
-        if (!payload) {
-          skipped += 1;
-          continue;
-        }
-
-        const filename = sanitizeFilename(
-          part.filename ?? `${message.id}-${index}.bin`
-        );
-        const destinationPath = `${SANDBOX_UPLOADS_DIR}/${filename}`;
-        const tempPath = `${SANDBOX_UPLOADS_TEMP_DIR}/${createTempFileName(
-          message.id,
-          index,
-          filename
-        )}`;
-
-        try {
-          await sandboxSession.sandbox.fs.uploadFile(payload, tempPath);
-          const moveResult = await this.runInternalPtyCommand(
-            `mv -f ${shellQuote(tempPath)} ${shellQuote(destinationPath)}`
-          );
-          if (!moveResult.success || moveResult.timedOut) {
-            throw new Error(createPtyCommandError("saveFilesToSandbox mv", moveResult));
-          }
-          uploaded += 1;
-        } catch {
-          void this.runInternalPtyCommand(`rm -f ${shellQuote(tempPath)}`).catch(
-            () => undefined
-          );
-          errors += 1;
-        }
-      }
-    }
-
-    return {
-      uploaded,
-      skipped,
-      errors,
-    };
-  }
-}
-
-function createSandboxTool(
-  options: SandboxToolkitOptions,
-  config: {
-    name: string;
-    description: string;
-    parameters: z.ZodObject<z.ZodRawShape>;
-    execute: (
-      args: Record<string, unknown>,
-      toolOptions?: WrappedExecuteOptions
-    ) => Promise<unknown>;
-  }
-): BaseTool {
-  if (options.store && options.outputStore) {
-    return createWrappedTool({
-      name: config.name,
-      description: config.description,
-      parameters: config.parameters,
-      store: options.store,
-      outputStore: options.outputStore,
-      toolCallConfig: DEFAULT_TOOL_CALL_CONFIG,
-      execute: config.execute,
-    });
-  }
-
-  return createTool({
-    name: config.name,
-    description: config.description,
-    parameters: config.parameters,
-    execute: async (args, toolOptions) =>
-      await config.execute(
-        args,
-        toolOptions
-      ),
-  });
-}
-
-export function createSandboxToolkit(
-  filesystemBackend: SandboxFilesystemBackend,
-  options: SandboxToolkitOptions = {}
-): Toolkit {
-  const tools: BaseTool[] = [
-    createSandboxTool(options, {
-      name: "ls",
-      description: "List files and directories in the sandbox.",
-      parameters: lsParameters,
-      execute: async (args) => await filesystemBackend.listFiles(lsParameters.parse(args)),
-    }),
-    createSandboxTool(options, {
-      name: "read",
-      description: "Read a text file from the sandbox.",
-      parameters: readParameters,
-      execute: async (args) => await filesystemBackend.readFile(readParameters.parse(args)),
-    }),
-    createSandboxTool(options, {
-      name: "write",
-      description: "Write text content to a sandbox file.",
-      parameters: writeParameters,
-      execute: async (args) => await filesystemBackend.writeFile(writeParameters.parse(args)),
-    }),
-    createSandboxTool(options, {
-      name: "edit",
-      description: "Edit a sandbox file by replacing text.",
-      parameters: editParameters,
-      execute: async (args) => await filesystemBackend.editFile(editParameters.parse(args)),
-    }),
-    createSandboxTool(options, {
-      name: "glob",
-      description: "Find files in the sandbox with a glob pattern.",
-      parameters: globParameters,
-      execute: async (args) => await filesystemBackend.globFiles(globParameters.parse(args)),
-    }),
-    createSandboxTool(options, {
-      name: "grep",
-      description: "Search sandbox files for a pattern.",
-      parameters: grepParameters,
-      execute: async (args) => await filesystemBackend.grepFiles(grepParameters.parse(args)),
-    }),
-    createSandboxTool(options, {
-      name: "exec",
-      description: "Execute a shell command through a PTY session.",
-      parameters: execParameters,
-      execute: async (args, toolOptions) =>
-        await filesystemBackend.exec(execParameters.parse(args), toolOptions),
-    }),
-    createSandboxTool(options, {
-      name: "expose_service",
-      description:
-        "Expose a sandbox HTTP service by generating Daytona standard and/or signed preview links.",
-      parameters: exposeServiceParameters,
-      execute: async (args) => {
-        return await filesystemBackend.exposeService(
-          exposeServiceParameters.parse(args)
-        );
-      },
-    }),
-    createSandboxTool(options, {
-      name: "close_pty_session",
-      description: "Close and kill a PTY session.",
-      parameters: xtermCloseParameters,
-      execute: async (args) => {
-        return await filesystemBackend.closePtySession(
-          xtermCloseParameters.parse(args)
-        );
-      },
-    }),
-    createSandboxTool(options, {
-      name: "lsp_completions",
-      description: "Get LSP completions from the single active LSP session (auto-recreated on language change).",
-      parameters: lspCompletionsParameters,
-      execute: async (args) => {
-        return await filesystemBackend.lspCompletions(
-          lspCompletionsParameters.parse(args)
-        );
-      },
-    }),
-  ];
-
-  return createToolkit({
-    name: "sandbox",
+export async function createDaytonaToolkit(connectionId: string): Promise<Toolkit> {
+  const list = createTool({
+    name: 'list',
     description:
-      "Sandbox filesystem, PTY terminal, and LSP tools backed by Daytona.",
-    instructions: SANDBOX_TOOLKIT_INSTRUCTIONS,
-    tools,
+      'List files and directories in the configured Daytona sandbox path. Returns entries with metadata.',
+    parameters: listSchema,
+    execute: async (input) => {
+      const sandbox = await getSandboxConnection(connectionId);
+      return sandbox.fs.listFiles(input.path);
+    },
   });
-}
 
-export abstract class SandboxTerminalAgentBase<
-  State = unknown,
-> extends AIChatAgent<typeof worker.Env, State> {
-  private terminalBackend: SandboxFilesystemBackend | null = null;
-  private terminalBackendSandboxId: string | null = null;
+  const read = createTool({
+    name: 'read',
+    description: 'Read file contents from the configured Daytona sandbox with line offset and limit.',
+    parameters: readSchema,
+    execute: async (input) => {
+      const sandbox = await getSandboxConnection(connectionId);
+      const fileBuffer = await sandbox.fs.downloadFile(input.path);
+      const slice = sliceByOffsetLimit(fileBuffer.toString('utf8'), input.offset, input.limit);
 
-  protected abstract initSandboxAccess(): Promise<void>;
-  protected abstract getSandboxIdForTerminal(): string | null;
-
-  private async getTerminalBackend(): Promise<SandboxFilesystemBackend> {
-    await this.initSandboxAccess();
-    const sandboxId = this.getSandboxIdForTerminal();
-    if (!sandboxId) {
-      throw new Error("No sandbox attached to this chat");
-    }
-
-    if (this.terminalBackend && this.terminalBackendSandboxId === sandboxId) {
-      return this.terminalBackend;
-    }
-
-    if (this.terminalBackend) {
-      await this.terminalBackend.closeSandboxSession().catch(() => undefined);
-    }
-
-    const backend = new SandboxFilesystemBackend(this.env, sandboxId);
-    await backend.ready;
-    this.terminalBackend = backend;
-    this.terminalBackendSandboxId = sandboxId;
-    return this.terminalBackend;
-  }
-
-  @callable()
-  async listFiles(input?: { path?: string }) {
-    const backend = await this.getTerminalBackend();
-    return await backend.listFiles({
-      path: input?.path ?? ".",
-    });
-  }
-
-  @callable()
-  async openPtyTerminal(input?: {
-    terminalId?: string;
-    cols?: number;
-    rows?: number;
-    cwd?: string;
-    envs?: Record<string, string>;
-  }) {
-    const backend = await this.getTerminalBackend();
-    const response = await backend.openPtySession({
-      terminalId: input?.terminalId,
-      cols: input?.cols,
-      rows: input?.rows,
-      cwd: input?.cwd,
-      envs: input?.envs,
-    });
-    return { terminalId: response.terminalId };
-  }
-
-  @callable()
-  async readPtyTerminal(input: {
-    terminalId: string;
-    offset?: number;
-    cols?: number;
-    rows?: number;
-    cwd?: string;
-    envs?: Record<string, string>;
-  }) {
-    const backend = await this.getTerminalBackend();
-    return await backend.readPtySession({
-      terminalId: input.terminalId,
-      offset: input.offset ?? 0,
-      cols: input.cols,
-      rows: input.rows,
-      cwd: input.cwd,
-      envs: input.envs,
-    });
-  }
-
-  @callable()
-  async writePtyTerminal(input: {
-    terminalId: string;
-    data: string;
-    cols?: number;
-    rows?: number;
-    cwd?: string;
-    envs?: Record<string, string>;
-  }) {
-    const backend = await this.getTerminalBackend();
-    return await backend.writePtySession({
-      terminalId: input.terminalId,
-      data: input.data,
-      cols: input.cols,
-      rows: input.rows,
-      cwd: input.cwd,
-      envs: input.envs,
-    });
-  }
-
-  @callable()
-  async resizePtyTerminal(input: {
-    terminalId: string;
-    cols: number;
-    rows: number;
-  }) {
-    const backend = await this.getTerminalBackend();
-    return await backend.resizePtySession({
-      terminalId: input.terminalId,
-      cols: input.cols,
-      rows: input.rows,
-    });
-  }
-
-  @callable()
-  async listPtyTerminalSessions() {
-    const backend = await this.getTerminalBackend();
-    return await backend.listPtySessions();
-  }
-
-  @callable()
-  async closePtyTerminal(input: { terminalId: string }) {
-    const backend = await this.getTerminalBackend();
-    return await backend.closePtySession({
-      terminalId: input.terminalId,
-    });
-  }
-
-  @callable()
-  async downloadFile(input: { path: string }) {
-    const backend = await this.getTerminalBackend();
-    return await backend.downloadFileBase64({ path: input.path });
-  }
-
-  @callable()
-  async downloadFolder(input: { path: string }) {
-    const backend = await this.getTerminalBackend();
-    return await backend.downloadFolderArchive({ path: input.path });
-  }
-
-  @callable()
-  async deleteEntry(input: { path: string }) {
-    const backend = await this.getTerminalBackend();
-    return await backend.deleteEntry({ path: input.path });
-  }
-}
-
-function parseModTime(modTime: string): number {
-  const parsed = Date.parse(modTime);
-  return Number.isNaN(parsed) ? Date.now() : parsed;
-}
-
-function joinSandboxPath(basePath: string, name: string): string {
-  if (basePath === ".") {
-    return name;
-  }
-  if (basePath === "/") {
-    return `/${name}`;
-  }
-  const normalizedBase = basePath.endsWith("/")
-    ? basePath.slice(0, -1)
-    : basePath;
-  return `${normalizedBase}/${name}`;
-}
-
-function decodeDataUrl(url: string): Buffer | null {
-  if (!url.startsWith("data:")) {
-    return null;
-  }
-
-  const commaIndex = url.indexOf(",");
-  if (commaIndex === -1) {
-    return null;
-  }
-
-  const metadata = url.slice(5, commaIndex);
-  const payload = url.slice(commaIndex + 1);
-  if (metadata.includes(";base64")) {
-    return Buffer.from(payload, "base64");
-  }
-
-  return Buffer.from(decodeURIComponent(payload), "utf8");
-}
-
-function countSubstringOccurrences(content: string, needle: string): number {
-  if (!needle) {
-    return 0;
-  }
-  return content.split(needle).length - 1;
-}
-
-function replaceFirstOccurrence(content: string, oldText: string, newText: string): string {
-  const index = content.indexOf(oldText);
-  if (index < 0) {
-    return content;
-  }
-  return `${content.slice(0, index)}${newText}${content.slice(index + oldText.length)}`;
-}
-
-function createPtyCommandError(
-  operation: string,
-  result: Pick<ExecOutput, "success" | "timedOut" | "exitCode" | "error" | "output">
-): string {
-  if (result.timedOut) {
-    return `${operation} timed out`;
-  }
-  const outputTail = result.output.slice(-500).trim();
-  const errorReason = result.error?.trim();
-  if (errorReason) {
-    return `${operation} failed: ${errorReason}`;
-  }
-  if (outputTail) {
-    return `${operation} failed: ${outputTail}`;
-  }
-  if (result.exitCode !== null) {
-    return `${operation} failed with exit code ${result.exitCode}`;
-  }
-  return `${operation} failed`;
-}
-
-function buildStandardPreviewResult(
-  preview: Awaited<ReturnType<Sandbox["getPreviewLink"]>>
-) {
-  return {
-    url: preview.url,
-    token: preview.token ?? null,
-    auth: {
-      type: "header" as const,
-      headerName: DAYTONA_PREVIEW_TOKEN_HEADER,
-      ...(preview.token ? { headerValue: preview.token } : {}),
+      return {
+        totalLines: slice.totalLines,
+        returnedLines: slice.returnedLines,
+        hasMore: slice.hasMore,
+        content: slice.text,
+      };
     },
-  };
-}
+  });
 
-function buildSignedPreviewResult(
-  preview: Awaited<ReturnType<Sandbox["getSignedPreviewUrl"]>>,
-  input: Pick<ExposeServiceInput, "expiresInSeconds">
-) {
-  return {
-    url: preview.url,
-    token: preview.token,
-    ...(input.expiresInSeconds !== undefined
-      ? { expiresInSeconds: input.expiresInSeconds }
-      : {}),
-    auth: {
-      type: "token_in_url" as const,
+  const write = createTool({
+    name: 'write',
+    description: 'Write or overwrite a file in the configured Daytona sandbox.',
+    parameters: writeSchema,
+    execute: async (input) => {
+      const sandbox = await getSandboxConnection(connectionId);
+      await sandbox.fs.uploadFile(input.content, input.path);
+      return {
+        bytes: Buffer.from(input.content).length,
+        result: 'ok',
+      };
     },
-  };
-}
+  });
 
-function shellQuote(value: string): string {
-  return `'${value.replace(/'/g, `'\\''`)}'`;
-}
+  const edit = createTool({
+    name: 'edit',
+    description:
+      'Perform text replacement in a file inside the configured Daytona sandbox with optional replaceAll.',
+    parameters: editSchema,
+    execute: async (input) => {
+      const sandbox = await getSandboxConnection(connectionId);
+      const fileBuffer = await sandbox.fs.downloadFile(input.path);
+      const current = fileBuffer.toString('utf8');
+      const replaced = replaceInText(current, input.oldText, input.newText, input.replaceAll);
 
-function createTempFileName(messageId: string, index: number, filename: string): string {
-  const safeMessageId = messageId.replace(/[^a-zA-Z0-9._-]/g, "_");
-  const nonce = `${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
-  return `${safeMessageId}_${index}_${nonce}_${filename}`;
-}
+      await sandbox.fs.uploadFile(replaced.result, input.path);
 
-function normalizeSandboxPath(path: string): string {
-  if (path === "/workspace") {
-    return "workspace";
-  }
-  if (path.startsWith("/workspace/")) {
-    return `workspace/${path.slice("/workspace/".length)}`;
-  }
-  if (path === "/home/daytona/workspace") {
-    return "workspace";
-  }
-  if (path.startsWith("/home/daytona/workspace/")) {
-    return `workspace/${path.slice("/home/daytona/workspace/".length)}`;
-  }
-  return path;
-}
+      return {
+        replaced: replaced.count,
+        result: 'ok',
+      };
+    },
+  });
 
-function getLspBinaryCandidates(languageId: string): string[] {
-  switch (languageId.toLowerCase()) {
-    case "typescript":
-    case "javascript":
-      return ["typescript-language-server", "vtsls"];
-    case "python":
-      return ["pylsp", "pyright-langserver", "basedpyright-langserver"];
-    default:
-      return [];
-  }
-}
+  const glob = createTool({
+    name: 'glob',
+    description: 'Find files matching a glob pattern inside a directory.',
+    parameters: globSchema,
+    execute: async (input) => {
+      const sandbox = await getSandboxConnection(connectionId);
+      const found = await sandbox.fs.searchFiles(input.path, input.pattern);
 
-function isSandboxPathNotFoundError(error: unknown): boolean {
-  if (!(error instanceof Error)) {
-    return false;
-  }
-  const message = error.message.toLowerCase();
-  return message.includes("not found") || message.includes("no such file") || message.includes("404");
-}
+      return {
+        files: found.files,
+        count: found.files.length,
+      };
+    },
+  });
 
-function buildLspErrorReason(languageId: string, error: unknown): string {
-  if (error instanceof Error && error.message.trim().length > 0) {
-    const message = error.message.trim();
-    const normalizedMessage = message.toLowerCase();
-    if (normalizedMessage.includes("not found") || normalizedMessage.includes("enoent")) {
-      const binaries = getLspBinaryCandidates(languageId);
-      if (binaries.length > 0) {
-        return `Server binary not found (${binaries.join(" or ")})`;
+  const grep = createTool({
+    name: 'grep',
+    description: 'Search for text pattern matches in files inside a directory.',
+    parameters: grepSchema,
+    execute: async (input) => {
+      const sandbox = await getSandboxConnection(connectionId);
+      const matches = await sandbox.fs.findFiles(input.path, input.pattern);
+
+      return {
+        matches,
+        count: matches.length,
+      };
+    },
+  });
+
+  const generate_download_url = createTool({
+    name: 'generate_download_url',
+    description: 'Generate a direct download URL for a sandbox file.',
+    parameters: generateDownloadUrlSchema,
+    execute: async (input) => {
+      const sandbox = await getSandboxConnection(connectionId);
+      const baseUrl = await daytona.getProxyToolboxUrl(sandbox.id, sandbox.target);
+      const url = new URL(`${baseUrl.replace(/\/$/, '')}/files/download`);
+      url.searchParams.set('path', input.path);
+
+      return { url: url.toString() };
+    },
+  });
+
+  const exec = createTool({
+    name: 'exec',
+    description:
+      'Execute shell commands in a Daytona sandbox terminal session. Set background=true for long-running sessions.',
+    parameters: execSchema,
+    execute: async (input) => {
+      const sandbox = await getSandboxConnection(connectionId);
+
+      if (input.background) {
+        const existingSession = await sandbox.process.getSession(input.terminalId).catch(() => null);
+        if (!existingSession) {
+          await sandbox.process.createSession(input.terminalId);
+        }
+
+        const result = await sandbox.process.executeSessionCommand(input.terminalId, {
+          command: input.command,
+          runAsync: true,
+        });
+
+        return {
+          commandId: result.cmdId,
+          status: 'running',
+        };
       }
-    }
-    return message;
+
+      const result = await sandbox.process.executeCommand(input.command);
+
+      return {
+        exitCode: result.exitCode,
+        stdout: result.result,
+      };
+    },
+  });
+
+  const read_terminal_logs = createTool({
+    name: 'read_terminal_logs',
+    description:
+      'Read combined output logs for the latest command in a terminal session with line offset/limit.',
+    parameters: readLogsSchema,
+    execute: async (input) => {
+      const sandbox = await getSandboxConnection(connectionId);
+      const session = await sandbox.process.getSession(input.terminalId);
+      const commandId = session.commands.at(-1)?.id;
+      if (!commandId) {
+        return {
+          hasMore: false,
+          output: '',
+          commandId: null,
+        };
+      }
+
+      const logs = await sandbox.process.getSessionCommandLogs(input.terminalId, commandId);
+      const output = logs.output ?? '';
+      const stdout = logs.stdout ?? '';
+      const stderr = logs.stderr ?? '';
+      const slicedStdout = sliceByOffsetLimit(stdout, input.offset, input.limit);
+      const slicedStderr = sliceByOffsetLimit(stderr, input.offset, input.limit);
+      const combined = output.length > 0 ? output : [stdout, stderr].join('\n');
+      const combinedSlice = sliceByOffsetLimit(combined, input.offset, input.limit);
+
+      return {
+        commandId,
+        output: combinedSlice.text,
+        outputTotalLines: combinedSlice.totalLines,
+        outputReturnedLines: combinedSlice.returnedLines,
+        outputHasMore: combinedSlice.hasMore,
+        stdout: slicedStdout.text,
+        stderr: slicedStderr.text,
+      };
+    },
+  });
+
+  const stateful_code_exec = createTool({
+    name: 'stateful_code_exec',
+    description:
+      'Run persistent Python code in an isolated notebook-like context. Reuse context by notebookId.',
+    parameters: statefulCodeExecSchema,
+    execute: async (input) => {
+      const sandbox = await getSandboxConnection(connectionId);
+      const context = await getCodeInterpreterContext(sandbox, input.notebookId);
+
+      const result = await sandbox.codeInterpreter.runCode(input.code, { context });
+
+      return {
+        stdout: result.stdout,
+        stderr: result.stderr,
+        error: result.error,
+      };
+    },
+  });
+
+  return {
+    name: 'daytona-filesystem-agent',
+    description:
+      'Use Daytona sandbox filesystem and terminal tools for file operations, command execution, and stateful Python code execution.',
+    instructions: 'Use these tools to read and edit files, run commands, inspect logs, and execute stateful Python snippets.',
+    addInstructions: true,
+    tools: [
+      list,
+      read,
+      write,
+      edit,
+      glob,
+      grep,
+      generate_download_url,
+      exec,
+      read_terminal_logs,
+      stateful_code_exec,
+    ],
+  };
+}
+
+async function getSandboxConnection(connectionId: string) {
+  const existing = sandboxConnections.get(connectionId);
+
+  if (existing) {
+    return existing;
   }
-  return "Unknown LSP startup failure";
+
+  const sandbox = await daytona.get(connectionId);
+  sandboxConnections.set(connectionId, sandbox);
+
+  try {
+    return sandbox;
+  } catch (error) {
+    sandboxConnections.delete(connectionId);
+    throw error;
+  }
+}
+
+async function getCodeInterpreterContext(sandbox: Sandbox, notebookId: string) {
+  const existing = codeInterpreterContexts.get(notebookId);
+
+  if (existing) {
+    return existing;
+  }
+
+  const context = await sandbox.codeInterpreter.createContext();
+  codeInterpreterContexts.set(notebookId, context);
+
+  return context;
+}
+
+function sliceByOffsetLimit(text: string, offset = DEFAULT_LIST_OFFSET, limit?: number): {
+  totalLines: number;
+  returnedLines: number;
+  hasMore: boolean;
+  text: string;
+} {
+  const start = Math.max(0, Math.floor(offset));
+  const safeLimit = limit === undefined ? undefined : Math.max(1, Math.floor(limit));
+  const lines = text.split('\n');
+  const from = Math.min(start, lines.length);
+  const to = safeLimit === undefined ? lines.length : Math.min(lines.length, from + safeLimit);
+  const sliced = lines.slice(from, to).join('\n');
+
+  return {
+    totalLines: lines.length,
+    returnedLines: to - from,
+    hasMore: safeLimit !== undefined && to < lines.length,
+    text: sliced,
+  };
+}
+
+function replaceInText(input: string, oldText: string, newText: string, replaceAll: boolean) {
+  if (oldText.length === 0) {
+    throw new Error('oldText cannot be empty');
+  }
+
+  if (replaceAll) {
+    const occurrences = input.split(oldText).length - 1;
+    return {
+      result: input.split(oldText).join(newText),
+      count: occurrences,
+    };
+  }
+
+  const index = input.indexOf(oldText);
+  if (index === -1) {
+    throw new Error(`No matches for oldText in ${input.slice(0, 80)}`);
+  }
+
+  return {
+    result: `${input.slice(0, index)}${newText}${input.slice(index + oldText.length)}`,
+    count: 1,
+  };
+}
+
+export function createSandboxPtyFunctions(connectionId: string) {
+  return new SandboxPtyService(connectionId, () => getSandboxConnection(connectionId));
 }

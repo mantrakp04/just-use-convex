@@ -25,7 +25,7 @@ export async function indexMessagesInVectorStore(args: {
   messages: UIMessage[];
 }): Promise<void> {
   const { env, agentName, chatId, messages } = args;
-  const vectorize = env.VECTORIZE_CHAT_MESSAGES;
+  const vectorize = env.vectorizeChatMessages;
   if (!vectorize || !chatId) return;
 
   const texts: string[] = [];
@@ -75,7 +75,7 @@ export async function deleteMessageVectors(args: {
   messageIds: string[];
 }): Promise<void> {
   const { env, agentName, messageIds } = args;
-  const vectorize = env.VECTORIZE_CHAT_MESSAGES;
+  const vectorize = env.vectorizeChatMessages;
   if (!vectorize || messageIds.length === 0) return;
 
   const ids = await Promise.all(
@@ -122,7 +122,7 @@ export async function queryVectorizedMessages(args: {
   topK?: number;
 }): Promise<VectorizeMatches | null> {
   const { env, memberId, queryText, topK = 6 } = args;
-  const vectorize = env.VECTORIZE_CHAT_MESSAGES;
+  const vectorize = env.vectorizeChatMessages;
   if (!vectorize) return null;
 
   const normalizedQuery = queryText.trim();

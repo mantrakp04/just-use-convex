@@ -26,7 +26,7 @@ export const worker = await Worker("agent-worker", {
   compatibility: "node",
   bindings: {
     agentWorker: agentWorkerNamespace,
-    VECTORIZE_CHAT_MESSAGES: chatMessagesIndex,
+    vectorizeChatMessages: chatMessagesIndex,
     NODE_ENV: "production",
     CONVEX_URL: alchemy.secret(env.CONVEX_URL),
     CONVEX_SITE_URL: alchemy.secret(env.CONVEX_SITE_URL),
@@ -65,9 +65,6 @@ await WranglerJson({
         );
       }
       if (spec.migrations) {
-        const newSqliteClasses = new Set<string>();
-        const newClasses = new Set<string>();
-
         for (const migration of spec.migrations) {
           if (migration.new_classes?.includes("Sandbox")) {
             migration.new_classes = migration.new_classes.filter((c: string) => c !== "Sandbox");
