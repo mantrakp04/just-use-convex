@@ -1,5 +1,6 @@
 import { useCallback, useRef } from "react";
 import { useNavigate, useParams } from "@tanstack/react-router";
+import { useAtomValue } from "jotai";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -10,9 +11,11 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
-import { useChatsList, type Chat } from "@/hooks/use-chats";
+import { Button } from "@/components/ui/button";
+import { useChats, useChatsList, type Chat } from "@/hooks/use-chats";
 import { Badge } from "@/components/ui/badge";
-import { MessageSquare, Pin, ChevronDown, Loader2, Box } from "lucide-react";
+import { selectedSandboxIdAtom } from "@/store/sandbox";
+import { MessageSquare, Pin, ChevronDown, Loader2, Box, Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 function formatDate(timestamp: number) {
@@ -29,10 +32,17 @@ const LOAD_MORE_COUNT = 20;
 export function HeaderChatsDropdown() {
   const navigate = useNavigate();
   const scrollRef = useRef<HTMLDivElement>(null);
+  const { createChat, isCreating } = useChats();
+  const selectedSandboxId = useAtomValue(selectedSandboxIdAtom);
 
   // Same queries as /chats page — React Query dedupes
   const pinnedChatsQuery = useChatsList({ isPinned: true });
   const unpinnedChatsQuery = useChatsList({ isPinned: false });
+
+  const handleNewChat = useCallback(async () => {
+    const chatId = await createChat({ data: { title: "New Chat", sandboxId: selectedSandboxId ?? undefined } });
+    navigate({ to: "/chats/$chatId", params: { chatId } });
+  }, [createChat, navigate, selectedSandboxId]);
 
   const pinned = pinnedChatsQuery.results;
   const unpinned = unpinnedChatsQuery.results;
@@ -97,6 +107,18 @@ export function HeaderChatsDropdown() {
         <ChevronDown className="size-4 shrink-0 text-muted-foreground" />
       </DropdownMenuTrigger>
       <DropdownMenuContent align="center" className="w-72 p-0" sideOffset={8}>
+        <div className="border-b border-border p-2 shrink-0">
+          <Button
+            variant="outline"
+            size="sm"
+            className="w-full justify-start gap-2"
+            onClick={handleNewChat}
+            disabled={isCreating}
+          >
+            <Plus className="size-4" />
+            New Chat
+          </Button>
+        </div>
         <div
           ref={scrollRef}
           onScroll={handleScroll}
@@ -121,11 +143,11 @@ export function HeaderChatsDropdown() {
                   <div className="px-2 py-1">
                     <CollapsibleTrigger
                       className={cn(
-                        "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs font-medium text-muted-foreground",
-                        "hover:bg-muted/50 transition-colors [&[data-state=open]>svg]:rotate-0"
+                        "group/trigger flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs font-medium text-muted-foreground",
+                        "hover:bg-muted/50 transition-colors"
                       )}
                     >
-                      <ChevronDown className="size-4 shrink-0 -rotate-90 transition-transform" />
+                      <ChevronDown className="size-4 shrink-0 -rotate-90 transition-transform duration-200 ease-out group-data-[panel-open]/trigger:rotate-0" />
                       Pinned
                     </CollapsibleTrigger>
                     <CollapsibleContent>
