@@ -21,16 +21,22 @@ export function processMessagesForAgent(
   let lastUserFilePartUrls: FilePartUrl[] = [];
 
   for (const msg of messages) {
-    const filteredParts = msg.parts.filter((part) => {
+    const mappedParts: UIMessage["parts"] = [];
+    for (const part of msg.parts) {
       if (isFileUIPart(part)) {
-        if (!isMimeTypeSupported(part.mediaType, inputModalities)) return false;
+        if (!isMimeTypeSupported(part.mediaType, inputModalities)) {
+          const filename = sanitizeFilename(part.filename ?? "file");
+          const path = `/home/daytona/uploads/${filename}`;
+          mappedParts.push({ type: "text", text: `[File uploaded to sandbox: ${path}]` });
+          continue;
+        }
       }
       const toolName = "type" in part ? getToolNameFromPartType(part.type as string) : null;
-      if (toolName != null && toolName.includes("sub-")) return false;
-      return true;
-    });
+      if (toolName != null && toolName.includes("sub-")) continue;
+      mappedParts.push(part);
+    }
 
-    const sanitized = { ...msg, parts: filteredParts };
+    const sanitized = { ...msg, parts: mappedParts };
     result.push(sanitized);
 
     if (msg.role === "user") {

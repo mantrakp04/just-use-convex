@@ -142,7 +142,8 @@ export function useChatSandbox(chatId: Id<"chats">, agent: AgentCaller | null) {
     try {
       const result = await agent.call("downloadFile", [{ path }]) as { base64: string };
       triggerDownload(atob(result.base64), name);
-    } catch {
+    } catch (error) {
+      console.error("Failed to download file", error);
       toast.error("Failed to download file");
     }
   }, [agent]);

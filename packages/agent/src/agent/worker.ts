@@ -58,13 +58,13 @@ import {
   createSandboxPtyFunctions,
 } from "../tools/sandbox";
 import { Daytona, type Sandbox } from "@daytonaio/sdk";
+import { ensureSandboxStarted } from "../tools/utils/sandbox";
 
 type CallableFunctionInstance = object;
 type CallableServiceMethodsMap = Record<string, (...args: unknown[]) => unknown>;
 type CallableServiceMethod = keyof CallableServiceMethodsMap;
 
 export class AgentWorker extends AIChatAgent<typeof worker.Env, AgentArgs> {
-  private static readonly SANDBOX_INACTIVITY_TIMEOUT_MINUTES = 2;
   private convexAdapter: ConvexAdapter | null = null;
   private planAgent: PlanAgent | null = null;
   private backgroundTaskStore = new BackgroundTaskStore(this.ctx.waitUntil.bind(this.ctx));
@@ -113,10 +113,7 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, AgentArgs> {
     });
     if (!this.sandbox && this.chatDoc?.sandboxId) {
       this.sandbox = await this.daytona.get(this.chatDoc?.sandboxId);
-      await this.sandbox.setAutostopInterval(
-        AgentWorker.SANDBOX_INACTIVITY_TIMEOUT_MINUTES
-      );
-      await this.sandbox.start();
+      await ensureSandboxStarted(this.sandbox);
     }
 
     this.callableFunctions = [
@@ -269,7 +266,7 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, AgentArgs> {
     if (!sandbox || filePartUrls.length === 0) return null;
 
     try {
-      const uploadsDir = "/home/daytona/volume/uploads";
+      const uploadsDir = "/home/daytona/uploads";
       const mkdirResult = await sandbox.process.executeCommand(`mkdir -p ${uploadsDir}`);
       if (mkdirResult.exitCode !== 0) {
         console.warn("Could not create uploads dir:", mkdirResult.result);
@@ -425,7 +422,7 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, AgentArgs> {
       }
 
       if (this.sandbox) {
-        await this.sandbox.waitUntilStarted()
+        await ensureSandboxStarted(this.sandbox, false);
       }
 
       const updateFn = this.convexAdapter.getTokenType() === "ext"
