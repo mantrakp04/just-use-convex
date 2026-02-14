@@ -60,6 +60,7 @@ type CallableServiceMethodsMap = Record<string, (...args: unknown[]) => unknown>
 type CallableServiceMethod = keyof CallableServiceMethodsMap;
 
 export class AgentWorker extends AIChatAgent<typeof worker.Env, AgentArgs> {
+  private static readonly SANDBOX_INACTIVITY_TIMEOUT_MINUTES = 2;
   private convexAdapter: ConvexAdapter | null = null;
   private planAgent: PlanAgent | null = null;
   private backgroundTaskStore = new BackgroundTaskStore(this.ctx.waitUntil.bind(this.ctx));
@@ -112,6 +113,9 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, AgentArgs> {
     }
     if (!this.sandbox && this.chatDoc?.sandboxId) {
       this.sandbox = await this.daytona.get(this.chatDoc?.sandboxId);
+      await this.sandbox.setAutostopInterval(
+        AgentWorker.SANDBOX_INACTIVITY_TIMEOUT_MINUTES
+      );
       await this.sandbox.start();
     }
 

@@ -1,8 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useMutation } from "@tanstack/react-query";
 import { api } from "@just-use-convex/backend/convex/_generated/api";
 import type { Id } from "@just-use-convex/backend/convex/_generated/dataModel";
-import type { FunctionReturnType } from "convex/server";
 import { useAction } from "convex/react";
 import { toast } from "sonner";
 import type { Terminal as XtermTerminal } from "xterm";
@@ -14,124 +12,105 @@ import type {
   TerminalSession,
 } from "@just-use-convex/agent/src/tools/sandbox/types";
 
-type ChatSshSession = FunctionReturnType<typeof api.sandboxes.nodeFunctions.createChatSshAccess>;
-type XtermTerminalInputData = Extract<Parameters<Parameters<XtermTerminal["onData"]>[0]>[0], string>;
-
 export type { ExplorerEntry, ExplorerState, TerminalSession };
 
 const TERMINAL_BACKGROUND = "#0b0f19";
 
-export function useChatSandbox(
-  chatId: Id<"chats">,
-  agent: {
-    call: (
-      method: string,
-      args?: unknown[],
-      options?: {
-        onChunk?: (chunk: unknown) => void;
-        onDone?: (finalChunk: unknown) => void;
-        onError?: (error: string) => void;
-      }
-    ) => Promise<unknown>;
-  } | null
-) {
+type AgentCaller = {
+  call: (
+    method: string,
+    args?: unknown[],
+    options?: {
+      onChunk?: (chunk: unknown) => void;
+      onDone?: (finalChunk: unknown) => void;
+      onError?: (error: string) => void;
+    }
+  ) => Promise<unknown>;
+};
+
+type TerminalWriteState = {
+  inputBuffer: string;
+  optimisticBuffer: string;
+  inFlight: boolean;
+  errored: boolean;
+};
+
+export function useChatSandbox(chatId: Id<"chats">, agent: AgentCaller | null) {
   const createChatSshAccess = useAction(api.sandboxes.nodeFunctions.createChatSshAccess);
   const createChatPreviewAccess = useAction(api.sandboxes.nodeFunctions.createChatPreviewAccess);
+
   const [isOpen, setIsOpen] = useState(false);
-  const [sshSession, setSshSession] = useState<ChatSshSession | null>(null);
+  const [sshSession, setSshSession] = useState<Awaited<ReturnType<typeof createChatSshAccess>> | null>(null);
+  const [sshPending, setSshPending] = useState(false);
   const [explorer, setExplorer] = useState<ExplorerState | null>(null);
-  const [previewPort, setPreviewPort] = useState<number | undefined>(undefined);
-  const [previewUrl, setPreviewUrl] = useState<string | undefined>(undefined);
+  const [preview, setPreview] = useState<{ port?: number; url?: string }>({});
+  const [previewPending, setPreviewPending] = useState(false);
+  const [terminalSessions, setTerminalSessions] = useState<TerminalSession[]>([]);
+  const [activeTerminalId, setActiveTerminalId] = useState<string | null>(null);
   const [terminalReloadKey, setTerminalReloadKey] = useState(0);
+
   const terminalContainerRef = useRef<HTMLDivElement | null>(null);
   const terminalRef = useRef<XtermTerminal | null>(null);
   const terminalIdRef = useRef<string | null>(null);
-  const terminalInputBufferRef = useRef<XtermTerminalInputData>("");
-  const terminalOptimisticInputBufferRef = useRef<XtermTerminalInputData>("");
-  const terminalWriteInFlightRef = useRef(false);
-  const terminalWriteErroredRef = useRef(false);
-  const [terminalSessions, setTerminalSessions] = useState<TerminalSession[]>([]);
-  const [activeTerminalId, setActiveTerminalId] = useState<string | null>(null);
-
-  const createSshMutation = useMutation({
-    mutationFn: async ({
-      chatId,
-      expiresInMinutes,
-    }: {
-      chatId: Id<"chats">;
-      expiresInMinutes?: number;
-    }) => {
-      return await createChatSshAccess({
-        chatId,
-        expiresInMinutes,
-      });
-    },
-    onSuccess: (nextSession) => {
-      setSshSession(nextSession);
-    },
-    onError: (error) => {
-      toast.error(error instanceof Error ? error.message : "Failed to create SSH access");
-    },
+  const writeState = useRef<TerminalWriteState>({
+    inputBuffer: "",
+    optimisticBuffer: "",
+    inFlight: false,
+    errored: false,
   });
 
-  const createPreviewMutation = useMutation({
-    mutationFn: async ({
-      chatId,
-      previewPort,
-    }: {
-      chatId: Id<"chats">;
-      previewPort: number;
-    }) => {
-      return await createChatPreviewAccess({
-        chatId,
-        previewPort,
-      });
-    },
-    onSuccess: (nextPreview) => {
-      setPreviewUrl(nextPreview.preview.url);
-    },
-    onError: (error) => {
-      toast.error(error instanceof Error ? error.message : "Failed to create preview access");
-    },
-  });
+  // Reset all state when chat changes
+  useEffect(() => {
+    setIsOpen(false);
+    setSshSession(null);
+    setExplorer(null);
+    setPreview({});
+    setTerminalSessions([]);
+    setActiveTerminalId(null);
+    setTerminalReloadKey(0);
+  }, [chatId]);
 
   const createSshAccess = useCallback(
     async (expiresInMinutes?: number) => {
-      return await createSshMutation.mutateAsync({
-        chatId,
-        expiresInMinutes,
-      });
+      setSshPending(true);
+      try {
+        const session = await createChatSshAccess({ chatId, expiresInMinutes });
+        setSshSession(session);
+        return session;
+      } catch (e) {
+        toast.error(e instanceof Error ? e.message : "Failed to create SSH access");
+        return null;
+      } finally {
+        setSshPending(false);
+      }
     },
-    [chatId, createSshMutation]
+    [chatId, createChatSshAccess]
   );
 
   const createPreviewAccess = useCallback(async () => {
-    if (previewPort === undefined) {
+    if (preview.port === undefined) return null;
+    setPreviewPending(true);
+    try {
+      const result = await createChatPreviewAccess({ chatId, previewPort: preview.port });
+      setPreview((prev) => ({ ...prev, url: result.preview.url }));
+      return result;
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Failed to create preview access");
       return null;
+    } finally {
+      setPreviewPending(false);
     }
-
-    const preview = await createPreviewMutation.mutateAsync({
-      chatId,
-      previewPort,
-    });
-    return preview;
-  }, [chatId, createPreviewMutation, previewPort]);
+  }, [chatId, createChatPreviewAccess, preview.port]);
 
   const openInEditor = useCallback(
     async (editor: "vscode" | "cursor") => {
       const isExpired = sshSession ? Date.now() >= new Date(sshSession.expiresAt).getTime() : false;
       const session = !sshSession || isExpired ? await createSshAccess() : sshSession;
-      if (!session?.token) {
-        return;
-      }
+      if (!session?.token) return;
 
       const host = session.sshCommand ? parseSshHost(session.sshCommand) : "ssh.app.daytona.io";
       const scheme = editor === "vscode" ? "vscode" : "cursor";
-      const uri = `${scheme}://vscode-remote/ssh-remote+${session.token}@${host}/home/daytona/workspace`;
-
-      if (typeof window !== "undefined") {
-        window.open(uri, "_blank");
-      }
+      window.open(`${scheme}://vscode-remote/ssh-remote+${session.token}@${host}/home/daytona/workspace`, "_blank");
     },
     [createSshAccess, sshSession]
   );
@@ -153,26 +132,15 @@ export function useChatSandbox(
         })),
       });
     } catch {
-      // ignore - sandbox may not be ready yet
+      // sandbox may not be ready yet
     }
   }, [agent, explorer?.path]);
-
-  const navigateExplorer = useCallback(async (path: string) => {
-    await refreshExplorer(path);
-  }, [refreshExplorer]);
 
   const downloadFile = useCallback(async (path: string, name: string) => {
     if (!agent) return;
     try {
-      const result = await agent.call("downloadFile", [{ path }]) as { base64: string; name: string };
-      const bytes = Uint8Array.from(atob(result.base64), (c) => c.charCodeAt(0));
-      const blob = new Blob([bytes]);
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = name;
-      a.click();
-      URL.revokeObjectURL(url);
+      const result = await agent.call("downloadFile", [{ path }]) as { base64: string };
+      triggerDownload(atob(result.base64), name);
     } catch {
       toast.error("Failed to download file");
     }
@@ -181,15 +149,8 @@ export function useChatSandbox(
   const downloadFolder = useCallback(async (path: string, name: string) => {
     if (!agent) return;
     try {
-      const result = await agent.call("downloadFolder", [{ path }]) as { base64: string; name: string };
-      const bytes = Uint8Array.from(atob(result.base64), (c) => c.charCodeAt(0));
-      const blob = new Blob([bytes], { type: "application/gzip" });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `${name}.tar.gz`;
-      a.click();
-      URL.revokeObjectURL(url);
+      const result = await agent.call("downloadFolder", [{ path }]) as { base64: string };
+      triggerDownload(atob(result.base64), `${name}.tar.gz`, "application/gzip");
     } catch {
       toast.error("Failed to download folder");
     }
@@ -199,117 +160,78 @@ export function useChatSandbox(
     if (!agent) return;
     try {
       await agent.call("deleteEntry", [{ path }]);
-      if (explorer) {
-        await refreshExplorer(explorer.path);
-      }
+      if (explorer) await refreshExplorer(explorer.path);
       toast.success("Deleted successfully");
     } catch {
       toast.error("Failed to delete");
     }
   }, [agent, explorer, refreshExplorer]);
 
-  const reconnectSsh = useCallback(async () => {
-    await createSshAccess();
-  }, [createSshAccess]);
-
-  const reconnectTerminal = useCallback(() => {
-    setTerminalReloadKey((value) => value + 1);
-  }, []);
-
-  const switchTerminalSession = useCallback((terminalId: string) => {
-    setActiveTerminalId(terminalId);
-    setTerminalReloadKey((value) => value + 1);
-  }, []);
-
-  const createTerminalSession = useCallback(() => {
-    const nextTerminalId = createTerminalSessionId();
-    setActiveTerminalId(nextTerminalId);
-    setTerminalReloadKey((value) => value + 1);
-  }, []);
-
   const refreshTerminalSessions = useCallback(async () => {
-    if (!agent) {
-      return;
-    }
+    if (!agent) return;
     try {
       const result = await agent.call("listPtyTerminalSessions") as { sessions?: TerminalSession[] };
-      const sessions = result.sessions ?? [];
-      setTerminalSessions(sessions);
+      setTerminalSessions(result.sessions ?? []);
     } catch {
-      // ignore - sandbox may not be ready yet
+      // sandbox may not be ready yet
     }
   }, [agent]);
 
-  const closeTerminalSession = useCallback(
-    async (terminalId: string) => {
-      if (!agent) {
-        return;
+  const closeTerminalSession = useCallback(async (terminalId: string) => {
+    if (!agent) return;
+    try {
+      await agent.call("closePtyTerminal", [{ terminalId }]);
+      const result = await agent.call("listPtyTerminalSessions") as { sessions?: TerminalSession[] };
+      const sessions = result.sessions ?? [];
+      setTerminalSessions(sessions);
+
+      if (activeTerminalId === terminalId) {
+        setActiveTerminalId(sessions[0]?.id ?? crypto.randomUUID());
+        setTerminalReloadKey((k) => k + 1);
       }
-      try {
-        await agent.call("closePtyTerminal", [{ terminalId }]);
-        const result = await agent.call("listPtyTerminalSessions") as { sessions?: TerminalSession[] };
-        const sessions = result.sessions ?? [];
-        setTerminalSessions(sessions);
-
-        if (activeTerminalId !== terminalId) {
-          return;
-        }
-
-        const nextTerminalId = sessions[0]?.id ?? createTerminalSessionId();
-        setActiveTerminalId(nextTerminalId);
-        setTerminalReloadKey((value) => value + 1);
-      } catch {
-        toast.error("Failed to close terminal session");
-      }
-    },
-    [agent, activeTerminalId]
-  );
-  
-  const focusTerminal = useCallback(() => {
-    terminalRef.current?.focus();
-  }, []);
-
-  const open = useCallback(async () => {
-    setIsOpen(true);
-  }, []);
-
-  const close = useCallback(() => {
-    setIsOpen(false);
-  }, []);
-
-  const toggle = useCallback(async () => {
-    if (isOpen) {
-      close();
-      return;
+    } catch {
+      toast.error("Failed to close terminal session");
     }
+  }, [agent, activeTerminalId]);
 
-    await open();
-  }, [close, isOpen, open]);
+  const toggle = useCallback(() => setIsOpen((v) => !v), []);
 
+  // Auto-create terminal session ID when opening
   useEffect(() => {
     if (isOpen && !activeTerminalId) {
-      setActiveTerminalId(createTerminalSessionId());
+      setActiveTerminalId(crypto.randomUUID());
     }
   }, [isOpen, activeTerminalId]);
 
+  // Auto-refresh explorer on open
   useEffect(() => {
-    if (!agent || !terminalContainerRef.current || !activeTerminalId) {
-      return;
+    if (isOpen && agent && !explorer) {
+      void refreshExplorer();
     }
+  }, [isOpen, agent, explorer, refreshExplorer]);
 
-    let isCancelled = false;
+  // Auto-refresh terminal sessions on open
+  useEffect(() => {
+    if (isOpen && agent) {
+      void refreshTerminalSessions();
+    }
+  }, [isOpen, agent, refreshTerminalSessions, terminalReloadKey]);
+
+  // Terminal setup effect
+  useEffect(() => {
+    if (!agent || !terminalContainerRef.current || !activeTerminalId) return;
+
+    let cancelled = false;
     let writeTimer: ReturnType<typeof setInterval> | null = null;
     let resizeObserver: ResizeObserver | null = null;
-    let terminalDispose: (() => void) | null = null;
+    let dispose: (() => void) | null = null;
 
-    const setupTerminal = async () => {
+    const setup = async () => {
       const [{ Terminal }, { FitAddon }] = await Promise.all([
         import("xterm"),
         import("@xterm/addon-fit"),
       ]);
-      if (isCancelled || !terminalContainerRef.current) {
-        return;
-      }
+      if (cancelled || !terminalContainerRef.current) return;
 
       const term = new Terminal({
         cursorBlink: true,
@@ -317,11 +239,7 @@ export function useChatSandbox(
         scrollback: 20000,
         fontSize: 12,
         fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
-        theme: {
-          background: TERMINAL_BACKGROUND,
-          foreground: "#e5e7eb",
-          cursor: "#f9fafb",
-        },
+        theme: { background: TERMINAL_BACKGROUND, foreground: "#e5e7eb", cursor: "#f9fafb" },
       });
       const fitAddon = new FitAddon();
       term.loadAddon(fitAddon);
@@ -329,6 +247,7 @@ export function useChatSandbox(
       fitAddon.fit();
       term.focus();
       term.writeln("Connecting to sandbox shell through agent proxy...");
+
       term.attachCustomKeyEventHandler((event) => {
         if (event.type !== "keydown") return true;
         if (event.key === "Tab") {
@@ -343,119 +262,80 @@ export function useChatSandbox(
         }
         if ((event.ctrlKey || event.metaKey) && event.key === "c" && term.hasSelection()) {
           event.preventDefault();
-          const sel = term.getSelection();
-          void navigator.clipboard.writeText(sel).catch(() => undefined);
+          void navigator.clipboard.writeText(term.getSelection()).catch(() => undefined);
           return false;
         }
         return true;
       });
+
       terminalRef.current = term;
-
-      terminalDispose = () => {
-        term.dispose();
-      };
-
       terminalIdRef.current = activeTerminalId;
+      dispose = () => term.dispose();
 
       const openResult = await agent
-        .call("openPtyTerminal", [{
-          terminalId: activeTerminalId,
-          cols: term.cols,
-          rows: term.rows,
-        }])
+        .call("openPtyTerminal", [{ terminalId: activeTerminalId, cols: term.cols, rows: term.rows }])
         .catch(() => null);
 
-      if (!openResult || isCancelled || !terminalContainerRef.current) {
-        if (openResult === null && !isCancelled) {
-          term.writeln("\r\nFailed to open PTY terminal session.");
-        }
-        if (isCancelled && activeTerminalId) {
+      if (!openResult || cancelled || !terminalContainerRef.current) {
+        if (openResult === null && !cancelled) term.writeln("\r\nFailed to open PTY terminal session.");
+        if (cancelled && activeTerminalId) {
           void agent.call("closePtyTerminal", [{ terminalId: activeTerminalId }]).catch(() => undefined);
         }
         return;
       }
 
-      void agent.call(
-        "streamPtyTerminal",
-        [{ terminalId: activeTerminalId }],
-        {
-          onChunk: (chunk) => {
-            if (isCancelled) {
-              return;
-            }
-            if (typeof chunk === "string") {
-              const chunkToWrite = consumeOptimisticPtyEcho(chunk, terminalOptimisticInputBufferRef);
-              if (chunkToWrite) {
-                term.write(chunkToWrite);
-              }
-            }
-          },
-          onDone: (finalChunk) => {
-            if (isCancelled) {
-              return;
-            }
-            const finalResult = finalChunk as {
-              closed?: boolean;
-              closeReason?: string | null;
-            };
-            if (finalResult?.closed) {
-              const reason = finalResult.closeReason ? `: ${finalResult.closeReason}` : "";
-              term.writeln(`\r\n[session closed${reason}]`);
-            }
-            void refreshTerminalSessions();
-          },
-          onError: () => {
-            if (!isCancelled) {
-              term.writeln("\r\n[terminal stream error]");
-            }
-          },
+      void agent.call("streamPtyTerminal", [{ terminalId: activeTerminalId }], {
+        onChunk: (chunk) => {
+          if (cancelled || typeof chunk !== "string") return;
+          const toWrite = consumeOptimisticEcho(chunk, writeState);
+          if (toWrite) term.write(toWrite);
         },
-      ).catch(() => {
-        if (!isCancelled) {
-          term.writeln("\r\n[terminal stream error]");
-        }
+        onDone: (finalChunk) => {
+          if (cancelled) return;
+          const result = finalChunk as { closed?: boolean; closeReason?: string | null };
+          if (result?.closed) {
+            term.writeln(`\r\n[session closed${result.closeReason ? `: ${result.closeReason}` : ""}]`);
+          }
+          void refreshTerminalSessions();
+        },
+        onError: () => {
+          if (!cancelled) term.writeln("\r\n[terminal stream error]");
+        },
+      }).catch(() => {
+        if (!cancelled) term.writeln("\r\n[terminal stream error]");
       });
 
-      terminalInputBufferRef.current = "";
-      terminalOptimisticInputBufferRef.current = "";
-      terminalWriteInFlightRef.current = false;
-      terminalWriteErroredRef.current = false;
+      writeState.current = { inputBuffer: "", optimisticBuffer: "", inFlight: false, errored: false };
       void refreshTerminalSessions();
 
-      term.onData((data: XtermTerminalInputData) => {
-        terminalInputBufferRef.current += data;
+      term.onData((data: string) => {
+        writeState.current.inputBuffer += data;
       });
 
       writeTimer = setInterval(() => {
-        const pendingInput = terminalInputBufferRef.current;
-        if (!pendingInput || !terminalIdRef.current || terminalWriteInFlightRef.current) {
-          return;
-        }
-        terminalWriteInFlightRef.current = true;
-        terminalInputBufferRef.current = "";
-        terminalOptimisticInputBufferRef.current += pendingInput;
-        // Don't term.write(pendingInput) - xterm already displays via default key handling
-        void agent.call("writePtyTerminal", [{
-          terminalId: terminalIdRef.current,
-          data: pendingInput,
-        }]).then(() => {
-          terminalWriteErroredRef.current = false;
-        }).catch(() => {
-          if (!terminalWriteErroredRef.current) {
-            term.writeln("\r\n[input unavailable]");
-            terminalWriteErroredRef.current = true;
-          }
-          terminalInputBufferRef.current = pendingInput + terminalInputBufferRef.current;
-        }).finally(() => {
-          terminalWriteInFlightRef.current = false;
-        });
+        const ws = writeState.current;
+        if (!ws.inputBuffer || !terminalIdRef.current || ws.inFlight) return;
+
+        const pending = ws.inputBuffer;
+        ws.inFlight = true;
+        ws.inputBuffer = "";
+        ws.optimisticBuffer += pending;
+
+        void agent.call("writePtyTerminal", [{ terminalId: terminalIdRef.current, data: pending }])
+          .then(() => { ws.errored = false; })
+          .catch(() => {
+            if (!ws.errored) {
+              term.writeln("\r\n[input unavailable]");
+              ws.errored = true;
+            }
+            ws.inputBuffer = pending + ws.inputBuffer;
+          })
+          .finally(() => { ws.inFlight = false; });
       }, 25);
 
       resizeObserver = new ResizeObserver(() => {
         fitAddon.fit();
-        if (!terminalIdRef.current) {
-          return;
-        }
+        if (!terminalIdRef.current) return;
         void agent.call("resizePtyTerminal", [{
           terminalId: terminalIdRef.current,
           cols: term.cols,
@@ -463,160 +343,110 @@ export function useChatSandbox(
         } satisfies PtyResizeInput]).catch(() => undefined);
       });
       resizeObserver.observe(terminalContainerRef.current);
-
-
     };
 
-    void setupTerminal().catch(() => {
-      toast.error("Failed to initialize terminal");
-    });
+    void setup().catch(() => toast.error("Failed to initialize terminal"));
 
     return () => {
-      isCancelled = true;
-      if (writeTimer) {
-        clearInterval(writeTimer);
-      }
+      cancelled = true;
+      if (writeTimer) clearInterval(writeTimer);
       resizeObserver?.disconnect();
-
       terminalIdRef.current = null;
-      terminalInputBufferRef.current = "";
-      terminalOptimisticInputBufferRef.current = "";
-      terminalWriteInFlightRef.current = false;
-      terminalWriteErroredRef.current = false;
-
+      writeState.current = { inputBuffer: "", optimisticBuffer: "", inFlight: false, errored: false };
       terminalRef.current = null;
-      terminalDispose?.();
+      dispose?.();
     };
   }, [agent, terminalReloadKey, isOpen, activeTerminalId, refreshTerminalSessions]);
 
-  useEffect(() => {
-    if (isOpen && agent && !explorer) {
-      void refreshExplorer();
-    }
-  }, [isOpen, agent, explorer, refreshExplorer]);
-
-  useEffect(() => {
-    if (!isOpen || !agent) {
-      return;
-    }
-    void refreshTerminalSessions();
-  }, [isOpen, agent, refreshTerminalSessions, terminalReloadKey]);
-
-  useEffect(() => {
-    setIsOpen(false);
-    setSshSession(null);
-    setExplorer(null);
-    setPreviewPort(undefined);
-    setPreviewUrl(undefined);
-    setTerminalReloadKey(0);
-    setTerminalSessions([]);
-    setActiveTerminalId(null);
-  }, [chatId]);
-
   return {
     isOpen,
-    open,
-    close,
+    open: useCallback(() => setIsOpen(true), []),
+    close: useCallback(() => setIsOpen(false), []),
     toggle,
     sshSession,
     explorer,
     refreshExplorer,
-    navigateExplorer,
+    navigateExplorer: refreshExplorer,
     downloadFile,
     downloadFolder,
     deleteEntry,
-    previewPort,
-    previewUrl,
-    setPreviewPort,
+    previewPort: preview.port,
+    previewUrl: preview.url,
+    setPreviewPort: useCallback((port: number | undefined) => setPreview((p) => ({ ...p, port })), []),
     createPreviewAccess,
     openInEditor,
-    reconnectSsh,
-    reconnectTerminal,
-    switchTerminalSession,
-    createTerminalSession,
+    reconnectSsh: createSshAccess,
+    reconnectTerminal: useCallback(() => setTerminalReloadKey((k) => k + 1), []),
+    switchTerminalSession: useCallback((id: string) => {
+      setActiveTerminalId(id);
+      setTerminalReloadKey((k) => k + 1);
+    }, []),
+    createTerminalSession: useCallback(() => {
+      setActiveTerminalId(crypto.randomUUID());
+      setTerminalReloadKey((k) => k + 1);
+    }, []),
     closeTerminalSession,
     refreshTerminalSessions,
     terminalSessions,
     activeTerminalId,
-    focusTerminal,
+    focusTerminal: useCallback(() => terminalRef.current?.focus(), []),
     terminalContainerRef,
     terminalBackground: TERMINAL_BACKGROUND,
-    isConnectingSsh: createSshMutation.isPending,
-    isConnectingPreview: createPreviewMutation.isPending,
+    isConnectingSsh: sshPending,
+    isConnectingPreview: previewPending,
   };
 }
 
-export type ChatSshSessionState = ReturnType<typeof useChatSandbox>["sshSession"];
-export type ChatExplorerState = ReturnType<typeof useChatSandbox>["explorer"];
-export type ChatTerminalSessionsState = ReturnType<typeof useChatSandbox>["terminalSessions"];
+export type ChatSandboxReturn = ReturnType<typeof useChatSandbox>;
 
-function createTerminalSessionId() {
-  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
-    return crypto.randomUUID();
-  }
-  return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
-}
+// --- Helpers ---
 
-function consumeOptimisticPtyEcho(
-  chunk: string,
-  terminalOptimisticInputBufferRef: { current: XtermTerminalInputData },
-) {
-  let pendingOptimisticInput = terminalOptimisticInputBufferRef.current;
-  if (!pendingOptimisticInput) {
-    return chunk;
-  }
-
-  let cursor = 0;
-
-  while (cursor < chunk.length && pendingOptimisticInput.length > 0) {
-    const char = chunk[cursor];
-    if (char === "\r" || char === "\n") {
-      cursor += 1;
-      continue;
-    }
-
-    const ansiLength = getAnsiEscapeSequenceLength(chunk, cursor);
-    if (ansiLength > 0) {
-      cursor += ansiLength;
-      continue;
-    }
-
-    if (chunk[cursor] === pendingOptimisticInput[0]) {
-      cursor += 1;
-      pendingOptimisticInput = pendingOptimisticInput.slice(1);
-      continue;
-    }
-
-    terminalOptimisticInputBufferRef.current = pendingOptimisticInput;
-    return chunk.slice(cursor);
-  }
-
-  if (pendingOptimisticInput.length === 0) {
-    terminalOptimisticInputBufferRef.current = "";
-    return chunk.slice(cursor);
-  }
-
-  terminalOptimisticInputBufferRef.current = pendingOptimisticInput;
-  return "";
+function triggerDownload(decoded: string, filename: string, mime?: string) {
+  const bytes = Uint8Array.from(decoded, (c) => c.charCodeAt(0));
+  const blob = new Blob([bytes], mime ? { type: mime } : undefined);
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
 }
 
 function parseSshHost(sshCommand: string): string {
-  const m = sshCommand.match(/@([^\s]+)/);
-  return m?.[1] ?? "ssh.app.daytona.io";
+  return sshCommand.match(/@([^\s]+)/)?.[1] ?? "ssh.app.daytona.io";
 }
 
-function getAnsiEscapeSequenceLength(chunk: string, start: number) {
-  if (chunk[start] !== "\u001b") {
-    return 0;
-  }
-  if (chunk[start + 1] !== "[") {
-    return 0;
-  }
-  for (let index = start + 2; index < chunk.length; index += 1) {
-    const code = chunk.charCodeAt(index);
-    if (code >= 64 && code <= 126) {
-      return index - start + 1;
+function consumeOptimisticEcho(chunk: string, ws: { current: TerminalWriteState }) {
+  let pending = ws.current.optimisticBuffer;
+  if (!pending) return chunk;
+
+  let cursor = 0;
+  while (cursor < chunk.length && pending.length > 0) {
+    const char = chunk[cursor];
+    if (char === "\r" || char === "\n") { cursor++; continue; }
+
+    // Skip ANSI escape sequences
+    if (char === "\u001b" && chunk[cursor + 1] === "[") {
+      let i = cursor + 2;
+      while (i < chunk.length) {
+        const code = chunk.charCodeAt(i);
+        if (code >= 64 && code <= 126) { cursor = i + 1; break; }
+        i++;
+      }
+      if (i >= chunk.length) break;
+      continue;
     }
+
+    if (chunk[cursor] === pending[0]) {
+      cursor++;
+      pending = pending.slice(1);
+      continue;
+    }
+
+    ws.current.optimisticBuffer = pending;
+    return chunk.slice(cursor);
   }
-  return 0;
+
+  ws.current.optimisticBuffer = pending;
+  return pending.length === 0 ? chunk.slice(cursor) : "";
 }

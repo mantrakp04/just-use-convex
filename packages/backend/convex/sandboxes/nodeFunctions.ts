@@ -12,6 +12,7 @@ import { Daytona, DaytonaNotFoundError, Sandbox } from "@daytonaio/sdk";
 const SANDBOX_VOLUME_MOUNT_PATH = "/home/daytona";
 const SANDBOX_SNAPSHOT = "daytona-medium";
 const MAX_VOLUME_READY_RETRIES = 10;
+const SANDBOX_INACTIVITY_TIMEOUT_MINUTES = 2;
 
 const daytonaClient = new Daytona({
   apiKey: env.DAYTONA_API_KEY,
@@ -160,19 +161,23 @@ async function ensureSandboxStarted(
 
   const state = sandbox.state;
   if (state === "started") {
+    await sandbox.setAutostopInterval(SANDBOX_INACTIVITY_TIMEOUT_MINUTES);
     return;
   }
   if (state === "starting") {
+    await sandbox.setAutostopInterval(SANDBOX_INACTIVITY_TIMEOUT_MINUTES);
     await sandbox.waitUntilStarted(startTimeoutSeconds);
     return;
   }
   if (state === "stopping" || state === "creating" || state === "restoring") {
     await sleep(3000);
     await sandbox.refreshData();
+    await sandbox.setAutostopInterval(SANDBOX_INACTIVITY_TIMEOUT_MINUTES);
     return ensureSandboxStarted(sandbox, options);
   }
   if (state === "error" || state === "build_failed") {
     if (sandbox.recoverable) {
+      await sandbox.setAutostopInterval(SANDBOX_INACTIVITY_TIMEOUT_MINUTES);
       await sandbox.recover(startTimeoutSeconds);
       await sandbox.waitUntilStarted(startTimeoutSeconds);
       return;
@@ -184,6 +189,7 @@ async function ensureSandboxStarted(
   if (state === "destroyed" || state === "destroying" || state === "archived") {
     throw new Error(`Sandbox is ${state} and cannot be started`);
   }
+  await sandbox.setAutostopInterval(SANDBOX_INACTIVITY_TIMEOUT_MINUTES);
   await sandbox.start(startTimeoutSeconds);
   await sandbox.waitUntilStarted(startTimeoutSeconds);
 }
