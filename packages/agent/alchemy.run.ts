@@ -66,6 +66,9 @@ await WranglerJson({
       }
       if (spec.migrations) {
         for (const migration of spec.migrations) {
+          if (migration.new_sqlite_classes?.includes("AgentWorker")) {
+            migration.new_sqlite_classes = migration.new_sqlite_classes.filter((c: string) => c !== "AgentWorker");
+          }
           if (migration.new_classes?.includes("Sandbox")) {
             migration.new_classes = migration.new_classes.filter((c: string) => c !== "Sandbox");
           }
