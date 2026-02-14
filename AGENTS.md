@@ -1,40 +1,59 @@
 # AGENTS.md
 
 ## Project Overview
-AI-powered chat SaaS template — multi-tenant, real-time, with org/team support. Cloudflare Agents for WebSocket chat state, Convex for reactive backend, TanStack Start for SSR.
+AI-powered agentic chat platform — multi-tenant, real-time, with org/team support. Features multi-step planning agents with sub-agents, Daytona sandbox code execution (PTY terminals, file ops), vector search (RAG), and tool approval workflows. Cloudflare Workers + Durable Objects for persistent agent state, Convex for reactive backend, TanStack Start for SSR.
 
 ## Tech Stack
 | Layer | Stack |
 |-------|-------|
 | **Runtime** | Bun |
-| **Frontend** | React 19, TanStack Start/Router/Query, Tailwind v4, shadcn/ui (base-mira), Jotai |
-| **Backend** | Convex, Convex Ents (relationships), Better Auth (org plugin) |
-| **Agent** | Cloudflare Workers, Durable Objects, AI SDK, OpenRouter |
+| **Frontend** | React 19, TanStack Start/Router/Query, Tailwind v4, shadcn/ui (base-mira), Jotai, Motion 12, Xterm, Streamdown, Rive |
+| **Backend** | Convex 1.31, Convex Ents (relationships), Better Auth 1.4 (org plugin), Convex Helpers (triggers, aggregates) |
+| **Agent** | Cloudflare Workers, Alchemy (IaC), Durable Objects (sqlite), VoltAgent Core (planning/sub-agents), OpenRouter, Daytona SDK (sandboxes), Exa (web search), Composio (integrations), Cloudflare Vectorize (RAG) |
 | **Build** | Turborepo, Vite 7 |
 
 ## Monorepo Structure
 ```
-apps/web/              # TanStack Start frontend + Fumadocs
+apps/web/              # TanStack Start frontend (React 19 SSR)
   src/
-    components/        # UI components
-    providers/         # Context providers (agent.tsx)
-    routes/            # File-based routing
-    lib/               # Utilities
+    components/        # UI — chat/, sandboxes/, todos/, dashboard/, auth/, ai-elements/, ui/
+    providers/         # Context providers (agent.tsx — isolated React roots per chat)
+    routes/            # File-based routing — (public)/, (protected)/
+    store/             # Jotai atoms (chatSettings, favoriteModels, dashboard, sandbox)
+    hooks/             # useChats, useSandbox, useAttachments, useOpenrouterModels, usePaginatedQuery
+    lib/               # Utilities, motion presets
 packages/
-  agent/               # Cloudflare Workers agent
+  agent/               # Cloudflare Workers agent (Alchemy-managed)
+    src/
+      agent/           # AgentWorker (AIChatAgent), ConvexAdapter, prompts
+      tools/           # web_search, ask_user, sandbox/ (file ops, PTY terminals, code interpreter)
+    alchemy.run.ts     # Alchemy IaC — DurableObject, Vectorize, secrets
   backend/             # Convex backend
     convex/
-      chats/           # Chat-related functions
-      sandboxes/       # Sandbox management
-  config/              # Shared TS config
-  env/                 # T3 Env type-safe env vars
+      tables/          # Ent definitions (chats, sandboxes, todos, attachments)
+      chats/           # Chat CRUD, search, stats
+      sandboxes/       # Sandbox CRUD, Daytona lifecycle triggers
+      todos/           # Todo CRUD with member assignment
+      lib/             # ConvexAdapter, auth helpers, custom functions (zQuery/zMutation)
+  config/              # Shared tsconfig.base.json
+  env/                 # T3 Env — exports ./web, ./backend, ./agent
 ```
 
 ## Commands
 ```bash
-bun run dev        # Start everything
-bun run build      # Production build
-turbo dev          # Turborepo dev
+bun run dev            # Start everything (Vite + Convex + Alchemy)
+bun run dev:web        # Frontend only
+bun run dev:server     # Convex backend only
+bun run build          # Production build
+bun run check-types    # Turborepo type check (MANDATORY)
+```
+
+### Agent Commands
+```bash
+cd packages/agent
+bunx alchemy dev alchemy.run.ts      # Local dev
+bunx alchemy deploy alchemy.run.ts   # Deploy to Cloudflare
+bunx alchemy destroy alchemy.run.ts  # Tear down infrastructure
 ```
 
 ### Type Checking
@@ -104,11 +123,47 @@ tableName/index.ts     # zQuery/zMutation exports
 tableName/aggregates.ts # Stats/triggers
 ```
 
-- Custom `zQuery`/`zMutation` wrappers inject auth context
-- Use `zInternalMutation` for internal operations
+- Custom `zQuery`/`zMutation` wrappers inject auth context (baseIdentity)
+- `zExternalQuery`/`zExternalMutation` for agent-side external token auth
+- `zInternalMutation` for internal operations
 - Search indexes for paginated queries (chats, sandboxes)
-- Ent relationships (1:many between chats and sandboxes)
+- Ent relationships: chats → sandboxes (many-to-one), todos ↔ members (many-to-many)
+- Sandbox lifecycle triggers: auto-provision Daytona on insert, auto-destroy on delete
 - Each Daytona sandbox gets a dedicated volume mounted at `/home/daytona/volume`
+
+### Tables
+- **chats** — organizationId, memberId, title, isPinned, sandboxId (optional ref to sandbox)
+- **sandboxes** — organizationId, userId, name, description (Daytona-backed)
+- **todos** — organizationId, memberId, title, description, completed, priority, dueDate
+- **attachments** — globalAttachments (org-wide) + orgMemberAttachments (per-member)
+
+### Agent Architecture
+```
+AgentWorker (AIChatAgent / Durable Object)
+  ├── ConvexAdapter — JWT + external token auth, unified Convex HTTP client
+  ├── PlanAgent — multi-step task decomposition with sub-agents
+  │   └── Daytona filesystem sub-agent (list, read, write, edit, glob, grep, exec, stateful Python)
+  ├── Tools
+  │   ├── web_search (Exa neural search)
+  │   ├── ask_user (structured questions with options)
+  │   └── sandbox/ (file ops, PTY terminal sessions, code interpreter)
+  ├── Vectorize — chat message indexing (768 dims, cosine)
+  └── Streaming — text-delta, reasoning-delta, tool-input, tool-result, errors
+```
+
+- Default model: `openai/gpt-5.2-chat` (configurable per chat via OpenRouter)
+- Reasoning effort: low/medium/high
+- Background tasks with configurable timeout (default 1hr)
+- Tool result truncation for large outputs
+
+### Auth Flow
+```
+Client → Better Auth (JWT with org context) → WebSocket → Agent
+Agent → ConvexAdapter (JWT or external token) → Convex
+```
+- Session fields: activeOrganizationId, activeTeamId, organizationRole, memberId
+- Roles: member, admin, owner
+- Permissions: create, read, readAny, update, updateAny, delete, deleteAny
 
 ### Frontend Hooks
 ```typescript
@@ -121,6 +176,13 @@ export function useChats() {
 }
 ```
 
+### Agent Connection Management (providers/agent.tsx)
+- Isolated React root instances per chat (hidden divs)
+- `useSyncExternalStore` for external state subscriptions
+- Get-or-create pattern — maintains connections across route changes
+- Instance data: chat, agent, settings, setSettings
+- Handles SSR/hydration concerns with token passing
+
 ### React Performance (Critical)
 Heavy focus on preventing re-renders during AI streaming:
 - Custom memo comparisons (`areMessageItemPropsEqual`)
@@ -130,16 +192,10 @@ Heavy focus on preventing re-renders during AI streaming:
 - Derive state during render, not in effects
 - Functional setState for stable callbacks
 
-### Agent Connection Management
-- Get-or-create pattern for WebSocket connections
-- Maintain connections in memory across route changes
-- Context-based token management (SSR/hydration concerns)
-- AbortController for streaming cancellation
-
 ### Routing
 File-based TanStack Router:
-- `(public)/` — unauthenticated routes
-- `(protected)/` — wrapped in `<AuthBoundary>`
+- `(public)/` — unauthenticated routes (auth, docs)
+- `(protected)/` — wrapped in `<AuthBoundary>` (chats, settings, dashboard)
 
 ### Path Aliases
 ```
