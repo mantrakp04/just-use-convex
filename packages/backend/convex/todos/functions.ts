@@ -6,7 +6,7 @@ import {
   assertOrganizationAccess,
   assertPermission,
   assertScopedPermission,
-} from "../shared/auth_shared";
+} from "../shared/auth";
 
 async function runTodosQuery(ctx: zQueryCtx, args: z.infer<typeof types.ListArgs>) {
   return ctx.table("todos", 'organizationId', (q) => q

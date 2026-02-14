@@ -6,7 +6,7 @@ import {
   assertOrganizationAccess,
   assertPermission,
   assertScopedPermission,
-} from "../shared/auth_shared";
+} from "../shared/auth";
 
 async function runSandboxesQuery(ctx: zQueryCtx, args: z.infer<typeof types.ListArgs>) {
   return ctx.table("sandboxes", "organizationId_userId", (q) => q

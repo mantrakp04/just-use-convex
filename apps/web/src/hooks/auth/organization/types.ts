@@ -1,5 +1,5 @@
 import { authClient } from "@/lib/auth-client";
-export { ROLE_HIERARCHY, ROLES, type MemberRole } from "@convex/shared/auth_shared";
+export { ROLE_HIERARCHY, ROLES, type MemberRole } from "@convex/shared/auth";
 
 type Session = ReturnType<typeof authClient.useSession>["data"];
 export type User = NonNullable<Session>["user"];
