@@ -41,7 +41,11 @@ import {
   withBackgroundTaskTools,
 } from "../tools/utils/wrapper";
 import { generateTitle } from "./chat-meta";
-import { extractMessageText, filterMessageParts, sanitizeMessagesForAgent } from "./messages";
+import {
+  extractMessageText,
+  type FilePartUrl,
+  processMessagesForAgent,
+} from "./messages";
 import type { AgentArgs } from "./types";
 import {
   buildRetrievalMessage,
@@ -258,6 +262,38 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, AgentArgs> {
     });
   }
 
+  private async downloadFileUrlsInSandbox(
+    filePartUrls: FilePartUrl[]
+  ): Promise<string[] | null> {
+    const sandbox = this.sandbox;
+    if (!sandbox || filePartUrls.length === 0) return null;
+
+    const uploadsDir = "/home/daytona/volume/uploads";
+    const mkdirResult = await sandbox.process.executeCommand(`mkdir -p ${uploadsDir}`);
+    if (mkdirResult.exitCode !== 0) {
+      console.warn("Could not create uploads dir:", mkdirResult.result);
+      return null;
+    }
+
+    const paths: string[] = [];
+    await Promise.all(
+      filePartUrls.map(async ({ url, filename }, i) => {
+        try {
+          const res = await fetch(url);
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          const buf = Buffer.from(await res.arrayBuffer());
+          const safeName = filename.replace(/[/\\]/g, "_");
+          const path = `${uploadsDir}/${i}_${safeName}`;
+          await sandbox.fs.uploadFile(buf, path);
+          paths.push(path);
+        } catch (err) {
+          console.warn("Failed to download file from message:", url, err);
+        }
+      })
+    );
+    return paths;
+  }
+
   private async _registerCallableFunctions() {
     if (this.didRegisterCallableFunctions || !this.callableFunctions.length) {
       return;
@@ -402,22 +438,43 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, AgentArgs> {
         }
       }
 
-      const messagesForAgent = sanitizeMessagesForAgent(
-        filterMessageParts(this.messages, this.state.inputModalities)
-      );
+      const { messages: messagesForAgent, lastUserIdx, lastUserQueryText, lastUserFilePartUrls } =
+        processMessagesForAgent(this.messages, this.state.inputModalities);
 
-      const lastUserIdx = messagesForAgent.findLastIndex((m) => m.role === "user");
-      const retrievalMessage = lastUserIdx !== -1
-        ? await buildRetrievalMessage({
-          env: this.env,
-          memberId: this.chatDoc?.memberId,
-          queryText: extractMessageText(messagesForAgent[lastUserIdx]!),
-        })
-        : null;
+      const [retrievalMessage, downloadedPaths] = await Promise.all([
+        lastUserIdx !== -1 && lastUserQueryText
+          ? buildRetrievalMessage({
+              env: this.env,
+              memberId: this.chatDoc?.memberId,
+              queryText: lastUserQueryText,
+            })
+          : null,
+        this.sandbox && lastUserFilePartUrls.length > 0
+          ? this.downloadFileUrlsInSandbox(lastUserFilePartUrls)
+          : null,
+      ]);
 
-      const modelMessages = retrievalMessage
+      let modelMessages = retrievalMessage && lastUserIdx !== -1
         ? messagesForAgent.toSpliced(lastUserIdx, 0, retrievalMessage)
         : messagesForAgent;
+
+      if (downloadedPaths && downloadedPaths.length > 0) {
+        const fileContextMessage: UIMessage = {
+          id: `file-downloads-${crypto.randomUUID()}`,
+          role: "system",
+          parts: [
+            {
+              type: "text",
+              text: `Attached files downloaded to sandbox at:\n${downloadedPaths.map((p) => `- ${p}`).join("\n")}`,
+            },
+          ],
+        };
+        modelMessages = modelMessages.toSpliced(
+          lastUserIdx + (retrievalMessage ? 1 : 0),
+          0,
+          fileContextMessage
+        );
+      }
 
       const agent = this.planAgent || (await this._prepAgent());
       const stream = await agent.streamText(modelMessages, {

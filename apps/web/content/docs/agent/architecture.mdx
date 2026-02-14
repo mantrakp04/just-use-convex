@@ -72,14 +72,17 @@ override async onChatMessage(onFinish, options): Promise<Response> {
     void generateTitle({ convexAdapter, chatId, userMessage });
   }
 
-  // 3. Filter message parts by input modalities
-  const messagesForAgent = filterMessageParts(this.messages, this.state.inputModalities);
+  // 3. Process messages (filter modalities, sanitize tool parts, extract last user context)
+  const { messages: messagesForAgent, lastUserIdx, lastUserQueryText } =
+    processMessagesForAgent(this.messages, this.state.inputModalities);
 
   // 4. Build RAG context from Vectorize
-  const retrievalMessage = await buildRetrievalMessage({ env, memberId, queryText });
+  const retrievalMessage = lastUserIdx !== -1
+    ? await buildRetrievalMessage({ env, memberId, queryText: lastUserQueryText })
+    : null;
 
   // 5. Inject retrieval context before last user message
-  const modelMessages = retrievalMessage
+  const modelMessages = retrievalMessage && lastUserIdx !== -1
     ? messagesForAgent.toSpliced(lastUserIdx, 0, retrievalMessage)
     : messagesForAgent;
 

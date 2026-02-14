@@ -1,11 +1,74 @@
 import { isFileUIPart, type UIMessage } from "ai";
 
+const HTTP_URL_PREFIXES = ["http://", "https://"] as const;
+
+export type FilePartUrl = { url: string; filename: string };
+
+export interface ProcessedMessages {
+  messages: UIMessage[];
+  lastUserIdx: number;
+  lastUserQueryText: string;
+  lastUserFilePartUrls: FilePartUrl[];
+}
+
+export function processMessagesForAgent(
+  messages: UIMessage[],
+  inputModalities?: string[]
+): ProcessedMessages {
+  const result: UIMessage[] = [];
+  let lastUserIdx = -1;
+  let lastUserQueryText = "";
+  let lastUserFilePartUrls: FilePartUrl[] = [];
+
+  for (const msg of messages) {
+    const filteredParts = msg.parts.filter((part) => {
+      if (isFileUIPart(part)) {
+        if (!isMimeTypeSupported(part.mediaType, inputModalities)) return false;
+      }
+      const toolName = "type" in part ? getToolNameFromPartType(part.type as string) : null;
+      if (toolName != null && toolName.includes("sub-")) return false;
+      return true;
+    });
+
+    const sanitized = { ...msg, parts: filteredParts };
+    result.push(sanitized);
+
+    if (msg.role === "user") {
+      lastUserIdx = result.length - 1;
+      const extracted = extractTextAndFileUrlsFromParts(msg.parts);
+      lastUserQueryText = extracted.text;
+      lastUserFilePartUrls = extracted.filePartUrls;
+    }
+  }
+
+  return { messages: result, lastUserIdx, lastUserQueryText, lastUserFilePartUrls };
+}
+
 export function extractMessageText(message: UIMessage): string {
   if (message.role !== "user" && message.role !== "assistant") return "";
-  return message.parts
-    .map((part) => part.type === "text" ? part.text : "")
-    .filter(Boolean)
-    .join("\n");
+  return extractTextAndFileUrlsFromParts(message.parts).text;
+}
+
+function extractTextAndFileUrlsFromParts(
+  parts: UIMessage["parts"]
+): { text: string; filePartUrls: FilePartUrl[] } {
+  const textLines: string[] = [];
+  const filePartUrls: FilePartUrl[] = [];
+  for (const part of parts) {
+    if (part.type === "text" && part.text) {
+      textLines.push(part.text);
+    } else if (
+      isFileUIPart(part) &&
+      part.url &&
+      typeof part.url === "string" &&
+      HTTP_URL_PREFIXES.some((p) => part.url.trim().startsWith(p))
+    ) {
+      const url = part.url.trim();
+      const filename = sanitizeFilename(part.filename ?? url.split("/").pop() ?? "file");
+      filePartUrls.push({ url, filename });
+    }
+  }
+  return { text: textLines.join("\n"), filePartUrls };
 }
 
 function getMimeModality(mimeType: string): string | null {
@@ -27,30 +90,9 @@ function isMimeTypeSupported(mimeType: string, inputModalities?: string[]): bool
   return inputModalities.includes(modality);
 }
 
-export function filterMessageParts(messages: UIMessage[], inputModalities?: string[]): UIMessage[] {
-  return messages.map((msg) => ({
-    ...msg,
-    parts: msg.parts.filter((part) => {
-      if (!isFileUIPart(part)) return true;
-      return isMimeTypeSupported(part.mediaType, inputModalities);
-    }),
-  }));
-}
-
 function getToolNameFromPartType(type: string): string | null {
   if (!type.startsWith("tool-")) return null;
   return type.slice(5);
-}
-
-export function sanitizeMessagesForAgent(messages: UIMessage[]): UIMessage[] {
-  return messages.map((msg) => ({
-    ...msg,
-    parts: msg.parts.filter((part) => {
-      const toolName = "type" in part ? getToolNameFromPartType(part.type as string) : null;
-      if (toolName == null) return true;
-      return !toolName.includes("sub-");
-    }),
-  }));
 }
 
 export function sanitizeFilename(filename: string): string {
