@@ -15,15 +15,21 @@ import {
   KanbanSkeleton,
   ListSkeleton,
   CalendarSkeleton,
-  type KanbanGroupBy,
-  type PriorityFilterValue,
-  type StatusFilterValue,
-  type DateRange,
 } from "@/components/dashboard";
-import { viewModeAtom } from "@/store/dashboard";
+import {
+  viewModeAtom,
+  groupByAtom,
+  filterPriorityAtom,
+  filterStatusAtom,
+  filterTeamIdAtom,
+  filterMemberIdAtom,
+  calendarDateRangeAtom,
+} from "@/store/dashboard";
 
 export const Route = createFileRoute("/(protected)/dashboard")({
   component: RouteComponent,
+  gcTime: Infinity,
+  staleTime: Infinity,
 });
 
 function RouteComponent() {
@@ -34,12 +40,12 @@ function RouteComponent() {
   const orgStats = useOrgStats();
 
   const [viewMode, setViewMode] = useAtom(viewModeAtom);
-  const [groupBy, setGroupBy] = useState<KanbanGroupBy>("status");
-  const [filterPriority, setFilterPriority] = useState<PriorityFilterValue>("all");
-  const [filterStatus, setFilterStatus] = useState<StatusFilterValue>("all");
-  const [filterTeamId, setFilterTeamId] = useState<string | "all">("all");
-  const [filterMemberId, setFilterMemberId] = useState<string | "all">("all");
-  const [calendarDateRange, setCalendarDateRange] = useState<DateRange | null>(null);
+  const [groupBy, setGroupBy] = useAtom(groupByAtom);
+  const [filterPriority, setFilterPriority] = useAtom(filterPriorityAtom);
+  const [filterStatus, setFilterStatus] = useAtom(filterStatusAtom);
+  const [filterTeamId, setFilterTeamId] = useAtom(filterTeamIdAtom);
+  const [filterMemberId, setFilterMemberId] = useAtom(filterMemberIdAtom);
+  const [calendarDateRange, setCalendarDateRange] = useAtom(calendarDateRangeAtom);
 
   const [dialogOpen, setDialogOpen] = useState(false);
   const [selectedTodo, setSelectedTodo] = useState<Todo | null>(null);

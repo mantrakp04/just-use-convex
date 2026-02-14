@@ -17,8 +17,10 @@ import { allTodoAggregates } from "./todos/aggregates";
 import { allChatAggregates } from "./chats/aggregates";
 import { allSandboxAggregates } from "./sandboxes/aggregates";
 import { allAttachmentAggregates } from "./attachments/aggregates";
+import { sandboxDaytonaTrigger } from "./tables/sandboxes";
+import { env } from "@just-use-convex/env/backend";
 
-const EXTERNAL_TOKEN = process.env.EXTERNAL_TOKEN ?? "meow";
+const EXTERNAL_TOKEN = env.EXTERNAL_TOKEN;
 
 const triggers = new Triggers<DataModel>();
 
@@ -36,6 +38,9 @@ for (const aggregate of allChatAggregates) {
 for (const aggregate of allSandboxAggregates) {
   triggers.register("sandboxes", aggregate.trigger());
 }
+
+// Register lifecycle trigger for Daytona sandbox provisioning/cleanup
+triggers.register("sandboxes", sandboxDaytonaTrigger);
 
 // Register all aggregate triggers for orgMemberAttachments table
 for (const aggregate of allAttachmentAggregates) {

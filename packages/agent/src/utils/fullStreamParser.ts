@@ -7,23 +7,23 @@ export async function parseStreamToUI(
 ): Promise<void> {
   try {
     for await (const part of fullStream) {
-      if (
-        part.subAgentId != null ||
-        part.subAgentName != null ||
-        part.executingAgentId != null ||
-        part.executingAgentName != null ||
-        part.parentAgentId != null ||
-        part.parentAgentName != null ||
-        (Array.isArray(part.agentPath) && part.agentPath.length > 0)
-      ) {
-        writer.write({
-          type: 'data-subagent-stream',
-          data: {
-            ...part,
-            originalType: part.type,
-          },
-        });
-      }
+      // if (
+      //   part.subAgentId != null ||
+      //   part.subAgentName != null ||
+      //   part.executingAgentId != null ||
+      //   part.executingAgentName != null ||
+      //   part.parentAgentId != null ||
+      //   part.parentAgentName != null ||
+      //   (Array.isArray(part.agentPath) && part.agentPath.length > 0)
+      // ) {
+      //   writer.write({
+      //     type: 'data-subagent-stream',
+      //     data: {
+      //       ...part,
+      //       originalType: part.type,
+      //     },
+      //   });
+      // }
 
       switch (part.type) {
         case 'text-start':
@@ -99,15 +99,18 @@ export async function parseStreamToUI(
           });
           break;
         case 'tool-input-start':
+          {
+            const toolName = getOutputToolName(part);
           writer.write({
             type: 'tool-input-start',
             toolCallId: part.id,
-            toolName: part.toolName,
+            toolName,
             ...(part.providerExecuted != null ? { providerExecuted: part.providerExecuted } : {}),
             ...(part.providerMetadata != null ? { providerMetadata: part.providerMetadata } : {}),
             ...(part.dynamic != null ? { dynamic: part.dynamic } : {}),
             ...(part.title != null ? { title: part.title } : {}),
           });
+          }
           break;
         case 'tool-input-delta':
           writer.write({
@@ -117,11 +120,13 @@ export async function parseStreamToUI(
           });
           break;
         case 'tool-call':
+          {
+            const toolName = getOutputToolName(part);
           if (part.invalid) {
             writer.write({
               type: 'tool-input-error',
               toolCallId: part.toolCallId,
-              toolName: part.toolName,
+              toolName,
               input: part.input,
               errorText: String(part.error),
               ...(part.providerExecuted != null ? { providerExecuted: part.providerExecuted } : {}),
@@ -133,13 +138,14 @@ export async function parseStreamToUI(
             writer.write({
               type: 'tool-input-available',
               toolCallId: part.toolCallId,
-              toolName: part.toolName,
+              toolName,
               input: part.input,
               ...(part.providerExecuted != null ? { providerExecuted: part.providerExecuted } : {}),
               ...(part.providerMetadata != null ? { providerMetadata: part.providerMetadata } : {}),
               ...(part.dynamic != null ? { dynamic: part.dynamic } : {}),
               ...(part.title != null ? { title: part.title } : {}),
             });
+          }
           }
           break;
         case 'tool-approval-request':
@@ -209,4 +215,55 @@ export async function parseStreamToUI(
       throw error;
     }
   }
+}
+
+function getOutputToolName(part: VoltAgentTextStreamPart): string {
+  if (!('toolName' in part) || typeof part.toolName !== 'string') {
+    return 'unknown_tool';
+  }
+
+  const agentName = getSubAgentName(part);
+  if (!agentName || part.toolName.startsWith('sub-')) {
+    return part.toolName;
+  }
+
+  return `sub-${slugifyAgentName(agentName)}-${part.toolName}`;
+}
+
+function getSubAgentName(part: VoltAgentTextStreamPart): string | null {
+  if ('subAgentName' in part && typeof part.subAgentName === 'string' && part.subAgentName.trim()) {
+    return part.subAgentName;
+  }
+
+  const agentPath = 'agentPath' in part ? part.agentPath : undefined;
+  if (Array.isArray(agentPath) && agentPath.length > 1) {
+    const executingAgent = getExecutingAgentName(part);
+    if (executingAgent && executingAgent !== 'Assistant') {
+      return executingAgent;
+    }
+
+    const lastPathEntry = agentPath[agentPath.length - 1];
+    if (typeof lastPathEntry === 'string' && lastPathEntry.trim()) {
+      return lastPathEntry;
+    }
+  }
+
+  return null;
+}
+
+function getExecutingAgentName(part: VoltAgentTextStreamPart): string | null {
+  if ('executingAgentName' in part && typeof part.executingAgentName === 'string' && part.executingAgentName.trim()) {
+    return part.executingAgentName;
+  }
+  return null;
+}
+
+function slugifyAgentName(value: string): string {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, '-')
+    .replace(/[^a-z0-9_-]/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-+|-+$/g, '');
 }

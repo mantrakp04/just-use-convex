@@ -1,4 +1,4 @@
-import { PaperclipIcon } from "lucide-react";
+import { Loader2Icon, PaperclipIcon, SquareTerminalIcon } from "lucide-react";
 import type { OpenRouterModel } from "@/hooks/use-openrouter-models";
 import type { FileUIPart } from "ai";
 import type { useAgentChat } from "@cloudflare/ai-chat/react";
@@ -41,6 +41,9 @@ export type ChatInputProps = {
   models: OpenRouterModel[];
   selectedModel?: OpenRouterModel;
   hasMessages: boolean;
+  onSandboxToggle?: () => void;
+  isSandboxPanelOpen?: boolean;
+  isSandboxConnecting?: boolean;
 };
 
 export const ChatInput = memo(function ChatInput({
@@ -53,6 +56,9 @@ export const ChatInput = memo(function ChatInput({
   models,
   selectedModel,
   hasMessages,
+  onSandboxToggle,
+  isSandboxPanelOpen = false,
+  isSandboxConnecting = false,
 }: ChatInputProps) {
   const supportsReasoning = selectedModel?.supports_reasoning ?? false;
   const setDefaultSettings = useSetAtom(defaultChatSettingsAtom);
@@ -69,7 +75,7 @@ export const ChatInput = memo(function ChatInput({
   );
 
   return (
-    <div className="pb-1 mx-auto w-4xl">
+    <div className="w-full px-3 pb-1 @xl/chat-column:mx-auto @xl/chat-column:w-4xl @xl/chat-column:px-0">
       <PromptInput
         onSubmit={onSubmit}
         multiple
@@ -95,7 +101,23 @@ export const ChatInput = memo(function ChatInput({
               />
             )}
           </PromptInputTools>
-          <PromptInputSubmit status={status} onStop={onStop} />
+          <div className="flex items-center gap-1">
+            {onSandboxToggle && (
+              <PromptInputButton
+                variant={isSandboxPanelOpen ? "outline" : "ghost"}
+                onClick={onSandboxToggle}
+                disabled={isSandboxConnecting}
+                aria-label={isSandboxPanelOpen ? "Close sandbox panel" : "Open sandbox panel"}
+              >
+                {isSandboxConnecting ? (
+                  <Loader2Icon className="size-4 animate-spin" />
+                ) : (
+                  <SquareTerminalIcon className="size-4" />
+                )}
+              </PromptInputButton>
+            )}
+            <PromptInputSubmit status={status} onStop={onStop} />
+          </div>
         </PromptInputFooter>
       </PromptInput>
     </div>
@@ -106,8 +128,8 @@ function AttachmentButton() {
   const attachments = usePromptInputAttachments();
 
   return (
-    <PromptInputButton onClick={() => attachments.openFileDialog()} size="icon-xs">
-      <PaperclipIcon className="size-4" />
+    <PromptInputButton onClick={() => attachments.openFileDialog()}>
+      <PaperclipIcon />
     </PromptInputButton>
   );
 }

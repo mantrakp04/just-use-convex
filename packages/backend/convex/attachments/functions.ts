@@ -5,7 +5,7 @@ import {
   assertOrganizationAccess,
   assertPermission,
   assertScopedPermission,
-} from "../shared/auth_shared";
+} from "../shared/auth";
 import { withInvalidCursorRetry } from "../shared/pagination";
 
 export async function CreateAttachmentFromHash(

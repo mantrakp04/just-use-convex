@@ -6,7 +6,7 @@ import {
   assertOrganizationAccess,
   assertPermission,
   assertScopedPermission,
-} from "../shared/auth_shared";
+} from "../shared/auth";
 
 async function runSandboxesQuery(ctx: zQueryCtx, args: z.infer<typeof types.ListArgs>) {
   return ctx.table("sandboxes", "organizationId_userId", (q) => q
@@ -127,7 +127,26 @@ export async function DeleteSandbox(ctx: zMutationCtx, args: z.infer<typeof type
     "You are not authorized to delete this sandbox",
     "You are not authorized to delete this sandbox"
   );
-  await sandbox.delete();
+  let cursor: string | null = null;
+  const updatedAt = Date.now();
+  while (true) {
+    const chats = await sandbox.edge("chats").paginate({ cursor, numItems: 64 });
+    await Promise.all(
+      chats.page.map(async (chat) => {
+        await ctx.db.patch(chat._id, {
+          sandboxId: undefined,
+          updatedAt,
+        });
+      })
+    );
+
+    if (chats.isDone) {
+      break;
+    }
+    cursor = chats.continueCursor;
+  }
+  await ctx.db.delete(sandbox._id);
+
   return true;
 }
 

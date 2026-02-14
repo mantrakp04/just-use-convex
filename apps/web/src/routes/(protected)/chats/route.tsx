@@ -3,6 +3,8 @@ import { AgentsProvider } from '@/providers/agent'
 
 export const Route = createFileRoute('/(protected)/chats')({
   component: RouteComponent,
+  gcTime: Infinity,
+  staleTime: Infinity,
 })
 
 function RouteComponent() {

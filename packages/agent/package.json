@@ -14,25 +14,28 @@
     "@ai-sdk/openai": "^3.0.25",
     "@ai-sdk/openai-compatible": "^1.0.32",
     "@cloudflare/ai-chat": "^0.0.4",
-    "@cloudflare/sandbox": "^0.7.0",
     "@composio/core": "^0.5.5",
     "@composio/vercel": "^0.5.5",
-    "@just-use-convex/backend": "workspace:*",
+    "@daytonaio/sdk": "^0.139.0",
+    "@daytonaio/toolbox-api-client": "^0.142.0",
     "@openrouter/ai-sdk-provider": "^2.1.1",
     "@voltagent/core": "^2.3.3",
     "agents": "^0.3.10",
     "ai": "^6.0.71",
     "alchemy": "^0.83.2",
-    "convex": "^1.31.7",
+    "convex": "catalog:",
     "exa-js": "^2.3.0",
     "modal": "^0.6.1",
+    "xterm": "^5.3.0",
     "zod": "^3.25.76",
     "zod-to-json-schema": "^3.25.1"
   },
   "devDependencies": {
+    "@just-use-convex/backend": "workspace:*",
+    "@just-use-convex/env": "workspace:*",
     "@cloudflare/workers-types": "^4.20260205.0",
     "@just-use-convex/config": "workspace:*",
     "@types/node": "^24.10.11",
-    "typescript": "^5.9.3"
+    "typescript": "catalog:"
   }
 }

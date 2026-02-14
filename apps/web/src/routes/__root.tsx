@@ -11,6 +11,7 @@ import {
   useRouteContext,
 } from "@tanstack/react-router";
 import { TanStackRouterDevtools } from "@tanstack/react-router-devtools";
+import { ReactQueryDevtools } from '@tanstack/react-query-devtools'
 import { createServerFn } from "@tanstack/react-start";
 import { ThemeProvider, ThemeScript } from "@/components/tweakcn-theme-provider";
 import appCss from "../index.css?url";
@@ -58,6 +59,11 @@ export const Route = createRootRouteWithContext<RouterAppContext>()({
       },
       {
         rel: "icon",
+        type: "image/x-icon",
+        href: "/favicon.ico",
+      },
+      {
+        rel: "icon",
         type: "image/svg+xml",
         href: "/logo.svg",
       }
@@ -98,6 +104,7 @@ function RootDocument() {
               <Outlet />
             </div>
             <Toaster richColors />
+            <ReactQueryDevtools buttonPosition="bottom-right" />
             <TanStackRouterDevtools position="bottom-left" />
             <Scripts />
           </body>

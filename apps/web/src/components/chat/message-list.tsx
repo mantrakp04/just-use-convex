@@ -13,6 +13,7 @@ import {
   findLastAssistantMessageIndex,
   findPrecedingUserMessageId,
 } from "@/hooks/use-chat";
+import { useHeader } from "@/hooks/use-header";
 
 interface MessageListProps {
   messages: UIMessage[];
@@ -37,6 +38,7 @@ export function MessageList({
   const prevMessagesLength = useRef(messages.length);
   const { handleTodosChange, syncTodosToParent } = useTodosState();
   const { handleAskUserChange, syncAskUserToParent } = useAskUserState();
+  const { headerHeight } = useHeader();
 
   const lastAssistantMessageIndex = findLastAssistantMessageIndex(messages);
 
@@ -55,8 +57,10 @@ export function MessageList({
     syncAskUserToParent(onAskUserChange);
   });
 
+  const messageListPaddingTop = messages.length > 0 ? headerHeight : 0;
+
   return (
-    <div className="flex flex-col gap-1">
+    <div className="flex flex-col gap-1" style={{ paddingTop: messageListPaddingTop }}>
       {messages.map((message, index) => {
         const userMessageId =
           message.role === "assistant"

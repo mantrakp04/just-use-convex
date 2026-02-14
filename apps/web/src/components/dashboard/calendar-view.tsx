@@ -19,6 +19,7 @@ import {
   endOfDay,
 } from "date-fns";
 import { Button } from "@/components/ui/button";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { ChevronLeft, ChevronRight } from "lucide-react";
@@ -144,30 +145,16 @@ export function CalendarView({
           <h2 className="text-lg font-semibold">{getTitle()}</h2>
         </div>
 
-        {/* View Mode Toggle */}
-        <div className="flex items-center gap-1 border rounded-md p-0.5">
-          <Button
-            variant={calendarView === "month" ? "secondary" : "ghost"}
-            size="sm"
-            onClick={() => setCalendarView("month")}
-          >
-            Month
-          </Button>
-          <Button
-            variant={calendarView === "week" ? "secondary" : "ghost"}
-            size="sm"
-            onClick={() => setCalendarView("week")}
-          >
-            Week
-          </Button>
-          <Button
-            variant={calendarView === "day" ? "secondary" : "ghost"}
-            size="sm"
-            onClick={() => setCalendarView("day")}
-          >
-            Day
-          </Button>
-        </div>
+        <Tabs
+          value={calendarView}
+          onValueChange={(v) => setCalendarView(v as CalendarViewMode)}
+        >
+          <TabsList>
+            <TabsTrigger value="month">Month</TabsTrigger>
+            <TabsTrigger value="week">Week</TabsTrigger>
+            <TabsTrigger value="day">Day</TabsTrigger>
+          </TabsList>
+        </Tabs>
       </div>
 
       {/* Calendar Content */}

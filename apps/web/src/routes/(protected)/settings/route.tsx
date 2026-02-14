@@ -4,6 +4,8 @@ import { useCallback } from 'react';
 
 export const Route = createFileRoute('/(protected)/settings')({
   component: RouteComponent,
+  gcTime: Infinity,
+  staleTime: Infinity,
 })
 
 function RouteComponent() {

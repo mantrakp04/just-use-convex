@@ -74,6 +74,7 @@ export const MessageItem = memo(function MessageItem({
   const messageText = extractMessageText(message);
   const messageFiles = extractMessageFiles(message);
   const sources = useMemo(() => extractSourcesFromMessage(message), [message]);
+  const containerClassName = "w-full px-3 @xl/chat-column:mx-auto @xl/chat-column:w-4xl @xl/chat-column:px-4";
 
   const isUser = message.role === "user";
   const isAssistant = message.role === "assistant";
@@ -181,7 +182,7 @@ export const MessageItem = memo(function MessageItem({
 
   if (isEditing && isUser) {
     return (
-      <Message from={message.role} className="mx-auto w-4xl px-4">
+      <Message from={message.role} className={containerClassName}>
         <div className="flex flex-col gap-3 max-w-[70%] ml-auto">
           {editedFiles.length > 0 && (
             <Attachments variant="grid">
@@ -258,7 +259,7 @@ export const MessageItem = memo(function MessageItem({
   }
 
   return (
-    <Message from={message.role} className="mx-auto w-4xl px-4">
+    <Message from={message.role} className={containerClassName}>
       <div className="group/message">
         <MessageContent className="group-[.is-user]:max-w-[70%]">
           {renderParts()}
@@ -271,7 +272,7 @@ export const MessageItem = memo(function MessageItem({
             {isUser && (messageText || messageFiles.length > 0) && onEditMessage && (
               <EditMessageButton onStartEdit={handleStartEdit} />
             )}
-            {isAssistant && onRegenerate && (
+            {onRegenerate && (
               <RegenerateButton onRegenerate={handleRegenerate} />
             )}
             {messageText && <CopyButton text={messageText} />}

@@ -1,11 +1,9 @@
 import { createTool, createToolkit } from "@voltagent/core";
+import { queryVectorizedMessages } from "../agent/vectorize";
 import { z } from "zod";
+import type { worker } from "@just-use-convex/agent/alchemy.run";
 
-export function createVectorizeToolkit({
-  queryVectorize,
-}: {
-  queryVectorize: (query: string, topK?: number) => Promise<VectorizeMatches | null>;
-}) {
+export function createVectorizeToolkit(env: typeof worker.Env, memberId: string | undefined) {
   const vectorizeSearchTool = createTool({
     name: "vectorize_search",
     description: `Search the Vectorize chat memory for relevant past messages.
@@ -26,7 +24,12 @@ Results return matching message snippets with scores and metadata.`,
         return { error: true, message: "Query is required and cannot be empty." };
       }
 
-      const results = await queryVectorize(normalizedQuery, topK);
+      const results = await queryVectorizedMessages({
+        env,
+        memberId,
+        queryText: normalizedQuery,
+        topK,
+      });
       if (!results) {
         return {
           query: normalizedQuery,
