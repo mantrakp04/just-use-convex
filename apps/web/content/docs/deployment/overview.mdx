@@ -1,36 +1,40 @@
 ---
 title: Deployment Overview
-description: Understanding the deployment architecture for Convex applications
+description: Understanding the deployment architecture for the agentic chat platform
 ---
 
 # Deployment Overview
 
-Deploying a Convex application involves two separate deployments: the Convex backend and the frontend hosting.
+Deploying this application involves three separate components: the Convex backend, the frontend, and the Cloudflare Workers agent.
 
 ## Architecture
 
 ```
-┌─────────────────┐         ┌─────────────────┐
-│   Frontend      │ ──────▶ │    Convex       │
-│   (Vercel,      │         │    Cloud        │
-│    Netlify)     │         │                 │
-└─────────────────┘         └─────────────────┘
-        │                           │
-        ▼                           ▼
-   Static Files              Backend Functions
-   React App                 Database
-   Assets                    File Storage
+┌─────────────────┐         ┌─────────────────┐         ┌─────────────────┐
+│   Frontend      │ ──────▶ │    Convex       │ ──────▶ │   Agent         │
+│   (Vercel,      │         │    Cloud        │         │   (Cloudflare   │
+│    CF Pages)    │         │                 │         │    Workers)     │
+└─────────────────┘         └─────────────────┘         └─────────────────┘
+        │                           │                           │
+        ▼                           ▼                           ▼
+   SSR + Static             Backend Functions            Durable Objects
+   React App                Database                     AI SDK + OpenRouter
+   Assets                   File Storage                 Sandbox Proxy
+        │                                                       │
+        └──────────── WebSocket ────────────────────────────────┘
 ```
+
+The frontend connects to the agent via WebSocket for real-time chat streaming. The agent communicates with Convex for persistence and with external services (OpenRouter, Daytona, Exa) for AI inference and sandbox management.
 
 ## Deployment Components
 
-### Convex Backend
+### 1. Convex Backend
 
 Convex handles your backend automatically:
 
-- **Functions**: Queries, mutations, and actions
-- **Database**: Document storage with real-time sync
-- **File Storage**: User uploads and media
+- **Functions**: Queries, mutations, and actions (zQuery/zMutation wrappers with auth context)
+- **Database**: Document storage with real-time sync (Ents for relationships)
+- **File Storage**: User uploads and attachments
 - **Scheduled Jobs**: Background tasks and cron jobs
 
 Deploy with a single command:
@@ -39,34 +43,57 @@ Deploy with a single command:
 bunx convex deploy
 ```
 
-### Frontend
+### 2. Frontend
 
-Your React application can be deployed to any static hosting provider:
+Your TanStack Start application can be deployed to any hosting provider that supports SSR:
 
 - **Vercel** (Recommended for TanStack Start)
-- **Netlify**
 - **Cloudflare Pages**
+- **Netlify**
 - **AWS Amplify**
+
+The frontend handles SSR, file-based routing, and connects to both Convex (for reactive data) and the agent (for WebSocket chat).
+
+### 3. Agent (Cloudflare Workers)
+
+The AI agent runs on Cloudflare Workers using Durable Objects for persistent WebSocket connections. It is deployed via **Alchemy** (infrastructure-as-code for Cloudflare).
+
+- **Durable Objects**: One per chat session, manages WebSocket state
+- **AI SDK**: Streaming responses via OpenRouter
+- **Sandbox Proxy**: PTY terminal, file operations, preview URLs via Daytona
+- **Tools**: Web search (Exa), code execution, todo management, ask-user prompts
+
+Deploy with:
+
+```bash
+cd packages/agent && bun run deploy
+```
+
+Or via Alchemy in CI:
+
+```bash
+bunx alchemy deploy
+```
 
 ## Deployment Environments
 
 ### Development
 
 ```bash
-# Start local development
-bun dev
+# Start everything (Convex dev + frontend + agent)
+bun run dev
 ```
 
 This runs:
 - Convex dev server (syncs functions in real-time)
-- Frontend dev server (hot reload)
+- Frontend dev server (hot reload on port 3001)
+- Agent dev server (Cloudflare Workers on port 1337)
 
 ### Preview/Staging
 
 For pull request previews, create a separate Convex project:
 
 ```bash
-# Deploy to preview environment
 bunx convex deploy --preview
 ```
 
@@ -78,35 +105,37 @@ Production deployments should be automated through CI/CD:
 # Deploy backend
 bunx convex deploy --prod
 
-# Build and deploy frontend
-bun run build
+# Deploy agent
+cd packages/agent && bun run deploy
+
+# Deploy frontend (via hosting provider CI)
 ```
 
 ## One-Click Deploy
 
-The fastest way to deploy is using the Vercel one-click deploy button:
+The fastest way to deploy the frontend is using the Vercel one-click deploy button:
 
-[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fmantrakp04%2Fjust-use-convex&env=VITE_SITE_URL,CONVEX_DEPLOY_KEY,VITE_CONVEX_URL,VITE_CONVEX_SITE_URL)
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fmantrakp04%2Fjust-use-convex&env=VITE_SITE_URL,CONVEX_DEPLOY_KEY,VITE_CONVEX_URL,VITE_CONVEX_SITE_URL,VITE_AGENT_URL)
 
 ## Deployment Checklist
 
 Before deploying to production:
 
-- [ ] Set all required environment variables (`VITE_CONVEX_URL`, `VITE_CONVEX_SITE_URL`, `VITE_SITE_URL`)
+- [ ] Set all frontend env vars (`VITE_CONVEX_URL`, `VITE_CONVEX_SITE_URL`, `VITE_SITE_URL`, `VITE_AGENT_URL`)
+- [ ] Set Convex backend env vars (`JWKS`, `AGENT_URL`, `SITE_URL`, `EXTERNAL_TOKEN`)
+- [ ] Set agent secrets (`OPENROUTER_API_KEY`, `CONVEX_URL`, `CONVEX_SITE_URL`, `EXTERNAL_TOKEN`)
+- [ ] Configure Daytona API key for sandbox support (optional)
 - [ ] Generate and set JWKS for auth token validation
 - [ ] Configure `CONVEX_DEPLOY_KEY` for CI/CD
 - [ ] Configure authentication callback URLs
 - [ ] Set up custom domain (if applicable)
-- [ ] Enable rate limiting
-- [ ] Configure CORS settings
-- [ ] Test with production-like data
+- [ ] Test WebSocket connectivity between frontend and agent
+- [ ] Test sandbox creation and terminal connectivity
 - [ ] Set up monitoring and alerts
 
 ## Cost Considerations
 
 ### Convex Pricing
-
-Convex offers a generous free tier:
 
 | Feature | Free Tier | Pro |
 |---------|-----------|-----|
@@ -115,16 +144,22 @@ Convex offers a generous free tier:
 | File storage | 1GB | Custom |
 | Bandwidth | 1GB | Custom |
 
+### Cloudflare Workers
+
+| Feature | Free Tier | Paid |
+|---------|-----------|------|
+| Requests | 100K/day | 10M+/month |
+| Durable Objects | Limited | Per-request pricing |
+| CPU time | 10ms | 50ms+ |
+
 ### Frontend Hosting
 
-Most hosting providers offer free tiers suitable for small to medium applications:
-
-- **Vercel**: 100GB bandwidth/month
+- **Vercel**: 100GB bandwidth/month (free tier)
+- **Cloudflare Pages**: Unlimited bandwidth
 - **Netlify**: 100GB bandwidth/month
-- **Cloudflare**: Unlimited bandwidth
 
 ## Next Steps
 
-1. [Deploy Convex Backend](/docs/deployment/convex-deploy)
-2. [Deploy Frontend](/docs/deployment/frontend-hosting)
-3. [Configure Environment Variables](/docs/deployment/environment-variables)
+1. [Configure Environment Variables](/docs/deployment/environment-variables)
+2. [Deploy Convex Backend](/docs/deployment/convex-deploy)
+3. [Deploy Frontend](/docs/deployment/frontend-hosting)

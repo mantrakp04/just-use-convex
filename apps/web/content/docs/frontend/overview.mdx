@@ -1,11 +1,11 @@
 ---
 title: Frontend Overview
-description: Integrating Convex with React and TanStack
+description: Integrating Convex with React, TanStack, and Cloudflare Agents
 ---
 
 # Frontend Overview
 
-This template uses a powerful combination of React 19, TanStack Start, TanStack Query, and Convex for a fully type-safe, reactive frontend.
+This template uses React 19, TanStack Start, TanStack Query, Convex, and Cloudflare Agents to build a fully type-safe, reactive agentic chat platform with sandbox capabilities.
 
 ## Tech Stack
 
@@ -16,6 +16,10 @@ This template uses a powerful combination of React 19, TanStack Start, TanStack 
 | TanStack Query | Server state management |
 | @convex-dev/react-query | Convex + TanStack Query bridge |
 | Convex React | Core Convex React bindings |
+| @cloudflare/ai-chat/react | Agent WebSocket connection + chat |
+| Jotai | Shared in-memory UI state (atoms) |
+| xterm.js | Terminal emulation for sandbox PTY |
+| motion/react | Animation primitives |
 
 ## Project Structure
 
@@ -23,16 +27,35 @@ This template uses a powerful combination of React 19, TanStack Start, TanStack 
 apps/web/src/
 ├── routes/              # File-based routing
 │   ├── __root.tsx       # Root layout with providers
-│   ├── index.tsx        # Home page
-│   └── dashboard/       # Dashboard routes
-├── components/          # React components
-│   ├── ui/              # shadcn/ui components
-│   └── ...              # Feature components
+│   ├── (public)/        # Unauthenticated routes
+│   └── (protected)/     # Wrapped in <AuthBoundary>
+├── components/
+│   ├── chat/            # Chat interface, message items, input
+│   ├── sandboxes/       # Terminal, file explorer, preview
+│   ├── todos/           # Task management UI
+│   ├── dashboard/       # Dashboard views + stats
+│   ├── auth/            # Auth forms + boundaries
+│   ├── ai-elements/     # Queue (todos), ask-user prompts
+│   └── ui/              # shadcn/ui base components
 ├── hooks/               # Custom hooks
-│   └── useTodos.ts      # Convex query hooks
-└── lib/                 # Utilities
+│   ├── use-chat.ts      # Chat actions (submit, edit, regenerate)
+│   ├── use-chats.ts     # Chat CRUD + pagination
+│   ├── use-sandbox.ts   # Sandbox UI state + terminal
+│   ├── use-sandboxes.ts # Sandbox CRUD + pagination
+│   ├── use-attachments.ts        # Upload with progress
+│   ├── use-openrouter-models.ts  # Model fetching + caching
+│   └── use-model-filtering.ts    # Fuzzy search + favorites
+├── providers/
+│   └── agent.tsx        # Agent connection provider (isolated React root)
+├── store/               # Jotai atoms
+│   ├── chat-settings.ts # Model selection, system prompt
+│   ├── models.ts        # Favorite models
+│   ├── dashboard.ts     # Dashboard UI state
+│   └── sandbox.ts       # Sandbox panel state
+└── lib/
     ├── convex.ts        # Convex client setup
-    └── auth.ts          # Auth client setup
+    ├── auth.ts          # Auth client setup
+    └── motion.ts        # Animation presets
 ```
 
 ## Setting Up Providers
@@ -68,131 +91,132 @@ export function RootLayout({ children }) {
 }
 ```
 
-## Basic Usage
+### Agent Connection
 
-### Queries
+Agent connections are managed via an isolated React root to avoid re-rendering the main tree during streaming. The provider uses a get-or-create pattern to maintain WebSocket connections across route changes.
 
 ```tsx
-import { useQuery } from "convex/react";
-import { api } from "@/convex/_generated/api";
+// providers/agent.tsx handles:
+// - WebSocket connection to Cloudflare Workers agent
+// - Token-based authentication (SSR/hydration aware)
+// - Connection persistence across route navigation
+// - AbortController for streaming cancellation
+```
 
-function TodoList() {
-  const todos = useQuery(api.todos.list, { filters: {} });
+## Core Concepts
 
-  if (todos === undefined) return <Loading />;
+### Chat Interface
 
-  return (
-    <ul>
-      {todos.map((todo) => (
-        <li key={todo._id}>{todo.title}</li>
-      ))}
-    </ul>
+The primary feature is the AI chat interface. Each chat connects to a Cloudflare Agent via WebSocket and supports:
+
+- Streaming message responses
+- Tool approval workflows (write_todos, ask_user)
+- Message editing and regeneration
+- File attachments (images, documents)
+- Sandbox integration (terminal, file explorer, preview)
+
+### Sandbox UI
+
+Each chat can have an associated Daytona sandbox with:
+
+- **PTY Terminal**: xterm.js with FitAddon, multiple sessions, streaming I/O via agent callable methods
+- **File Explorer**: Browse, download files/folders, delete entries
+- **Preview**: Live URL preview for running web apps
+- **SSH/Editor**: Open in VS Code or Cursor via SSH remote
+
+### State Management
+
+Jotai atoms manage shared UI state:
+
+- `chatSettingsAtom` -- model selection, system prompt, reasoning effort
+- `favoriteModelsAtom` -- persisted favorite model slugs
+- `dashboardAtom` -- dashboard layout preferences
+- `sandboxAtom` -- sandbox panel open/closed state
+
+## Queries
+
+```tsx
+import { useQuery } from "@tanstack/react-query";
+import { convexQuery } from "@convex-dev/react-query";
+import { api } from "@just-use-convex/backend/convex/_generated/api";
+
+function ChatView({ chatId }: { chatId: Id<"chats"> }) {
+  const { data: chat } = useQuery(
+    convexQuery(api.chats.index.get, { _id: chatId })
   );
+
+  if (!chat) return <LoadingSkeleton />;
+  return <ChatInterface chat={chat} />;
 }
 ```
 
-### Mutations
+## Mutations
 
 ```tsx
-import { useMutation } from "convex/react";
-import { api } from "@/convex/_generated/api";
+import { useMutation } from "@tanstack/react-query";
+import { useConvexMutation } from "@convex-dev/react-query";
 
-function CreateTodo() {
-  const create = useMutation(api.todos.create);
+function CreateChat() {
+  const createChat = useMutation({
+    mutationFn: useConvexMutation(api.chats.index.create),
+    onSuccess: () => toast.success("Chat created"),
+  });
 
-  const handleSubmit = async (title: string) => {
-    await create({ title, priority: "medium" });
-  };
-
-  return <TodoForm onSubmit={handleSubmit} />;
+  return <button onClick={() => createChat.mutateAsync({ title: "New Chat" })}>New</button>;
 }
 ```
 
 ## Type Safety
 
-Types flow from your Convex schema to the frontend:
+Types flow from your Convex schema to the frontend via generated API types:
 
 ```tsx
-import { api } from "@/convex/_generated/api";
-import type { Doc } from "@/convex/_generated/dataModel";
+import type { FunctionReturnType } from "convex/server";
+import { api } from "@just-use-convex/backend/convex/_generated/api";
 
-// Type is inferred from api.todos.list return type
-const todos = useQuery(api.todos.list, { filters: {} });
-
-// Explicit type for a todo document
-type Todo = Doc<"todos">;
-
-function TodoItem({ todo }: { todo: Todo }) {
-  // todo.title is typed as string
-  // todo.status is typed as "todo" | "in_progress" | "done"
-  return <div>{todo.title}</div>;
-}
+// Inferred from the API return type
+type Chat = FunctionReturnType<typeof api.chats.index.list>["page"][number];
+type ChatWithDetails = FunctionReturnType<typeof api.chats.index.get>;
 ```
 
 ## Conditional Queries
 
-Skip queries based on conditions:
-
 ```tsx
-function UserTodos({ userId }: { userId: string | null }) {
-  // Query only runs when userId is truthy
-  const todos = useQuery(
-    api.todos.listByUser,
-    userId ? { userId } : "skip"
-  );
+function ChatDetails({ chatId }: { chatId: Id<"chats"> | undefined }) {
+  const { data: chat } = useQuery({
+    ...convexQuery(api.chats.index.get, chatId ? { _id: chatId } : "skip"),
+    enabled: !!chatId,
+  });
 
-  if (!userId) return <p>Select a user</p>;
-  if (todos === undefined) return <Loading />;
-
-  return <TodoList todos={todos} />;
+  if (!chatId) return <p>Select a chat</p>;
+  if (!chat) return <LoadingSkeleton />;
+  return <ChatView chat={chat} />;
 }
 ```
 
 ## Real-Time Updates
 
-Convex queries are reactive by default:
+Convex queries are reactive by default. Chat lists, sandbox states, and stats all update in real-time:
 
 ```tsx
-function LiveTodoCount() {
-  // Automatically updates when any todo changes
-  const stats = useQuery(api.todos.stats.getOrgStats);
-
-  return <span>Total: {stats?.total ?? 0}</span>;
-}
-```
-
-## Error Handling
-
-```tsx
-function TodoList() {
-  const todos = useQuery(api.todos.list, { filters: {} });
-
-  // Handle loading
-  if (todos === undefined) {
-    return <LoadingSkeleton />;
-  }
-
-  // Handle empty state
-  if (todos.length === 0) {
-    return <EmptyState />;
-  }
-
-  return <ul>{/* ... */}</ul>;
-}
-```
-
-### With Error Boundaries
-
-```tsx
-import { ErrorBoundary } from "react-error-boundary";
-
-function App() {
-  return (
-    <ErrorBoundary fallback={<ErrorFallback />}>
-      <TodoList />
-    </ErrorBoundary>
+function ChatStats() {
+  const { data: stats } = useQuery(
+    convexQuery(api.chats.index.getMemberStats, {})
   );
+
+  return <span>Total chats: {stats?.total ?? 0}</span>;
 }
 ```
 
-Next, learn about [TanStack Query Integration](/docs/frontend/tanstack-query).
+## Performance Notes
+
+Heavy focus on preventing re-renders during AI streaming:
+
+- Custom memo comparisons (`areMessageItemPropsEqual`)
+- `useSyncExternalStore` for shared mutable state
+- Isolated `useChat`/`useAgentChat` hooks in separate React roots
+- Content-based comparison vs reference equality
+- Derive state during render, not in effects
+- Functional setState for stable callbacks
+
+Next, learn about [Custom Hooks](/docs/frontend/hooks).

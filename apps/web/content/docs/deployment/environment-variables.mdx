@@ -1,296 +1,200 @@
 ---
 title: Production Environment Variables
-description: Managing environment variables across deployment environments
+description: Managing environment variables across all deployment components
 ---
 
 # Production Environment Variables
 
-Properly managing environment variables is critical for security and functionality in production.
+This application has three deployment components, each with its own set of environment variables. All variables are validated at runtime using `@t3-oss/env-core` with Zod schemas.
 
-## Variable Categories
+## Frontend (`apps/web/.env`)
 
-### Public Variables
+Variables prefixed with `VITE_` are exposed to the client bundle.
 
-Variables that can be exposed to the client:
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `VITE_CONVEX_URL` | Yes | -- | Convex deployment URL (e.g., `https://<slug>.convex.cloud`) |
+| `VITE_CONVEX_SITE_URL` | Yes | -- | Convex site URL for HTTP actions (e.g., `https://<slug>.convex.site`) |
+| `VITE_SITE_URL` | No | `http://localhost:3001` | Your frontend application URL |
+| `VITE_AGENT_URL` | No | `http://localhost:1337` | Cloudflare Workers agent URL |
+| `VITE_DEFAULT_MODEL` | No | `openai/gpt-5.2-chat` | Default AI model slug |
 
 ```bash
-# Convex deployment URL (safe to expose)
+# apps/web/.env
 VITE_CONVEX_URL=https://your-deployment.convex.cloud
-
-# Public API keys (rate-limited by provider)
-VITE_POSTHOG_KEY=phc_xxxxx
-```
-
-### Private Variables
-
-Variables that must stay server-side only:
-
-```bash
-# Authentication secrets
-BETTER_AUTH_SECRET=your-secret-key
-
-# OAuth credentials
-GITHUB_CLIENT_SECRET=xxxxx
-GOOGLE_CLIENT_SECRET=xxxxx
-
-# Convex deploy key
-CONVEX_DEPLOY_KEY=prod:xxxxx
+VITE_CONVEX_SITE_URL=https://your-deployment.convex.site
+VITE_SITE_URL=https://yourapp.com
+VITE_AGENT_URL=https://your-agent.your-domain.workers.dev
+VITE_DEFAULT_MODEL=openai/gpt-5.2-chat
 ```
 
 <Callout type="error">
-Never prefix secrets with `VITE_` or `NEXT_PUBLIC_` - this exposes them to clients.
+Never prefix secrets with `VITE_` -- this exposes them to clients.
 </Callout>
+
+## Convex Backend (Convex Dashboard Environment Variables)
+
+Set these via the Convex dashboard or CLI. These are server-side only.
+
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `AGENT_URL` | No | `http://localhost:1337` | Agent endpoint URL |
+| `DAYTONA_API_KEY` | No | -- | Daytona API key for sandbox provisioning |
+| `DAYTONA_API_URL` | No | `https://app.daytona.io/api` | Daytona API endpoint |
+| `DAYTONA_TARGET` | No | `us` | Daytona region target |
+| `EXTERNAL_TOKEN` | No | `meow` | Shared token for agent-to-Convex auth |
+| `JWKS` | No | -- | JSON Web Key Set for JWT verification |
+| `SITE_URL` | No | `http://localhost:3001` | Frontend URL (for callbacks, CORS) |
+
+```bash
+# Set via CLI
+bunx convex env set AGENT_URL "https://your-agent.workers.dev"
+bunx convex env set EXTERNAL_TOKEN "your-secure-token"
+bunx convex env set JWKS '{"keys":[...]}'
+bunx convex env set SITE_URL "https://yourapp.com"
+
+# Optional: Daytona sandbox support
+bunx convex env set DAYTONA_API_KEY "your-daytona-key"
+bunx convex env set DAYTONA_API_URL "https://app.daytona.io/api"
+bunx convex env set DAYTONA_TARGET "us"
+```
+
+## Agent (`packages/agent/.dev.vars` or Alchemy Secrets)
+
+The agent runs on Cloudflare Workers. In development, use `.dev.vars`. In production, secrets are managed via Alchemy or the Cloudflare dashboard.
+
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `OPENROUTER_API_KEY` | Yes | -- | OpenRouter API key for AI model access |
+| `CONVEX_URL` | Yes | -- | Convex deployment URL |
+| `CONVEX_SITE_URL` | Yes | -- | Convex site URL |
+| `SITE_URL` | No | `http://localhost:3001` | Frontend URL |
+| `EXTERNAL_TOKEN` | No | `meow` | Shared token for Convex auth (must match backend) |
+| `DEFAULT_MODEL` | No | `openai/gpt-5.2-chat` | Default AI model slug |
+| `MAX_BACKGROUND_DURATION_MS` | No | `3600000` | Max background task duration (ms) |
+| `DAYTONA_API_KEY` | No | -- | Daytona API key for sandbox operations |
+| `DAYTONA_API_URL` | No | `https://app.daytona.io/api` | Daytona API endpoint |
+| `DAYTONA_TARGET` | No | `us` | Daytona region target |
+| `EXA_API_KEY` | No | -- | Exa API key for web search tool |
+| `COMPOSIO_API_KEY` | No | -- | Composio API key for tool integrations |
+| `VOLTAGENT_PUBLIC_KEY` | No | -- | VoltAgent observability public key |
+| `VOLTAGENT_SECRET_KEY` | No | -- | VoltAgent observability secret key |
+| `ALCHEMY_PASSWORD` | No | -- | Alchemy deployment password |
+
+```bash
+# packages/agent/.dev.vars (local development)
+OPENROUTER_API_KEY=sk-or-xxxxx
+CONVEX_URL=https://your-deployment.convex.cloud
+CONVEX_SITE_URL=https://your-deployment.convex.site
+SITE_URL=http://localhost:3001
+EXTERNAL_TOKEN=meow
+DEFAULT_MODEL=openai/gpt-5.2-chat
+EXA_API_KEY=your-exa-key
+DAYTONA_API_KEY=your-daytona-key
+```
 
 ## Setting Variables by Platform
 
-### Vercel
-
-**Dashboard Method:**
-
-1. Go to Project Settings → Environment Variables
-2. Add each variable with appropriate scope (Production/Preview/Development)
-3. Click Save
-
-**CLI Method:**
+### Vercel (Frontend)
 
 ```bash
-# Add a variable
-vercel env add BETTER_AUTH_SECRET production
+# Add variables
+vercel env add VITE_CONVEX_URL production
+vercel env add VITE_AGENT_URL production
 
 # List variables
 vercel env ls
 ```
 
-### Netlify
+### Convex Dashboard (Backend)
 
-**Dashboard Method:**
-
-1. Site Settings → Environment Variables
-2. Add variables with scope selection
-3. Save and redeploy
-
-**CLI Method:**
-
-```bash
-# Set variable
-netlify env:set BETTER_AUTH_SECRET "value"
-
-# Import from file
-netlify env:import .env.production
-```
-
-### Cloudflare Pages
-
-**Dashboard Method:**
-
-1. Settings → Environment Variables
-2. Add variables for Production and Preview
-
-**CLI Method:**
-
-```bash
-# Set secret
-wrangler secret put BETTER_AUTH_SECRET
-```
-
-### Convex Dashboard
-
-Set backend environment variables:
-
-1. Open your project at convex.dev
-2. Go to Settings → Environment Variables
+1. Open your project at [dashboard.convex.dev](https://dashboard.convex.dev)
+2. Go to Settings -> Environment Variables
 3. Add each variable
 
-**CLI Method:**
+Or via CLI:
 
 ```bash
-# Set variable
-bunx convex env set BETTER_AUTH_SECRET "value"
-
-# List variables
+bunx convex env set VARIABLE_NAME "value"
 bunx convex env list
-
-# Remove variable
-bunx convex env unset OLD_VARIABLE
 ```
 
-## Required Variables by Feature
+### Cloudflare (Agent)
 
-### Core Application
-
-| Variable | Where | Description |
-|----------|-------|-------------|
-| `VITE_CONVEX_URL` | Frontend | Convex deployment URL (e.g., `https://<slug>.convex.cloud`) |
-| `VITE_CONVEX_SITE_URL` | Frontend | Convex site URL for file serving (e.g., `https://<slug>.convex.site`) |
-| `VITE_SITE_URL` | Frontend | Your frontend application URL |
-| `CONVEX_DEPLOY_KEY` | CI/CD | Deploy authentication key from Convex dashboard |
-| `JWKS` | Convex | JSON Web Key Set for token validation |
-
-### Better Auth
-
-| Variable | Where | Description |
-|----------|-------|-------------|
-| `BETTER_AUTH_URL` | Both | Application base URL |
-| `BETTER_AUTH_SECRET` | Convex | Token signing secret |
-
-### Optional
-
-| Variable | Where | Description |
-|----------|-------|-------------|
-| `VITE_DATA_BUDDY_CLIENT_ID` | Frontend | DataBuddy analytics client ID |
-
-### OAuth Providers
-
-| Provider | Client ID | Client Secret |
-|----------|-----------|---------------|
-| GitHub | `GITHUB_CLIENT_ID` | `GITHUB_CLIENT_SECRET` |
-| Google | `GOOGLE_CLIENT_ID` | `GOOGLE_CLIENT_SECRET` |
-| Discord | `DISCORD_CLIENT_ID` | `DISCORD_CLIENT_SECRET` |
-
-## Environment-Specific Values
-
-### Development
+For production, set secrets via Alchemy config or the Cloudflare dashboard:
 
 ```bash
-CONVEX_URL=https://dev-deployment.convex.cloud
-BETTER_AUTH_URL=http://localhost:3000
+# Via wrangler (if not using Alchemy)
+wrangler secret put OPENROUTER_API_KEY
+wrangler secret put CONVEX_URL
+wrangler secret put EXTERNAL_TOKEN
 ```
 
-### Staging/Preview
+## Shared Secrets
 
-```bash
-CONVEX_URL=https://staging-deployment.convex.cloud
-BETTER_AUTH_URL=https://staging.yourapp.com
+The `EXTERNAL_TOKEN` must match between the Convex backend and the agent. This token authenticates agent-to-Convex communication.
+
+The `DAYTONA_API_KEY`, `DAYTONA_API_URL`, and `DAYTONA_TARGET` values should be consistent across the backend and agent if you want sandbox support.
+
+## Validation
+
+All environment variables are validated at startup using `@t3-oss/env-core` with Zod schemas defined in the `@just-use-convex/env` package:
+
+```
+packages/env/src/
+├── web.ts      # Frontend variables (VITE_ prefixed)
+├── backend.ts  # Convex backend variables
+└── agent.ts    # Agent variables
 ```
 
-### Production
-
-```bash
-CONVEX_URL=https://prod-deployment.convex.cloud
-BETTER_AUTH_URL=https://yourapp.com
-```
+Missing required variables will throw immediately at startup, preventing silent failures.
 
 ## OAuth Callback URLs
 
 Configure callback URLs for each environment:
 
-### GitHub
-
 ```
 # Development
-http://localhost:3000/api/auth/callback/github
+http://localhost:3001/api/auth/callback/github
+http://localhost:3001/api/auth/callback/google
 
 # Production
 https://yourapp.com/api/auth/callback/github
-```
-
-### Google
-
-Add to Authorized redirect URIs:
-
-```
-http://localhost:3000/api/auth/callback/google
 https://yourapp.com/api/auth/callback/google
-```
-
-## Secrets Management
-
-### Generating Secure Secrets
-
-```bash
-# Generate a 32-byte secret
-openssl rand -base64 32
-
-# Or using Node
-node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
-```
-
-### Rotating Secrets
-
-When rotating the `BETTER_AUTH_SECRET`:
-
-1. Generate a new secret
-2. Update in Convex: `bunx convex env set BETTER_AUTH_SECRET "new-secret"`
-3. Users will need to re-authenticate
-
-### Secret Rotation Checklist
-
-- [ ] Generate new secret
-- [ ] Update in Convex environment
-- [ ] Update in frontend hosting (if applicable)
-- [ ] Verify application works
-- [ ] Invalidate old sessions if needed
-- [ ] Document rotation date
-
-## Validation
-
-### Runtime Validation
-
-Add validation to catch missing variables early:
-
-```typescript
-// lib/env.ts
-function requireEnv(name: string): string {
-  const value = process.env[name];
-  if (!value) {
-    throw new Error(`Missing required environment variable: ${name}`);
-  }
-  return value;
-}
-
-export const env = {
-  convexUrl: requireEnv("CONVEX_URL"),
-  betterAuthUrl: requireEnv("BETTER_AUTH_URL"),
-};
-```
-
-### Build-time Validation
-
-Validate during build:
-
-```typescript
-// In your build script or vite.config.ts
-const required = ["VITE_CONVEX_URL"];
-
-for (const key of required) {
-  if (!process.env[key]) {
-    throw new Error(`Missing ${key} environment variable`);
-  }
-}
 ```
 
 ## Debugging
 
-### Check Current Values
-
 ```bash
-# Vercel
-vercel env ls
-
-# Convex
+# Check Convex env vars
 bunx convex env list
 
-# In application
-console.log("CONVEX_URL:", process.env.CONVEX_URL);
+# Check Vercel env vars
+vercel env ls
+
+# Verify frontend vars are loaded (in browser console)
+console.log(import.meta.env.VITE_CONVEX_URL)
 ```
 
 ### Common Issues
 
 **Variable not available in client:**
-- Ensure it's prefixed with `VITE_`
-- Rebuild after adding variable
-- Check that it's set for the correct environment
+- Ensure it is prefixed with `VITE_`
+- Rebuild after adding the variable
+- Check that it is set for the correct environment
 
-**Variable not available in Convex:**
-- Set via `bunx convex env set`
-- Redeploy after setting
-- Check variable name matches exactly
+**Agent cannot reach Convex:**
+- Verify `CONVEX_URL` and `CONVEX_SITE_URL` are set in agent secrets
+- Verify `EXTERNAL_TOKEN` matches between agent and Convex backend
+
+**Sandbox not working:**
+- Verify `DAYTONA_API_KEY` is set in both Convex backend and agent
+- Check `DAYTONA_API_URL` and `DAYTONA_TARGET` are consistent
 
 **OAuth callback errors:**
-- Verify callback URL matches exactly
-- Check for trailing slashes
+- Verify callback URL matches exactly (including protocol and port)
 - Ensure HTTPS in production
 
 ## Next Steps
 
-Your deployment is now fully configured. Review the [deployment overview](/docs/deployment/overview) for the complete deployment checklist.
+Review the [deployment overview](/docs/deployment/overview) for the complete deployment checklist.

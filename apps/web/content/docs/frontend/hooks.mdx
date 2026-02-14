@@ -1,314 +1,375 @@
 ---
 title: Custom Hooks
-description: Building reusable hooks for Convex data
+description: Reusable hooks for chat, sandbox, attachments, and model selection
 ---
 
 # Custom Hooks
 
-Custom hooks encapsulate data fetching logic, making components cleaner and logic reusable.
+Custom hooks encapsulate data fetching, mutations, and complex UI logic. The app provides hooks for chat interactions, sandbox management, file uploads, and AI model selection.
 
-## Query Hooks
+## Chat Hooks
 
-### Basic Query Hook
+### useChat (Agent Actions)
+
+Wraps an `AgentChatInstance` from `@cloudflare/ai-chat/react`. Provides submit, edit, regenerate, tool approval, and message extraction utilities.
 
 ```tsx
-// hooks/useTodoStats.ts
-import { useConvexQuery } from "@convex-dev/react-query";
-import { api } from "@/convex/_generated/api";
+// hooks/use-chat.ts
+import type { useAgentChat } from "@cloudflare/ai-chat/react";
 
-export function useTodoStats() {
-  const { data, isLoading, error } = useConvexQuery(
-    api.todos.stats.getOrgStats,
-    {}
-  );
+type AgentChatInstance = ReturnType<typeof useAgentChat>;
 
+export function useChat(chat: AgentChatInstance | null, agent: AgentConnection) {
+  // Returns:
   return {
-    stats: data,
+    status,         // "ready" | "streaming" | ...
+    error,          // Error | undefined
+    stop,           // () => void — stop streaming
+    messages,       // UIMessage[]
+    isStreaming,    // boolean
+    handleSubmit,   // ({ text, files }) => Promise<void>
+    handleToolApprovalResponse,  // approve/reject tool calls
+    handleRegenerate,            // (messageId) => regenerate from that point
+    handleEditMessage,           // (messageId, newText, files) => edit + re-send
+  };
+}
+```
+
+Helper exports for extracting structured data from messages:
+
+```tsx
+// Extract text content from a UIMessage
+extractMessageText(message: UIMessage): string
+
+// Extract file parts from a UIMessage
+extractMessageFiles(message: UIMessage): FileUIPart[]
+
+// Extract write_todos tool state from the last assistant message
+extractTodosFromMessage(message, isLastAssistantMessage): TodosState | null
+
+// Extract ask_user tool state from the last assistant message
+extractAskUserFromMessage(message, isLastAssistantMessage): AskUserState | null
+```
+
+### useMessageEditing
+
+Full editing flow for user messages, including file add/remove and keyboard shortcuts.
+
+```tsx
+export function useMessageEditing(message, onEditMessage?) {
+  return {
+    isEditing,
+    editedText, setEditedText,
+    editedFiles,
+    textareaRef, fileInputRef,
+    hasChanges,
+    handleStartEdit,
+    handleCancelEdit,
+    handleRemoveFile,
+    handleAddFiles,
+    handleConfirmEdit,    // Ctrl+Enter to confirm
+    handleKeyDown,        // Escape to cancel
+  };
+}
+```
+
+### useCopyToClipboard
+
+```tsx
+export function useCopyToClipboard(text: string) {
+  return { copied, handleCopy };  // copied resets after 2s
+}
+```
+
+### useChats / useChatsList
+
+Chat CRUD mutations and paginated listing via `useConvexMutation` and `useConvexPaginatedQuery`.
+
+```tsx
+// hooks/use-chats.ts
+export function useChats() {
+  return {
+    createChat,   // mutateAsync — create a new chat
+    updateChat,   // mutateAsync — update chat fields
+    deleteChat,   // mutateAsync — delete a chat
+    updateTitle,  // (id, title) => update just the title
+    togglePin,    // (id, isPinned) => pin/unpin
+    isCreating, isUpdating, isDeleting,
+  };
+}
+
+export function useChatsList(filters?: ChatFilters) {
+  // Returns useConvexPaginatedQuery result with cursor-based pagination
+  // initialNumItems: 20
+}
+
+// Single chat query
+export function useChat(chatId: Id<"chats"> | undefined) {
+  // Conditional convexQuery, skips when chatId is undefined
+}
+
+// Chat stats for the current member
+export function useChatStats() {
+  // Returns getMemberStats query
+}
+```
+
+Exported types derived from the API:
+
+```tsx
+export type Chat = FunctionReturnType<typeof api.chats.index.list>["page"][number];
+export type ChatWithDetails = FunctionReturnType<typeof api.chats.index.get>;
+export type ChatStats = FunctionReturnType<typeof api.chats.index.getMemberStats>;
+export type ChatFilters = FunctionArgs<typeof api.chats.index.list>["filters"];
+```
+
+## Sandbox Hooks
+
+### useChatSandbox
+
+Full sandbox UI state for a chat: SSH sessions, PTY terminal (xterm.js + FitAddon), file explorer, preview URLs. All terminal I/O streams through the agent's callable methods.
+
+```tsx
+// hooks/use-sandbox.ts
+export function useChatSandbox(chatId: Id<"chats">, agent: AgentConnection) {
+  return {
+    // Panel state
+    isOpen, open, close, toggle,
+
+    // SSH
+    sshSession,            // { ssh: { token, host, expiresAt } } | null
+    reconnectSsh,
+    openInEditor,          // (editor: "vscode" | "cursor") => open remote SSH
+
+    // Terminal (PTY via agent proxy)
+    terminalContainerRef,  // ref for xterm.js mount
+    terminalBackground,    // CSS color
+    terminalSessions,      // TerminalSession[] — active sessions
+    activeTerminalId,
+    switchTerminalSession,
+    createTerminalSession,
+    closeTerminalSession,
+    reconnectTerminal,
+    refreshTerminalSessions,
+    focusTerminal,
+
+    // File explorer
+    explorer,              // { path, entries: ExplorerEntry[] } | null
+    refreshExplorer,
+    navigateExplorer,
+    downloadFile,
+    downloadFolder,
+    deleteEntry,
+
+    // Preview
+    previewPort, previewUrl,
+    setPreviewPort,
+    createPreviewAccess,
+
+    // Loading states
+    isConnectingSsh,
+    isConnectingPreview,
+  };
+}
+```
+
+The terminal setup dynamically imports xterm.js and `@xterm/addon-fit`, opens a PTY session via `agent.call("openPtyTerminal")`, and streams output via `onChunk`. Input is batched at 25ms intervals and written via `agent.call("writePtyTerminal")`. A `ResizeObserver` keeps the terminal fitted and syncs dimensions to the remote PTY.
+
+Exported types:
+
+```tsx
+export type ExplorerEntry = { name, path, isDir, size, modifiedAt };
+export type ExplorerState = { path, entries: ExplorerEntry[] };
+export type TerminalSession = { id, active?, processId?, cwd?, cols?, rows?, createdAt? };
+```
+
+### useSandboxes / useSandboxesList
+
+Sandbox CRUD mutations and paginated listing, same pattern as `useChats`.
+
+```tsx
+// hooks/use-sandboxes.ts
+export function useSandboxes() {
+  return {
+    createSandbox,  // mutateAsync
+    updateSandbox,  // mutateAsync
+    deleteSandbox,  // mutateAsync
+    updateName,     // (id, name) shortcut
+    isCreating, isUpdating, isDeleting,
+  };
+}
+
+export function useSandboxesList(filters?: SandboxFilters) {
+  // Paginated query, initialNumItems: 20
+}
+
+export function useSandbox(sandboxId: Id<"sandboxes"> | undefined) {
+  // Conditional single-sandbox query
+}
+
+export function useSandboxStats() {
+  // Returns getUserStats query
+}
+```
+
+## Attachment Hooks
+
+### useAttachments
+
+Upload flow with XHR progress tracking, SHA-256 hashing for dedup, and Convex storage integration.
+
+```tsx
+// hooks/use-attachments.ts
+export function useAttachments() {
+  return {
+    uploadAttachment,   // (args: { fileBytes, fileName, contentType, onProgress?, signal? }) => Promise
+    deleteAttachment,   // mutateAsync
+    isUploading,        // true during any phase (URL gen, upload, hash creation)
+    isDeleting,
+  };
+}
+
+export function useAttachmentsList(filters?: AttachmentFilters) {
+  // Paginated query
+}
+```
+
+The upload pipeline:
+1. `generateUploadUrl` -- get a signed Convex upload URL
+2. `uploadBlobWithProgress` -- XHR upload with `onProgress` callback (0-100%)
+3. `toHexHash` -- SHA-256 hash via `crypto.subtle.digest`
+4. `createFromHash` -- dedup check + create attachment record
+
+Supports `AbortSignal` for cancellation.
+
+## Model Selection Hooks
+
+### useOpenRouterModels
+
+Fetches models from `/api/models`, caches in localStorage for 1 hour, groups by author. Filters out free-tier and models older than 1 year.
+
+```tsx
+// hooks/use-openrouter-models.ts
+export function useOpenRouterModels() {
+  return {
+    models,          // OpenRouterModel[] — all models
+    groupedModels,   // [author, OpenRouterModel[]][] — grouped by author
+    reasoningModels, // OpenRouterModel[] — models with reasoning support
     isLoading,
     error,
   };
 }
+
+export type OpenRouterModel = {
+  slug: string;          // e.g. "openai/gpt-5.2-chat"
+  name: string;
+  short_name: string;
+  author: string;
+  description: string;
+  context_length: number;
+  supports_reasoning: boolean;
+  created_at: string;
+  input_modalities?: string[];
+  output_modalities?: string[];
+  reasoning_config?: { ... };
+};
 ```
 
-### Paginated Query Hook
+### useModelFiltering
+
+Fuzzy search across models, provider grouping with logo mapping, favorites via Jotai `favoriteModelsAtom`.
 
 ```tsx
-// hooks/useTodosList.ts
-import { useConvexPaginatedQuery } from "@convex-dev/react-query";
-import { api } from "@/convex/_generated/api";
-
-export interface TodoFilters {
-  status?: "todo" | "in_progress" | "done";
-  priority?: "low" | "medium" | "high";
-  teamId?: string;
-  search?: string;
-}
-
-export function useTodosList(filters: TodoFilters = {}) {
-  const query = useConvexPaginatedQuery(
-    api.todos.list,
-    { filters },
-    { initialNumItems: 20 }
-  );
-
+// hooks/use-model-filtering.ts
+export function useModelFiltering({ groupedModels, models }) {
   return {
-    todos: query.results,
-    isLoading: query.status === "LoadingFirstPage",
-    isLoadingMore: query.status === "LoadingMore",
-    hasMore: query.status === "CanLoadMore",
-    loadMore: () => query.loadMore(20),
+    selectedAuthor,     // "all" | "favorites" | provider display name
+    setSelectedAuthor,
+    authors,            // Available filter options
+    filteredModels,     // [author, OpenRouterModel[]][] — filtered result
+    toggleFavorite,     // (slug) => add/remove from favorites
+    isFavorite,         // (slug) => boolean
+    favorites,          // string[] — favorite model slugs
   };
 }
+
+// Utility exports
+getProviderLabel(author: string): string | null     // Match author to known provider
+getProviderDisplayName(label: string): string        // Display name for filter tab
+getProviderLogoSlug(displayLabel: string): string    // Logo slug for provider icon
 ```
 
-### Conditional Query Hook
-
-```tsx
-// hooks/useTodo.ts
-import { useConvexQuery } from "@convex-dev/react-query";
-import { api } from "@/convex/_generated/api";
-
-export function useTodo(id: string | null) {
-  const { data, isLoading } = useConvexQuery(
-    api.todos.getById,
-    id ? { id } : "skip"
-  );
-
-  return {
-    todo: data,
-    isLoading: id ? isLoading : false,
-  };
-}
-```
-
-## Mutation Hooks
-
-### Single Mutation Hook
-
-```tsx
-// hooks/useCreateTodo.ts
-import { useConvexMutation } from "@convex-dev/react-query";
-import { useMutation } from "@tanstack/react-query";
-import { api } from "@/convex/_generated/api";
-import { toast } from "sonner";
-
-export function useCreateTodo() {
-  const createFn = useConvexMutation(api.todos.create);
-
-  return useMutation({
-    mutationFn: createFn,
-    onSuccess: () => {
-      toast.success("Todo created successfully");
-    },
-    onError: (error) => {
-      toast.error(`Failed to create todo: ${error.message}`);
-    },
-  });
-}
-```
-
-### Combined Mutations Hook
-
-```tsx
-// hooks/useTodoMutations.ts
-import { useConvexMutation } from "@convex-dev/react-query";
-import { useMutation } from "@tanstack/react-query";
-import { api } from "@/convex/_generated/api";
-import { toast } from "sonner";
-
-export function useTodoMutations() {
-  const createFn = useConvexMutation(api.todos.create);
-  const updateFn = useConvexMutation(api.todos.update);
-  const deleteFn = useConvexMutation(api.todos.remove);
-  const assignFn = useConvexMutation(api.todos.assignUsers);
-
-  const create = useMutation({
-    mutationFn: createFn,
-    onSuccess: () => toast.success("Todo created"),
-    onError: (e) => toast.error(`Create failed: ${e.message}`),
-  });
-
-  const update = useMutation({
-    mutationFn: updateFn,
-    onSuccess: () => toast.success("Todo updated"),
-    onError: (e) => toast.error(`Update failed: ${e.message}`),
-  });
-
-  const remove = useMutation({
-    mutationFn: deleteFn,
-    onSuccess: () => toast.success("Todo deleted"),
-    onError: (e) => toast.error(`Delete failed: ${e.message}`),
-  });
-
-  const assign = useMutation({
-    mutationFn: assignFn,
-    onSuccess: (_, variables) =>
-      toast.success(`Assigned ${variables.userIds.length} users`),
-    onError: (e) => toast.error(`Assignment failed: ${e.message}`),
-  });
-
-  return { create, update, remove, assign };
-}
-```
-
-## Specialized Hooks
-
-### Status Update Hook
-
-```tsx
-// hooks/useTodoStatus.ts
-import { useConvexMutation } from "@convex-dev/react-query";
-import { useMutation } from "@tanstack/react-query";
-import { api } from "@/convex/_generated/api";
-
-type Status = "todo" | "in_progress" | "done";
-
-export function useTodoStatus(todoId: string) {
-  const updateFn = useConvexMutation(api.todos.update);
-
-  const mutation = useMutation({
-    mutationFn: (status: Status) => updateFn({ id: todoId, status }),
-  });
-
-  return {
-    setStatus: mutation.mutate,
-    isPending: mutation.isPending,
-    markTodo: () => mutation.mutate("todo"),
-    markInProgress: () => mutation.mutate("in_progress"),
-    markDone: () => mutation.mutate("done"),
-  };
-}
-```
-
-### Kanban Drag Hook
-
-```tsx
-// hooks/useKanbanDrag.ts
-import { useTodoMutations } from "./useTodoMutations";
-
-export function useKanbanDrag() {
-  const { update } = useTodoMutations();
-
-  const onDragEnd = (result: DropResult) => {
-    if (!result.destination) return;
-
-    const todoId = result.draggableId;
-    const newStatus = result.destination.droppableId as Status;
-
-    update.mutate({ id: todoId, status: newStatus });
-  };
-
-  return { onDragEnd, isUpdating: update.isPending };
-}
-```
+Supported providers: Anthropic, OpenAI, Google, xAI, MiniMax, DeepSeek, Moonshot AI, Z-AI, Black Forest Labs.
 
 ## Auth Hooks
 
-### Current User Hook
+### Current User
 
 ```tsx
-// hooks/useCurrentUser.ts
-import { useSession } from "@/lib/auth";
-
 export function useCurrentUser() {
-  const { data: session, isPending } = useSession();
-
   return {
-    user: session?.user ?? null,
-    isLoading: isPending,
-    isAuthenticated: !!session,
-    organizationId: session?.session.activeOrganizationId,
-    teamId: session?.session.activeTeamId,
-    role: session?.session.organizationRole,
+    user,               // User object or null
+    isLoading,
+    isAuthenticated,
+    organizationId,     // Active org from session
+    teamId,
+    role,               // "owner" | "admin" | "member"
   };
 }
 ```
 
-### Permission Hook
+### Permissions
 
 ```tsx
-// hooks/usePermissions.ts
-import { useCurrentUser } from "./useCurrentUser";
-
 export function usePermissions() {
-  const { role, user } = useCurrentUser();
-
-  const isOwner = role === "owner";
-  const isAdmin = role === "admin" || isOwner;
-  const isMember = !!role;
-
-  const canManageMembers = isAdmin;
-  const canDeleteOrg = isOwner;
-  const canEditSettings = isAdmin;
-
-  const canEditResource = (resourceUserId: string) => {
-    return isAdmin || resourceUserId === user?.id;
-  };
-
   return {
-    isOwner,
-    isAdmin,
-    isMember,
+    isOwner, isAdmin, isMember,
     canManageMembers,
     canDeleteOrg,
     canEditSettings,
-    canEditResource,
+    canEditResource,    // (resourceUserId) => boolean
   };
 }
 ```
 
-## Hook Composition
+## Hook Patterns
 
-### Combined Data Hook
+### Mutation Pattern
+
+All mutation hooks follow the same structure using `useConvexMutation` + `useMutation`:
 
 ```tsx
-// hooks/useDashboard.ts
-import { useTodoStats } from "./useTodoStats";
-import { useTodosList } from "./useTodosList";
-import { useCurrentUser } from "./useCurrentUser";
-
-export function useDashboard() {
-  const user = useCurrentUser();
-  const stats = useTodoStats();
-  const recentTodos = useTodosList({ limit: 5 });
-
-  const isLoading = user.isLoading || stats.isLoading || recentTodos.isLoading;
-
-  return {
-    user: user.user,
-    stats: stats.stats,
-    recentTodos: recentTodos.todos,
-    isLoading,
-  };
-}
+const mutation = useMutation({
+  mutationFn: useConvexMutation(api.resource.index.action),
+  onSuccess: () => toast.success("Done"),
+  onError: (error: Error) => toast.error(error.message || "Failed"),
+});
 ```
 
-## Usage Examples
+### Paginated Query Pattern
+
+All list hooks use `useConvexPaginatedQuery` with cursor-based pagination:
 
 ```tsx
-// components/TodoList.tsx
-function TodoList() {
-  const { todos, isLoading, hasMore, loadMore } = useTodosList();
-  const { update, remove } = useTodoMutations();
-  const { canEditResource } = usePermissions();
-
-  if (isLoading) return <Loading />;
-
-  return (
-    <div>
-      {todos.map((todo) => (
-        <TodoItem
-          key={todo._id}
-          todo={todo}
-          canEdit={canEditResource(todo.userId)}
-          onUpdate={(data) => update.mutate({ id: todo._id, ...data })}
-          onDelete={() => remove.mutate({ id: todo._id })}
-        />
-      ))}
-
-      {hasMore && <button onClick={loadMore}>Load More</button>}
-    </div>
+export function useResourceList(filters = {}) {
+  return useConvexPaginatedQuery(
+    api.resource.index.list,
+    { filters },
+    { initialNumItems: 20 }
   );
+}
+```
+
+### Conditional Query Pattern
+
+Single-resource queries skip when the ID is undefined:
+
+```tsx
+export function useResource(id: Id<"table"> | undefined) {
+  return useQuery({
+    ...convexQuery(api.resource.index.get, id ? { _id: id } : "skip"),
+    enabled: !!id,
+  });
 }
 ```
 

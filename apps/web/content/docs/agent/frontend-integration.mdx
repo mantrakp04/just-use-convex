@@ -1,28 +1,44 @@
 ---
 title: Frontend Integration
-description: Integrating the AI agent with React using agents/react and custom providers
+description: Integrating the AI agent with React using isolated roots, useSyncExternalStore, and agents/react
 ---
 
 # Frontend Integration
 
-The frontend connects to the agent using `agents/react` and custom context providers for isolated chat management.
+The frontend connects to the agent using `agents/react` and `@cloudflare/ai-chat/react`, wrapped in a custom provider that creates isolated React root instances per chat to prevent re-render interference.
+
+## Architecture
+
+```
+AgentsProvider (context + token)
+├── AgentsContext.Provider
+│   └── Consumer components (useAgentInstance)
+└── Isolated React roots (hidden divs, one per chat)
+    └── AgentInstanceInner
+        ├── useAgent (WebSocket connection)
+        └── useAgentChat (message state)
+```
+
+Key design decisions:
+- **Isolated React roots** -- each chat's `useAgent` + `useAgentChat` hooks run in a separate `createRoot`, so streaming updates don't trigger re-renders in the main tree
+- **`useSyncExternalStore`** -- main tree subscribes to instance data via external store pattern, getting controlled updates
+- **Get-or-create pattern** -- connections persist across route changes; navigating away and back reuses the existing instance
 
 ## AgentsProvider
 
-The `AgentsProvider` creates isolated React roots for each chat instance to prevent re-render interference:
+The provider manages chat instances and exposes them via context:
 
 ```tsx
-// src/providers/agent.tsx
-import { useAgent } from "agents/react";
-import { useAgentChat } from "@cloudflare/ai-chat/react";
-
+// apps/web/src/providers/agent.tsx
 export function AgentsProvider({ children, token }: {
   children: ReactNode;
   token: string | null | undefined;
 }) {
+  const defaultSettings = useAtomValue(defaultChatSettingsAtom);
+
   const requestInstance = useCallback((chatId: string) => {
-    createIsolatedInstance(chatId, token);
-  }, [token]);
+    createIsolatedInstance(chatId, token, defaultSettings);
+  }, [token, defaultSettings]);
 
   const subscribe = useCallback((chatId: string, callback: () => void) => {
     if (!subscribersStore.has(chatId)) {
@@ -37,7 +53,7 @@ export function AgentsProvider({ children, token }: {
   }, []);
 
   return (
-    <AgentsContext.Provider value={{ requestInstance, subscribe, getSnapshot }}>
+    <AgentsContext.Provider value={{ requestInstance, subscribe, getSnapshot, defaultSettings }}>
       {children}
     </AgentsContext.Provider>
   );
@@ -46,125 +62,159 @@ export function AgentsProvider({ children, token }: {
 
 ### Isolated Instances
 
-Each chat runs in a separate React root to maintain state isolation:
+Each chat runs in a hidden DOM element with its own React root:
 
 ```tsx
-function createIsolatedInstance(chatId: string, token: string | null | undefined) {
-  if (isolatedInstances.has(chatId)) return;
+function createIsolatedInstance(chatId, token, defaultSettings) {
+  const existing = isolatedInstances.get(chatId);
+  if (existing) {
+    // Re-render existing instance with updated props
+    existing.root.render(createElement(AgentInstanceInner, { chatId, token, defaultSettings }));
+    return;
+  }
 
   const container = document.createElement("div");
   container.style.display = "none";
+  container.dataset.agentInstance = chatId;
   document.body.appendChild(container);
 
   const root = createRoot(container);
-  root.render(createElement(AgentInstanceInner, { chatId, token }));
-
+  root.render(createElement(AgentInstanceInner, { chatId, token, defaultSettings }));
   isolatedInstances.set(chatId, { root, container });
+}
+```
+
+### AgentInstanceInner
+
+The inner component creates the actual WebSocket connection and chat state:
+
+```tsx
+function AgentInstanceInner({ chatId, token, defaultSettings }) {
+  const agent = useAgent<ChatSettings>({
+    agent: "agent-worker",
+    name: chatId,
+    host: env.VITE_AGENT_URL,
+    onStateUpdate: handleStateUpdate,
+    onMessage: handleMessage,
+    query: {
+      token: token ?? null,
+      model: defaultSettings.model,
+      reasoningEffort: defaultSettings.reasoningEffort ?? null,
+      inputModalities: defaultSettings.inputModalities?.join(",") ?? null,
+    },
+  });
+
+  const chat = useAgentChat({
+    agent,
+    resume: true,
+    onError: handleError,
+    autoContinueAfterToolResult: true,
+  });
+
+  // Publishes instance data to the external store on mount and updates
+  useEffect(() => {
+    updateInstanceData(chatId, { chat, agent, settings, setSettings });
+  }, [chatId, chat, agent, setSettings]);
+
+  return null; // No visual output -- this runs in a hidden div
 }
 ```
 
 ## useAgentInstance Hook
 
-Access agent functionality from any component:
+The primary hook for consuming agent data in the main React tree:
 
 ```tsx
 export function useAgentInstance(chatId: string) {
   const { requestInstance, subscribe, getSnapshot } = useAgentsContext();
 
+  // Request the instance on mount (get-or-create)
   useEffect(() => {
     requestInstance(chatId);
   }, [chatId, requestInstance]);
 
+  // Subscribe via useSyncExternalStore for tear-free reads
   const subscribeToChat = useCallback(
     (callback: () => void) => subscribe(chatId, callback),
     [chatId, subscribe]
   );
-
   const getSnapshotForChat = useCallback(
     () => getSnapshot(chatId),
     [chatId, getSnapshot]
   );
 
-  const data = useSyncExternalStore(subscribeToChat, getSnapshotForChat);
+  const data = useSyncExternalStore(subscribeToChat, getSnapshotForChat, getSnapshotForChat);
 
   return {
-    chat: data?.chat ?? null,
-    settings: data?.settings ?? {},
+    chat: data?.chat ?? null,       // AgentChatInstance (messages, sendMessage, etc.)
+    agent: data?.agent ?? null,     // AgentConnection (setState, WebSocket)
+    settings: data?.settings ?? {}, // Current ChatSettings
     setSettings: data?.setSettings ?? (() => {}),
     isReady: !!data?.chat,
   };
 }
 ```
 
-## Using the Agent
+### Instance Data Shape
+
+```ts
+type InstanceData = {
+  chat: AgentChatInstance | null;    // useAgentChat return value
+  agent: AgentConnection | null;     // useAgent return value
+  settings: ChatSettings;            // model, reasoningEffort, inputModalities
+  setSettings: (settingsOrFn: ChatSettings | ((prev: ChatSettings) => ChatSettings)) => void;
+};
+```
+
+## Settings Sync
+
+Settings flow bidirectionally between frontend and agent:
+
+```tsx
+const setSettings = useCallback((settingsOrFn) => {
+  const next = typeof settingsOrFn === "function" ? settingsOrFn(prev) : settingsOrFn;
+  // 1. Update local state immediately for responsive UI
+  settingsRef.current = next;
+  updateInstanceData(chatId, { chat, agent, settings: next, setSettings });
+  // 2. Sync to agent via WebSocket
+  agentRef.current?.setState(next);
+}, [chatId]);
+```
+
+Server-initiated state updates (from `onStateUpdate` with `source === "server"`) also flow back to update the local store.
+
+## Usage Examples
 
 ### Basic Chat Page
 
 ```tsx
-// src/routes/(protected)/chats/$chatId.tsx
 export default function ChatPage() {
   const { chatId } = useParams();
   const { chat, settings, setSettings, isReady } = useAgentInstance(chatId);
 
-  if (!isReady) {
-    return <LoadingSpinner />;
-  }
+  if (!isReady) return <ChatSkeleton />;
 
   return (
     <div className="flex flex-col h-full">
       <MessageList messages={chat.messages} />
-      <ChatInput
-        onSend={(message) => chat.sendMessage(message)}
-        settings={settings}
-        onSettingsChange={setSettings}
-      />
+      <ChatInput onSend={(message) => chat.sendMessage(message)} />
     </div>
-  );
-}
-```
-
-### Sending Messages
-
-```tsx
-function ChatInput({ onSend, settings, onSettingsChange }) {
-  const [input, setInput] = useState("");
-
-  const handleSubmit = () => {
-    onSend({ content: input });
-    setInput("");
-  };
-
-  return (
-    <form onSubmit={handleSubmit}>
-      <input
-        value={input}
-        onChange={(e) => setInput(e.target.value)}
-        placeholder="Type a message..."
-      />
-      <button type="submit">Send</button>
-    </form>
   );
 }
 ```
 
 ### Model Selection
 
-Update the model through settings:
-
 ```tsx
-function ModelSelector({ settings, onSettingsChange }) {
-  const models = useOpenRouterModels();
+function ModelSelector() {
+  const { settings, setSettings } = useAgentInstance(chatId);
 
   return (
     <select
       value={settings.model}
-      onChange={(e) => onSettingsChange({ ...settings, model: e.target.value })}
+      onChange={(e) => setSettings((prev) => ({ ...prev, model: e.target.value }))}
     >
-      {models.map((model) => (
-        <option key={model.id} value={model.id}>
-          {model.name}
-        </option>
-      ))}
+      {models.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
     </select>
   );
 }
@@ -172,113 +222,62 @@ function ModelSelector({ settings, onSettingsChange }) {
 
 ### Reasoning Effort
 
-For models that support extended thinking:
-
 ```tsx
-function ReasoningSelector({ settings, onSettingsChange }) {
-  const efforts = ["low", "medium", "high"] as const;
+function ReasoningSelector() {
+  const { settings, setSettings } = useAgentInstance(chatId);
 
   return (
     <select
       value={settings.reasoningEffort}
       onChange={(e) =>
-        onSettingsChange({
-          ...settings,
-          reasoningEffort: e.target.value as "low" | "medium" | "high",
-        })
+        setSettings((prev) => ({ ...prev, reasoningEffort: e.target.value }))
       }
     >
-      {efforts.map((effort) => (
-        <option key={effort} value={effort}>
-          {effort}
-        </option>
-      ))}
+      <option value="low">Low</option>
+      <option value="medium">Medium</option>
+      <option value="high">High</option>
     </select>
   );
 }
 ```
 
-## Displaying Messages
+## Message Parts
 
-### Message Types
+Messages from the agent contain typed parts for rendering:
 
-The agent streams different message types:
+| Part Type | Description | Rendering |
+|-----------|-------------|-----------|
+| `text` | Streamed text content | Markdown renderer |
+| `reasoning` | Thinking/reasoning tokens | Collapsible details block |
+| `tool-invocation` | Tool call with args + result | Tool-specific UI components |
 
-```tsx
-type Message = {
-  id: string;
-  role: "user" | "assistant";
-  content: string;
-  parts?: MessagePart[];
+### Tool Invocation Types
+
+Tool invocations carry a `toolName` that determines the UI:
+
+- **`ask_user`** -- renders structured question cards with selectable options. User response is sent back via the tool approval flow.
+- **`web_search`** -- displays search results with titles, URLs, and snippets
+- **`write_todos` / `update_todo`** -- renders a step-by-step plan with status indicators
+- **`task`** -- shows sub-agent delegation with streamed progress
+- **Sandbox tools** (`list`, `read`, `write`, `edit`, `exec`, etc.) -- rendered inline via the sub-agent's tool results
+
+### Tool Approval (ask_user)
+
+The `ask_user` tool uses the approval mechanism. When the tool fires, the frontend renders a question card. The user's response is sent back as a JSON-encoded `AskUserResult`:
+
+```ts
+type AskUserResult = {
+  answers: Record<string, {
+    selectedIds: string[];
+    customText?: string;
+  }>;
+  timestamp: number;
 };
-
-type MessagePart =
-  | { type: "text"; text: string }
-  | { type: "reasoning"; reasoning: string }
-  | { type: "tool-invocation"; toolName: string; args: unknown; result?: unknown };
-```
-
-### Rendering Messages
-
-```tsx
-function MessageItem({ message }) {
-  return (
-    <div className={`message ${message.role}`}>
-      {message.parts?.map((part, i) => (
-        <div key={i}>
-          {part.type === "text" && <p>{part.text}</p>}
-          {part.type === "reasoning" && (
-            <details>
-              <summary>Thinking...</summary>
-              <pre>{part.reasoning}</pre>
-            </details>
-          )}
-          {part.type === "tool-invocation" && (
-            <ToolInvocation
-              name={part.toolName}
-              args={part.args}
-              result={part.result}
-            />
-          )}
-        </div>
-      ))}
-    </div>
-  );
-}
-```
-
-### Tool Outputs
-
-Extract and display tool outputs:
-
-```tsx
-function extractToolOutputs(messages) {
-  return messages
-    .flatMap((m) => m.parts ?? [])
-    .filter((p) => p.type === "tool-invocation" && p.result)
-    .map((p) => ({ name: p.toolName, output: p.result }));
-}
-
-// Example: Display todos from write_todos tool
-function TodosFromAgent({ messages }) {
-  const outputs = extractToolOutputs(messages);
-  const todos = outputs
-    .filter((o) => o.name === "write_todos")
-    .flatMap((o) => o.output.todos);
-
-  return (
-    <ul>
-      {todos.map((todo) => (
-        <li key={todo.id}>{todo.title}</li>
-      ))}
-    </ul>
-  );
-}
 ```
 
 ## Provider Setup
 
-Wrap your chat routes with the provider:
+Wrap chat routes with the provider, passing the auth token:
 
 ```tsx
 // src/routes/(protected)/chats/route.tsx
@@ -295,23 +294,28 @@ export default function ChatsLayout() {
 }
 ```
 
+## SSR / Hydration Notes
+
+- The `AgentsProvider` accepts `token` as a prop to handle SSR scenarios where auth state must be passed from server to client
+- Isolated React roots are only created on the client (they require `document.createElement`)
+- `useSyncExternalStore` accepts a server snapshot (same as client snapshot) for hydration safety
+- Default settings come from a Jotai atom (`defaultChatSettingsAtom`), which can be hydrated from server state
+
 ## File Structure
 
 ```
 apps/web/src/
 ├── providers/
-│   └── agent.tsx           # AgentsProvider and hooks
+│   └── agent.tsx           # AgentsProvider, useAgentInstance, isolated roots
+├── store/
+│   └── models.ts           # defaultChatSettingsAtom (Jotai)
 ├── components/chat/
-│   ├── chat-input.tsx      # Message input component
-│   ├── message-item.tsx    # Message display
-│   ├── chat-model-selector.tsx
-│   └── reasoning-effort-selector.tsx
-├── hooks/
-│   ├── use-chats.ts        # Convex chat operations
-│   └── use-openrouter-models.ts
+│   ├── chat-input.tsx      # Message input
+│   ├── message-item.tsx    # Message rendering with parts
+│   └── ...                 # Tool-specific UI components
 └── routes/(protected)/chats/
     ├── route.tsx           # Layout with AgentsProvider
-    └── $chatId.tsx         # Chat page
+    └── $chatId.tsx         # Chat page using useAgentInstance
 ```
 
-Next, learn about [Configuration](/docs/agent/configuration).
+Return to [Overview](/docs/agent/overview) or see [Configuration](/docs/agent/configuration).
