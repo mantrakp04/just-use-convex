@@ -9,7 +9,6 @@ import {
   globSchema,
   grepSchema,
   listSchema,
-  readLogsSchema,
   readSchema,
   statefulCodeExecSchema,
   writeSchema,
@@ -121,69 +120,14 @@ export async function createDaytonaToolkit(daytona: Daytona, sandbox: Sandbox): 
   const exec = createTool({
     name: 'exec',
     description:
-      'Execute shell commands in a Daytona sandbox terminal session. Set background=true for long-running sessions.',
+      'Execute shell commands in a Daytona sandbox terminal session.',
     parameters: execSchema,
     execute: async (input) => {
-
-      if (input.background) {
-        const existingSession = await sandbox.process.getSession(input.terminalId).catch(() => null);
-        if (!existingSession) {
-          await sandbox.process.createSession(input.terminalId);
-        }
-
-        const result = await sandbox.process.executeSessionCommand(input.terminalId, {
-          command: input.command,
-          runAsync: true,
-        });
-
-        return {
-          commandId: result.cmdId,
-          status: 'running',
-        };
-      }
-
       const result = await sandbox.process.executeCommand(input.command);
 
       return {
         exitCode: result.exitCode,
         stdout: result.result,
-      };
-    },
-  });
-
-  const read_terminal_logs = createTool({
-    name: 'read_terminal_logs',
-    description:
-      'Read combined output logs for the latest command in a terminal session with line offset/limit.',
-    parameters: readLogsSchema,
-    execute: async (input) => {
-      const session = await sandbox.process.getSession(input.terminalId);
-      const commandId = session.commands.at(-1)?.id;
-      if (!commandId) {
-        return {
-          hasMore: false,
-          output: '',
-          commandId: null,
-        };
-      }
-
-      const logs = await sandbox.process.getSessionCommandLogs(input.terminalId, commandId);
-      const output = logs.output ?? '';
-      const stdout = logs.stdout ?? '';
-      const stderr = logs.stderr ?? '';
-      const slicedStdout = sliceByOffsetLimit(stdout, input.offset, input.limit);
-      const slicedStderr = sliceByOffsetLimit(stderr, input.offset, input.limit);
-      const combined = output.length > 0 ? output : [stdout, stderr].join('\n');
-      const combinedSlice = sliceByOffsetLimit(combined, input.offset, input.limit);
-
-      return {
-        commandId,
-        output: combinedSlice.text,
-        outputTotalLines: combinedSlice.totalLines,
-        outputReturnedLines: combinedSlice.returnedLines,
-        outputHasMore: combinedSlice.hasMore,
-        stdout: slicedStdout.text,
-        stderr: slicedStderr.text,
       };
     },
   });
@@ -221,7 +165,6 @@ export async function createDaytonaToolkit(daytona: Daytona, sandbox: Sandbox): 
       grep,
       generate_download_url,
       exec,
-      read_terminal_logs,
       stateful_code_exec,
     ],
   };

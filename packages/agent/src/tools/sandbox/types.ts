@@ -91,27 +91,7 @@ export const generateDownloadUrlSchema = z.object({
 
 export const execSchema = z.object({
   terminalId: ptyTerminalIdSchema,
-  command: z.string().describe('Shell command to execute'),
-  background: z
-    .boolean()
-    .default(false)
-    .describe('Run asynchronously in a long-running session'),
-});
-
-export const readLogsSchema = z.object({
-  terminalId: z.string().describe('Terminal session ID to read logs from'),
-  offset: z
-    .number()
-    .int()
-    .min(0)
-    .default(DEFAULT_LIST_OFFSET)
-    .describe('Line offset to start reading logs from'),
-  limit: z
-    .number()
-    .int()
-    .min(1)
-    .default(DEFAULT_LIST_LIMIT)
-    .describe('Maximum number of log lines to return'),
+  command: z.string().describe('Shell command to execute')
 });
 
 export const statefulCodeExecSchema = z.object({
