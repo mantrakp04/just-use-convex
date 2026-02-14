@@ -25,14 +25,13 @@ const textDecoder = new TextDecoder();
 
 export class SandboxPtyService {
   constructor(
-    private readonly connectionId: string,
     private readonly getSandbox: () => Promise<Sandbox>,
   ) {}
 
   async openPtyTerminal(input: PtySessionCreateInput): Promise<OpenPtyTerminalResult> {
     const terminalId = input.terminalId ?? DEFAULT_TERMINAL_ID;
     const sandbox = await this.getSandbox();
-    await getOrCreatePtySession(sandbox, this.connectionId, terminalId, {
+    await getOrCreatePtySession(sandbox, terminalId, {
       terminalId,
       cols: input.cols,
       rows: input.rows,
@@ -58,7 +57,7 @@ export class SandboxPtyService {
 
   async writePtyTerminal(input: XtermWriteInput): Promise<WritePtyTerminalResult> {
     const sandbox = await this.getSandbox();
-    const state = await getOrCreatePtySession(sandbox, this.connectionId, input.terminalId, {
+    const state = await getOrCreatePtySession(sandbox, input.terminalId, {
       terminalId: input.terminalId,
       cols: input.cols,
       rows: input.rows,
@@ -75,7 +74,7 @@ export class SandboxPtyService {
 
   async readPtyTerminal(input: XtermReadInput): Promise<ReadPtyTerminalResult> {
     const sandbox = await this.getSandbox();
-    const state = await getOrCreatePtySession(sandbox, this.connectionId, input.terminalId, {
+    const state = await getOrCreatePtySession(sandbox, input.terminalId, {
       terminalId: input.terminalId,
     });
 
@@ -109,7 +108,7 @@ export class SandboxPtyService {
   async resizePtyTerminal(input: XtermResizeInput): Promise<ResizePtyTerminalResult> {
     const sandbox = await this.getSandbox();
     await sandbox.process.resizePtySession(input.terminalId, input.cols, input.rows);
-    await getOrCreatePtySession(sandbox, this.connectionId, input.terminalId, {
+    await getOrCreatePtySession(sandbox, input.terminalId, {
       terminalId: input.terminalId,
     });
 
@@ -121,7 +120,7 @@ export class SandboxPtyService {
   async closePtyTerminal(input: XtermCloseInput): Promise<ClosePtyTerminalResult> {
     const sandbox = await this.getSandbox();
     await sandbox.process.killPtySession(input.terminalId).catch(() => undefined);
-    deletePtySession(this.connectionId, input.terminalId);
+    deletePtySession(sandbox.id, input.terminalId);
 
     return {
       terminalId: input.terminalId,
@@ -130,17 +129,16 @@ export class SandboxPtyService {
   }
 }
 
-function getPtySessionKey(connectionId: string, terminalId: string) {
-  return `${connectionId}:${terminalId}`;
+function getPtySessionKey(sandboxId: string, terminalId: string) {
+  return `${sandboxId}:${terminalId}`;
 }
 
 async function getOrCreatePtySession(
   sandbox: Sandbox,
-  connectionId: string,
   terminalId: string,
   input: Pick<PtySessionCreateInput, "terminalId"> & Partial<PtySessionCreateInput>
 ) {
-  const key = getPtySessionKey(connectionId, terminalId);
+  const key = getPtySessionKey(sandbox.id, terminalId);
   const existing = ptySessions.get(key);
   if (existing) {
     return existing;
@@ -203,8 +201,8 @@ function decodePtyData(raw: unknown): string {
   return "";
 }
 
-function deletePtySession(connectionId: string, terminalId: string) {
-  const key = getPtySessionKey(connectionId, terminalId);
+function deletePtySession(sandboxId: string, terminalId: string) {
+  const key = getPtySessionKey(sandboxId, terminalId);
   const state = ptySessions.get(key);
   if (!state) {
     return;

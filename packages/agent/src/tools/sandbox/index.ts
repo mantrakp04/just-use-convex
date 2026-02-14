@@ -16,18 +16,15 @@ import {
   writeSchema,
 } from './types';
 
-const daytona = new Daytona();
-const sandboxConnections = new Map<string, Sandbox>();
 const codeInterpreterContexts = new Map<string, InterpreterContext>();
 
-export async function createDaytonaToolkit(connectionId: string): Promise<Toolkit> {
+export async function createDaytonaToolkit(daytona: Daytona, sandbox: Sandbox): Promise<Toolkit> {
   const list = createTool({
     name: 'list',
     description:
       'List files and directories in the configured Daytona sandbox path. Returns entries with metadata.',
     parameters: listSchema,
     execute: async (input) => {
-      const sandbox = await getSandboxConnection(connectionId);
       return sandbox.fs.listFiles(input.path);
     },
   });
@@ -37,7 +34,6 @@ export async function createDaytonaToolkit(connectionId: string): Promise<Toolki
     description: 'Read file contents from the configured Daytona sandbox with line offset and limit.',
     parameters: readSchema,
     execute: async (input) => {
-      const sandbox = await getSandboxConnection(connectionId);
       const fileBuffer = await sandbox.fs.downloadFile(input.path);
       const slice = sliceByOffsetLimit(fileBuffer.toString('utf8'), input.offset, input.limit);
 
@@ -55,7 +51,6 @@ export async function createDaytonaToolkit(connectionId: string): Promise<Toolki
     description: 'Write or overwrite a file in the configured Daytona sandbox.',
     parameters: writeSchema,
     execute: async (input) => {
-      const sandbox = await getSandboxConnection(connectionId);
       await sandbox.fs.uploadFile(input.content, input.path);
       return {
         bytes: Buffer.from(input.content).length,
@@ -70,7 +65,6 @@ export async function createDaytonaToolkit(connectionId: string): Promise<Toolki
       'Perform text replacement in a file inside the configured Daytona sandbox with optional replaceAll.',
     parameters: editSchema,
     execute: async (input) => {
-      const sandbox = await getSandboxConnection(connectionId);
       const fileBuffer = await sandbox.fs.downloadFile(input.path);
       const current = fileBuffer.toString('utf8');
       const replaced = replaceInText(current, input.oldText, input.newText, input.replaceAll);
@@ -89,7 +83,6 @@ export async function createDaytonaToolkit(connectionId: string): Promise<Toolki
     description: 'Find files matching a glob pattern inside a directory.',
     parameters: globSchema,
     execute: async (input) => {
-      const sandbox = await getSandboxConnection(connectionId);
       const found = await sandbox.fs.searchFiles(input.path, input.pattern);
 
       return {
@@ -104,7 +97,6 @@ export async function createDaytonaToolkit(connectionId: string): Promise<Toolki
     description: 'Search for text pattern matches in files inside a directory.',
     parameters: grepSchema,
     execute: async (input) => {
-      const sandbox = await getSandboxConnection(connectionId);
       const matches = await sandbox.fs.findFiles(input.path, input.pattern);
 
       return {
@@ -119,7 +111,6 @@ export async function createDaytonaToolkit(connectionId: string): Promise<Toolki
     description: 'Generate a direct download URL for a sandbox file.',
     parameters: generateDownloadUrlSchema,
     execute: async (input) => {
-      const sandbox = await getSandboxConnection(connectionId);
       const baseUrl = await daytona.getProxyToolboxUrl(sandbox.id, sandbox.target);
       const url = new URL(`${baseUrl.replace(/\/$/, '')}/files/download`);
       url.searchParams.set('path', input.path);
@@ -134,7 +125,6 @@ export async function createDaytonaToolkit(connectionId: string): Promise<Toolki
       'Execute shell commands in a Daytona sandbox terminal session. Set background=true for long-running sessions.',
     parameters: execSchema,
     execute: async (input) => {
-      const sandbox = await getSandboxConnection(connectionId);
 
       if (input.background) {
         const existingSession = await sandbox.process.getSession(input.terminalId).catch(() => null);
@@ -168,7 +158,6 @@ export async function createDaytonaToolkit(connectionId: string): Promise<Toolki
       'Read combined output logs for the latest command in a terminal session with line offset/limit.',
     parameters: readLogsSchema,
     execute: async (input) => {
-      const sandbox = await getSandboxConnection(connectionId);
       const session = await sandbox.process.getSession(input.terminalId);
       const commandId = session.commands.at(-1)?.id;
       if (!commandId) {
@@ -206,7 +195,6 @@ export async function createDaytonaToolkit(connectionId: string): Promise<Toolki
       'Run persistent Python code in an isolated notebook-like context. Reuse context by notebookId.',
     parameters: statefulCodeExecSchema,
     execute: async (input) => {
-      const sandbox = await getSandboxConnection(connectionId);
       const context = await getCodeInterpreterContext(sandbox, input.notebookId);
 
       const result = await sandbox.codeInterpreter.runCode(input.code, { context });
@@ -238,24 +226,6 @@ export async function createDaytonaToolkit(connectionId: string): Promise<Toolki
       stateful_code_exec,
     ],
   };
-}
-
-async function getSandboxConnection(connectionId: string) {
-  const existing = sandboxConnections.get(connectionId);
-
-  if (existing) {
-    return existing;
-  }
-
-  const sandbox = await daytona.get(connectionId);
-  sandboxConnections.set(connectionId, sandbox);
-
-  try {
-    return sandbox;
-  } catch (error) {
-    sandboxConnections.delete(connectionId);
-    throw error;
-  }
 }
 
 async function getCodeInterpreterContext(sandbox: Sandbox, notebookId: string) {
@@ -316,6 +286,6 @@ function replaceInText(input: string, oldText: string, newText: string, replaceA
   };
 }
 
-export function createSandboxPtyFunctions(connectionId: string) {
-  return new SandboxPtyService(connectionId, () => getSandboxConnection(connectionId));
+export function createSandboxPtyFunctions(sandbox: Sandbox) {
+  return new SandboxPtyService(() => Promise.resolve(sandbox));
 }

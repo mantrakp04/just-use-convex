@@ -23,7 +23,7 @@
   },
   "vectorize": [
     {
-      "binding": "VECTORIZE_CHAT_MESSAGES",
+      "binding": "vectorizeChatMessages",
       "index_name": "chat-messages",
       "remote": true
     }

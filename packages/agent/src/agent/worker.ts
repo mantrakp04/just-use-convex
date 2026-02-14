@@ -49,6 +49,11 @@ import {
   indexMessagesInVectorStore,
 } from "./vectorize";
 import { createSandboxPtyFunctions, createDaytonaToolkit } from "../tools/sandbox";
+import { Daytona, type Sandbox } from "@daytonaio/sdk";
+
+type CallableFunctionInstance = object;
+type CallableServiceMethodsMap = Record<string, (...args: unknown[]) => unknown>;
+type CallableServiceMethod = keyof CallableServiceMethodsMap;
 
 export class AgentWorker extends AIChatAgent<typeof worker.Env, AgentArgs> {
   private convexAdapter: ConvexAdapter | null = null;
@@ -56,6 +61,10 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, AgentArgs> {
   private backgroundTaskStore = new BackgroundTaskStore(this.ctx.waitUntil.bind(this.ctx));
   private truncatedOutputStore = new TruncatedOutputStore();
   private chatDoc: FunctionReturnType<typeof api.chats.index.get> | null = null;
+  private callableFunctions: CallableFunctionInstance[] = [];
+  private didRegisterCallableFunctions = false;
+  private daytona: Daytona | null = null;
+  private sandbox: Sandbox | null = null;
 
   private async _init(args?: AgentArgs): Promise<void> {
     if (args) {
@@ -86,6 +95,7 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, AgentArgs> {
         ...nextState,
       });
     }
+    this._registerCallableFunctions();
 
     if (!this.convexAdapter) {
       const activeTokenConfig = tokenConfig ?? this.state?.tokenConfig;
@@ -94,17 +104,33 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, AgentArgs> {
       }
       this.convexAdapter = await createConvexAdapter(this.env.CONVEX_URL, activeTokenConfig);
 
-      const getFn = this.convexAdapter.getTokenType() === "ext"
-        ? api.chats.index.getExt
-        : api.chats.index.get;
-      const chat = await this.convexAdapter.query(getFn, {
-        _id: this.name as Id<"chats">,
-      });
-      if (!chat) {
-        throw new Error("Unauthorized: No chat found");
-      }
-      this.chatDoc = chat;
     }
+
+    const getFn = this.convexAdapter.getTokenType() === "ext"
+    ? api.chats.index.getExt
+    : api.chats.index.get;
+    const chat = await this.convexAdapter.query(getFn, {
+      _id: this.name as Id<"chats">,
+    });
+    if (!chat) {
+      throw new Error("Unauthorized: No chat found");
+    }
+    this.chatDoc = chat;
+
+    if (!this.daytona) {
+      this.daytona = new Daytona({
+        apiKey: this.env.DAYTONA_API_KEY ?? '',
+        apiUrl: this.env.DAYTONA_API_URL ?? '',
+        target: this.env.DAYTONA_TARGET ?? '',
+      });
+    }
+    if (!this.sandbox && this.chatDoc?.sandboxId) {
+      this.sandbox = await this.daytona.get(this.chatDoc?.sandboxId);
+    }
+
+    this.callableFunctions = [
+      ...(this.sandbox ? [createSandboxPtyFunctions(this.sandbox)] : []),
+    ];
 
     if (model || reasoningEffort || inputModalities || tokenConfig) {
       await this.ctx.storage.put("chatState", {
@@ -129,13 +155,18 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, AgentArgs> {
       );
     }
 
+    if (!this.sandbox || !this.daytona || !this.state.model) {
+      throw new Error("Daytona or sandbox not found");
+    }
+    const model = this.state.model;
+
     const subagents = (await Promise.all([
-      createDaytonaToolkit(this.name),
+      createDaytonaToolkit(this.daytona, this.sandbox),
     ]) satisfies Toolkit[]).map((toolkit) =>
         new Agent({
           name: toolkit.name,
           purpose: toolkit.description,
-          model: createAiClient(this.state.model!, this.state.reasoningEffort),
+          model: createAiClient(model, this.state.reasoningEffort),
           instructions: toolkit.instructions ?? '',
           tools: toolkit.tools,
         })
@@ -144,7 +175,7 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, AgentArgs> {
     const agent = new PlanAgent({
       name: "Assistant",
       systemPrompt: SYSTEM_PROMPT,
-      model: createAiClient(this.state.model!, this.state.reasoningEffort),
+      model: createAiClient(model, this.state.reasoningEffort),
       tools: withBackgroundTaskTools([
         createWebSearchToolkit(),
         createAskUserToolkit(),
@@ -246,6 +277,46 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, AgentArgs> {
       writable: true,
       configurable: true,
     });
+  }
+
+  private async _registerCallableFunctions() {
+    if (this.didRegisterCallableFunctions) {
+      return;
+    }
+
+    await Promise.all(this.callableFunctions.map(async (fn) => {
+      const proto = Object.getPrototypeOf(fn);
+      const callableMap = fn as unknown as CallableServiceMethodsMap;
+      const names = Object.getOwnPropertyNames(proto).filter(
+        (name): name is CallableServiceMethod =>
+          name !== "constructor" && typeof callableMap[name] === "function"
+      );
+      const workerProto = Object.getPrototypeOf(this);
+      const register = callable();
+
+      for (const name of names) {
+        if (name in workerProto) {
+          continue;
+        }
+
+        const method = async function (this: AgentWorker, ...args: unknown[]) {
+          const methodFn = (fn as unknown as CallableServiceMethodsMap)[name];
+          if (!methodFn) {
+            throw new Error(`Callable method "${name}" is not available`);
+          }
+          return methodFn(...args);
+        };
+
+        register(method, { name } as unknown as ClassMethodDecoratorContext);
+        Object.defineProperty(workerProto, name, {
+          value: method,
+          writable: false,
+          configurable: true,
+        });
+      }
+    }));
+
+    this.didRegisterCallableFunctions = true;
   }
 
   override async onRequest(request: Request): Promise<Response> {
