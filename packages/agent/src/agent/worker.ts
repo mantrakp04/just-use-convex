@@ -27,7 +27,6 @@ import {
   ConvexAdapter,
   createConvexAdapter,
   parseTokenFromUrl,
-  type TokenConfig,
 } from "@just-use-convex/backend/convex/lib/convexAdapter";
 import type { FunctionReturnType } from "convex/server";
 import { createAiClient } from "../client";
@@ -154,7 +153,7 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, AgentArgs> {
 
     const agent = new PlanAgent({
       name: "Assistant",
-      systemPrompt: SYSTEM_PROMPT,
+      systemPrompt: SYSTEM_PROMPT(this.chatDoc?.sandbox ? this.chatDoc.sandbox.doc() : undefined),
       model: createAiClient(model, this.state.reasoningEffort),
       tools: withBackgroundTaskTools([
         createWebSearchToolkit(),
@@ -436,4 +435,5 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, AgentArgs> {
       return new Response("Internal Server Error", { status: 500 });
     }
   }
+
 }

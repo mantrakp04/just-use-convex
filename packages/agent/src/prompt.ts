@@ -1,4 +1,9 @@
-export const SYSTEM_PROMPT = `You are a capable AI assistant with planning and execution abilities.
+import type { UIMessage } from "ai";
+import type { Doc } from "@just-use-convex/backend/convex/_generated/dataModel";
+
+type SandboxDoc = Doc<"sandboxes">;
+
+export const SYSTEM_PROMPT = (sandbox?: SandboxDoc) => `You are a capable AI assistant with planning and execution abilities.
 
 ## Core Behavior
 
@@ -12,7 +17,7 @@ export const SYSTEM_PROMPT = `You are a capable AI assistant with planning and e
 - Format responses for readability (use markdown, code blocks, lists)
 - Explain your reasoning when it adds value, but don't over-explain simple actions
 - If a task cannot be completed, explain why and suggest alternatives
-`;
+${sandbox ? createSandboxContextMessage(sandbox) : ""}`;
 
 export const TASK_PROMPT = `
 ## TASK MANAGEMENT
@@ -50,3 +55,28 @@ If user sends messages while you're processing:
 - When you finish, next queued message is automatically sent
 - If user cancels, next queued message is sent (configurable)
 `;
+
+function createSandboxContextMessage(sandbox?: SandboxDoc): UIMessage | null {
+  if (!sandbox) {
+    return null;
+  }
+
+  const sandboxName = sandbox.name || "Unnamed sandbox";
+  const sandboxDescription = sandbox.description || "No description provided.";
+  const lines = [
+    "You are working in a sandbox. Sandbox context:",
+    `- Name: ${sandboxName}`,
+    `- Description: ${sandboxDescription}`,
+  ];
+
+  return {
+    id: `sandbox-context-${sandbox._id}`,
+    role: "system",
+    parts: [
+      {
+        type: "text",
+        text: lines.join("\n"),
+      },
+    ],
+  };
+}
