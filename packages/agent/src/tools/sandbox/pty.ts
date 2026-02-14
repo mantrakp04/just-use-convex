@@ -4,7 +4,9 @@ import { DEFAULT_TERMINAL_ID, type PtyCloseInput, type PtyOpenInput, type PtyRes
 
 type PtySessionState = { handle: PtyHandle; output: string; closed: boolean };
 
+const SANDBOX_HOME = "/home/daytona";
 const ptySessions = new Map<string, PtySessionState>();
+const shellConfigApplied = new Set<string>();
 const textDecoder = new TextDecoder();
 
 export class SandboxPtyService {
@@ -90,10 +92,37 @@ function getPtySessionKey(sandboxId: string, terminalId: string) {
   return `${sandboxId}:${terminalId}`;
 }
 
+const ZSHENV_CONTENT =
+  "export ZCOMPDUMP=/tmp/.zcompdump\n" +
+  "autoload -Uz compinit && compinit -D\n";
+const ZSHRC_CONTENT = "PROMPT='%n@workspace:%~$ '\n";
+
+async function ensureShellConfig(sandbox: Sandbox) {
+  if (shellConfigApplied.has(sandbox.id)) return;
+  try {
+    const home = (await sandbox.getUserHomeDir()) ?? SANDBOX_HOME;
+    const zshenvPath = `${home}/.zshenv`;
+    const zshrcPath = `${home}/.zshrc`;
+    const [existingZshenv, existingZshrc] = await Promise.all([
+      sandbox.fs.downloadFile(zshenvPath).then((b) => b.toString("utf8")).catch(() => null),
+      sandbox.fs.downloadFile(zshrcPath).then((b) => b.toString("utf8")).catch(() => null),
+    ]);
+    const uploads: Promise<unknown>[] = [];
+    if (existingZshenv !== ZSHENV_CONTENT) uploads.push(sandbox.fs.uploadFile(Buffer.from(ZSHENV_CONTENT, "utf8"), zshenvPath));
+    if (existingZshrc !== ZSHRC_CONTENT) uploads.push(sandbox.fs.uploadFile(Buffer.from(ZSHRC_CONTENT, "utf8"), zshrcPath));
+    if (uploads.length > 0) await Promise.all(uploads);
+    shellConfigApplied.add(sandbox.id);
+  } catch {
+    // Non-fatal: PTY will still work, may show zsh newuser prompt
+  }
+}
+
 async function getOrCreatePtySession(sandbox: Sandbox, input: PtyOpenInput) {
   const key = getPtySessionKey(sandbox.id, input.terminalId);
   const existing = ptySessions.get(key);
   if (existing) return existing;
+
+  await ensureShellConfig(sandbox);
 
   const onData = (raw: Uint8Array | ArrayBuffer) => {
     appendPtyOutput(

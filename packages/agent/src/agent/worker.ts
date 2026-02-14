@@ -112,6 +112,7 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, AgentArgs> {
     }
     if (!this.sandbox && this.chatDoc?.sandboxId) {
       this.sandbox = await this.daytona.get(this.chatDoc?.sandboxId);
+      await this.sandbox.start();
     }
 
     this.callableFunctions = [

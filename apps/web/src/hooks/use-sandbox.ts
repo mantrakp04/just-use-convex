@@ -330,10 +330,22 @@ export function useChatSandbox(
       term.focus();
       term.writeln("Connecting to sandbox shell through agent proxy...");
       term.attachCustomKeyEventHandler((event) => {
-        if (event.type === "keydown" && event.key === "Tab") {
+        if (event.type !== "keydown") return true;
+        if (event.key === "Tab") {
           event.preventDefault();
           event.stopPropagation();
           return true;
+        }
+        if ((event.ctrlKey || event.metaKey) && event.key === "v") {
+          event.preventDefault();
+          navigator.clipboard.readText().then((text) => term.paste(text)).catch(() => undefined);
+          return false;
+        }
+        if ((event.ctrlKey || event.metaKey) && event.key === "c" && term.hasSelection()) {
+          event.preventDefault();
+          const sel = term.getSelection();
+          void navigator.clipboard.writeText(sel).catch(() => undefined);
+          return false;
         }
         return true;
       });
@@ -422,7 +434,7 @@ export function useChatSandbox(
         terminalWriteInFlightRef.current = true;
         terminalInputBufferRef.current = "";
         terminalOptimisticInputBufferRef.current += pendingInput;
-        term.write(pendingInput);
+        // Don't term.write(pendingInput) - xterm already displays via default key handling
         void agent.call("writePtyTerminal", [{
           terminalId: terminalIdRef.current,
           data: pendingInput,
