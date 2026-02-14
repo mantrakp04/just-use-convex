@@ -13,6 +13,7 @@ import {
   statefulCodeExecSchema,
   writeSchema,
 } from './types';
+import { SandboxFsService } from './fs';
 
 const codeInterpreterContexts = new Map<string, InterpreterContext>();
 
@@ -185,6 +186,10 @@ async function getCodeInterpreterContext(sandbox: Sandbox, notebookId: string) {
 
 export function createSandboxPtyFunctions(sandbox: Sandbox) {
   return new SandboxPtyService(sandbox);
+}
+
+export function createSandboxFsFunctions(sandbox: Sandbox) {
+  return new SandboxFsService(sandbox);
 }
 
 function sliceByOffsetLimit(text: string, offset = 0, limit?: number): {

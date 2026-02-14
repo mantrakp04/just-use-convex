@@ -173,7 +173,7 @@ export function useChatSandbox(chatId: Id<"chats">, agent: AgentConnection) {
 }
 ```
 
-The terminal setup dynamically imports xterm.js and `@xterm/addon-fit`, opens a PTY session via `agent.call("openPtyTerminal")`, and streams output via `onChunk`. Input is batched at 25ms intervals and written via `agent.call("writePtyTerminal")`. A `ResizeObserver` keeps the terminal fitted and syncs dimensions to the remote PTY.
+The terminal setup dynamically imports xterm.js and `@xterm/addon-fit`, opens a PTY session via `agent.call("openPtyTerminal")`, then streams output via `agent.call("streamPtyTerminal")` with `onChunk`. Input is batched at 25ms intervals and written via `agent.call("writePtyTerminal")`. A `ResizeObserver` keeps the terminal fitted and syncs dimensions to the remote PTY.
 
 Exported types:
 

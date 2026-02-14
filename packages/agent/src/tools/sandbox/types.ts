@@ -1,4 +1,23 @@
 import { z } from "zod";
+import type { PtyCreateOptions } from "@daytonaio/sdk";
+import type {
+  FileInfo,
+  PtyResizeRequest,
+  PtySessionInfo,
+  SessionSendInputRequest,
+} from "@daytonaio/toolbox-api-client";
+
+export type { FileInfo, PtySessionInfo } from "@daytonaio/toolbox-api-client";
+export type TerminalSession = PtySessionInfo;
+export type PtyOpenInput = { terminalId: string } & Partial<Omit<PtyCreateOptions, "id">>;
+export type PtyWriteInput = { terminalId: string } & SessionSendInputRequest;
+export type PtyResizeInput = { terminalId: string } & PtyResizeRequest;
+export type PtyCloseInput = { terminalId: string };
+export type ExplorerEntry = Pick<FileInfo, "name" | "isDir" | "size"> & {
+  path: string;
+  modifiedAt: number;
+};
+export type ExplorerState = { path: string; entries: ExplorerEntry[] };
 
 export const DEFAULT_LIST_OFFSET = 0;
 export const DEFAULT_LIST_LIMIT = 1000;

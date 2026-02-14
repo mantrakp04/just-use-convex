@@ -21,7 +21,7 @@ AgentWorker (AIChatAgent / Durable Object)
 │   └── Background task wrapper (foreground + background execution)
 ├── Callable Functions
 │   ├── SandboxFsService — listFiles, downloadFile, downloadFolder, deleteEntry
-│   └── SandboxPtyService — openPtyTerminal, writePtyTerminal, resizePtyTerminal, closePtyTerminal, listPtyTerminalSessions
+│   └── SandboxPtyService — openPtyTerminal, streamPtyTerminal, writePtyTerminal, resizePtyTerminal, closePtyTerminal, listPtyTerminalSessions
 ├── Vectorize — chat message indexing (768 dims, cosine)
 └── Streaming — full event forwarding to frontend via createUIMessageStream
 ```
@@ -125,7 +125,8 @@ async updateMessages(messages) {
 
 Callable functions are registered dynamically from `SandboxFsService` and `SandboxPtyService`. The worker auto-discovers methods on these service objects and exposes them as callable RPC methods:
 
-- `openPtyTerminal` -- streaming callable that opens/connects a PTY session and streams output
+- `openPtyTerminal` -- opens/creates a PTY session and returns terminalId
+- `streamPtyTerminal` -- streaming callable that streams PTY output for an existing session
 - `writePtyTerminal` -- send input to a PTY session
 - `resizePtyTerminal` -- resize terminal dimensions
 - `closePtyTerminal` -- kill and clean up a PTY session

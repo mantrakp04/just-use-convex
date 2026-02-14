@@ -6,41 +6,33 @@ import type { FunctionReturnType } from "convex/server";
 import { useAction } from "convex/react";
 import { toast } from "sonner";
 import type { Terminal as XtermTerminal } from "xterm";
+import type {
+  ExplorerEntry,
+  ExplorerState,
+  FileInfo,
+  PtyResizeInput,
+  TerminalSession,
+} from "@just-use-convex/agent/src/tools/sandbox/types";
+
 type ChatSshSession = FunctionReturnType<typeof api.sandboxes.nodeFunctions.createChatSshAccess>;
-type XtermTerminalWriteData = Extract<Parameters<XtermTerminal["write"]>[0], string>;
 type XtermTerminalInputData = Extract<Parameters<Parameters<XtermTerminal["onData"]>[0]>[0], string>;
-type XtermTerminalResizeEvent = Parameters<Parameters<XtermTerminal["onResize"]>[0]>[0];
 
-export type ExplorerEntry = {
-  name: string;
-  path: string;
-  isDir: boolean;
-  size: number;
-  modifiedAt: number;
-};
-
-export type ExplorerState = {
-  path: string;
-  entries: ExplorerEntry[];
-};
-
-/** Wire format from listPtyTerminalSessions - matches Daytona PtySessionInfo */
-export type TerminalSession = {
-  id: string;
-  active?: boolean;
-  processId?: number;
-  cwd?: string;
-  cols?: number;
-  rows?: number;
-  createdAt?: string;
-};
+export type { ExplorerEntry, ExplorerState, TerminalSession };
 
 const TERMINAL_BACKGROUND = "#0b0f19";
 
 export function useChatSandbox(
   chatId: Id<"chats">,
   agent: {
-    call: (method: string, args?: unknown[]) => Promise<unknown>;
+    call: (
+      method: string,
+      args?: unknown[],
+      options?: {
+        onChunk?: (chunk: unknown) => void;
+        onDone?: (finalChunk: unknown) => void;
+        onError?: (error: string) => void;
+      }
+    ) => Promise<unknown>;
   } | null
 ) {
   const createChatSshAccess = useAction(api.sandboxes.nodeFunctions.createChatSshAccess);
@@ -54,8 +46,8 @@ export function useChatSandbox(
   const terminalContainerRef = useRef<HTMLDivElement | null>(null);
   const terminalRef = useRef<XtermTerminal | null>(null);
   const terminalIdRef = useRef<string | null>(null);
-  const terminalCursorRef = useRef(0);
   const terminalInputBufferRef = useRef<XtermTerminalInputData>("");
+  const terminalOptimisticInputBufferRef = useRef<XtermTerminalInputData>("");
   const terminalWriteInFlightRef = useRef(false);
   const terminalWriteErroredRef = useRef(false);
   const [terminalSessions, setTerminalSessions] = useState<TerminalSession[]>([]);
@@ -127,15 +119,15 @@ export function useChatSandbox(
 
   const openInEditor = useCallback(
     async (editor: "vscode" | "cursor") => {
-      const isExpired = sshSession && Date.now() >= sshSession.ssh.expiresAt;
-      const session = (!sshSession || isExpired) ? await createSshAccess() : sshSession;
-      if (!session?.ssh) {
+      const isExpired = sshSession ? Date.now() >= new Date(sshSession.expiresAt).getTime() : false;
+      const session = !sshSession || isExpired ? await createSshAccess() : sshSession;
+      if (!session?.token) {
         return;
       }
 
-      const { token, host } = session.ssh;
+      const host = session.sshCommand ? parseSshHost(session.sshCommand) : "ssh.app.daytona.io";
       const scheme = editor === "vscode" ? "vscode" : "cursor";
-      const uri = `${scheme}://vscode-remote/ssh-remote+${token}@${host}/home/daytona/workspace`;
+      const uri = `${scheme}://vscode-remote/ssh-remote+${session.token}@${host}/home/daytona/workspace`;
 
       if (typeof window !== "undefined") {
         window.open(uri, "_blank");
@@ -148,8 +140,18 @@ export function useChatSandbox(
     if (!agent) return;
     try {
       const resolvedPath = path ?? explorer?.path ?? ".";
-      const result = await agent.call("listFiles", [{ path: resolvedPath }]) as ExplorerState;
-      setExplorer(result);
+      const entries = (await agent.call("listFiles", [{ path: resolvedPath }])) as FileInfo[];
+      const basePath = resolvedPath === "." || resolvedPath === "" ? "" : resolvedPath.replace(/\/$/, "");
+      setExplorer({
+        path: basePath || ".",
+        entries: entries.map((e) => ({
+          name: e.name,
+          path: basePath ? `${basePath}/${e.name}` : e.name,
+          isDir: e.isDir,
+          size: e.size,
+          modifiedAt: new Date(e.modTime).getTime(),
+        })),
+      });
     } catch {
       // ignore - sandbox may not be ready yet
     }
@@ -162,12 +164,8 @@ export function useChatSandbox(
   const downloadFile = useCallback(async (path: string, name: string) => {
     if (!agent) return;
     try {
-      const result = await agent.call("downloadFile", [{ path }]) as {
-        content: string;
-        encoding: string;
-        size: number;
-      };
-      const bytes = Uint8Array.from(atob(result.content), (c) => c.charCodeAt(0));
+      const result = await agent.call("downloadFile", [{ path }]) as { base64: string; name: string };
+      const bytes = Uint8Array.from(atob(result.base64), (c) => c.charCodeAt(0));
       const blob = new Blob([bytes]);
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
@@ -183,12 +181,8 @@ export function useChatSandbox(
   const downloadFolder = useCallback(async (path: string, name: string) => {
     if (!agent) return;
     try {
-      const result = await agent.call("downloadFolder", [{ path }]) as {
-        content: string;
-        encoding: string;
-        archiveType: string;
-      };
-      const bytes = Uint8Array.from(atob(result.content), (c) => c.charCodeAt(0));
+      const result = await agent.call("downloadFolder", [{ path }]) as { base64: string; name: string };
+      const bytes = Uint8Array.from(atob(result.base64), (c) => c.charCodeAt(0));
       const blob = new Blob([bytes], { type: "application/gzip" });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
@@ -217,18 +211,22 @@ export function useChatSandbox(
   const reconnectSsh = useCallback(async () => {
     await createSshAccess();
   }, [createSshAccess]);
+
   const reconnectTerminal = useCallback(() => {
     setTerminalReloadKey((value) => value + 1);
   }, []);
+
   const switchTerminalSession = useCallback((terminalId: string) => {
     setActiveTerminalId(terminalId);
     setTerminalReloadKey((value) => value + 1);
   }, []);
+
   const createTerminalSession = useCallback(() => {
     const nextTerminalId = createTerminalSessionId();
     setActiveTerminalId(nextTerminalId);
     setTerminalReloadKey((value) => value + 1);
   }, []);
+
   const refreshTerminalSessions = useCallback(async () => {
     if (!agent) {
       return;
@@ -241,6 +239,7 @@ export function useChatSandbox(
       // ignore - sandbox may not be ready yet
     }
   }, [agent]);
+
   const closeTerminalSession = useCallback(
     async (terminalId: string) => {
       if (!agent) {
@@ -265,6 +264,7 @@ export function useChatSandbox(
     },
     [agent, activeTerminalId]
   );
+  
   const focusTerminal = useCallback(() => {
     terminalRef.current?.focus();
   }, []);
@@ -298,7 +298,6 @@ export function useChatSandbox(
     }
 
     let isCancelled = false;
-    let pollTimer: ReturnType<typeof setInterval> | null = null;
     let writeTimer: ReturnType<typeof setInterval> | null = null;
     let resizeObserver: ResizeObserver | null = null;
     let terminalDispose: (() => void) | null = null;
@@ -344,27 +343,69 @@ export function useChatSandbox(
         term.dispose();
       };
 
-      const openResponse = await agent.call("openPtyTerminal", [{
-        terminalId: activeTerminalId,
-        cols: term.cols,
-        rows: term.rows,
-      }]) as { terminalId?: string };
-      if (isCancelled) {
-        const terminalId = openResponse?.terminalId;
-        if (terminalId) {
-          void agent.call("closePtyTerminal", [{ terminalId }]).catch(() => undefined);
+      terminalIdRef.current = activeTerminalId;
+
+      const openResult = await agent
+        .call("openPtyTerminal", [{
+          terminalId: activeTerminalId,
+          cols: term.cols,
+          rows: term.rows,
+        }])
+        .catch(() => null);
+
+      if (!openResult || isCancelled || !terminalContainerRef.current) {
+        if (openResult === null && !isCancelled) {
+          term.writeln("\r\nFailed to open PTY terminal session.");
+        }
+        if (isCancelled && activeTerminalId) {
+          void agent.call("closePtyTerminal", [{ terminalId: activeTerminalId }]).catch(() => undefined);
         }
         return;
       }
 
-      const terminalId = openResponse?.terminalId;
-      if (!terminalId) {
-        term.writeln("\r\nFailed to open PTY terminal session.");
-        return;
-      }
-      terminalIdRef.current = terminalId;
-      terminalCursorRef.current = 0;
+      void agent.call(
+        "streamPtyTerminal",
+        [{ terminalId: activeTerminalId }],
+        {
+          onChunk: (chunk) => {
+            if (isCancelled) {
+              return;
+            }
+            if (typeof chunk === "string") {
+              const chunkToWrite = consumeOptimisticPtyEcho(chunk, terminalOptimisticInputBufferRef);
+              if (chunkToWrite) {
+                term.write(chunkToWrite);
+              }
+            }
+          },
+          onDone: (finalChunk) => {
+            if (isCancelled) {
+              return;
+            }
+            const finalResult = finalChunk as {
+              closed?: boolean;
+              closeReason?: string | null;
+            };
+            if (finalResult?.closed) {
+              const reason = finalResult.closeReason ? `: ${finalResult.closeReason}` : "";
+              term.writeln(`\r\n[session closed${reason}]`);
+            }
+            void refreshTerminalSessions();
+          },
+          onError: () => {
+            if (!isCancelled) {
+              term.writeln("\r\n[terminal stream error]");
+            }
+          },
+        },
+      ).catch(() => {
+        if (!isCancelled) {
+          term.writeln("\r\n[terminal stream error]");
+        }
+      });
+
       terminalInputBufferRef.current = "";
+      terminalOptimisticInputBufferRef.current = "";
       terminalWriteInFlightRef.current = false;
       terminalWriteErroredRef.current = false;
       void refreshTerminalSessions();
@@ -380,6 +421,8 @@ export function useChatSandbox(
         }
         terminalWriteInFlightRef.current = true;
         terminalInputBufferRef.current = "";
+        terminalOptimisticInputBufferRef.current += pendingInput;
+        term.write(pendingInput);
         void agent.call("writePtyTerminal", [{
           terminalId: terminalIdRef.current,
           data: pendingInput,
@@ -405,46 +448,11 @@ export function useChatSandbox(
           terminalId: terminalIdRef.current,
           cols: term.cols,
           rows: term.rows,
-        } satisfies XtermTerminalResizeEvent & { terminalId: string }]).catch(() => undefined);
+        } satisfies PtyResizeInput]).catch(() => undefined);
       });
       resizeObserver.observe(terminalContainerRef.current);
 
-      pollTimer = setInterval(() => {
-        if (!terminalIdRef.current) {
-          return;
-        }
 
-        void agent.call("readPtyTerminal", [{
-          terminalId: terminalIdRef.current,
-          offset: terminalCursorRef.current,
-        }]).then((result) => {
-          const response = result as {
-            data?: XtermTerminalWriteData;
-            offset?: number;
-            closed?: boolean;
-            closeReason?: string | null;
-          };
-          if (response.data) {
-            term.write(response.data);
-          }
-          if (typeof response.offset === "number") {
-            terminalCursorRef.current = response.offset;
-          }
-
-          if (response.closed) {
-            const reason = response.closeReason ? `: ${response.closeReason}` : "";
-            term.writeln(`\r\n[session closed${reason}]`);
-            if (pollTimer) {
-              clearInterval(pollTimer);
-              pollTimer = null;
-            }
-            if (writeTimer) {
-              clearInterval(writeTimer);
-              writeTimer = null;
-            }
-          }
-        }).catch(() => undefined);
-      }, 120);
     };
 
     void setupTerminal().catch(() => {
@@ -453,17 +461,14 @@ export function useChatSandbox(
 
     return () => {
       isCancelled = true;
-      if (pollTimer) {
-        clearInterval(pollTimer);
-      }
       if (writeTimer) {
         clearInterval(writeTimer);
       }
       resizeObserver?.disconnect();
 
       terminalIdRef.current = null;
-      terminalCursorRef.current = 0;
       terminalInputBufferRef.current = "";
+      terminalOptimisticInputBufferRef.current = "";
       terminalWriteInFlightRef.current = false;
       terminalWriteErroredRef.current = false;
 
@@ -471,12 +476,6 @@ export function useChatSandbox(
       terminalDispose?.();
     };
   }, [agent, terminalReloadKey, isOpen, activeTerminalId, refreshTerminalSessions]);
-
-  useEffect(() => {
-    if (isOpen && !sshSession) {
-      void createSshAccess().catch(() => undefined);
-    }
-  }, [isOpen, sshSession, createSshAccess]);
 
   useEffect(() => {
     if (isOpen && agent && !explorer) {
@@ -544,4 +543,68 @@ function createTerminalSessionId() {
     return crypto.randomUUID();
   }
   return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
+function consumeOptimisticPtyEcho(
+  chunk: string,
+  terminalOptimisticInputBufferRef: { current: XtermTerminalInputData },
+) {
+  let pendingOptimisticInput = terminalOptimisticInputBufferRef.current;
+  if (!pendingOptimisticInput) {
+    return chunk;
+  }
+
+  let cursor = 0;
+
+  while (cursor < chunk.length && pendingOptimisticInput.length > 0) {
+    const char = chunk[cursor];
+    if (char === "\r" || char === "\n") {
+      cursor += 1;
+      continue;
+    }
+
+    const ansiLength = getAnsiEscapeSequenceLength(chunk, cursor);
+    if (ansiLength > 0) {
+      cursor += ansiLength;
+      continue;
+    }
+
+    if (chunk[cursor] === pendingOptimisticInput[0]) {
+      cursor += 1;
+      pendingOptimisticInput = pendingOptimisticInput.slice(1);
+      continue;
+    }
+
+    terminalOptimisticInputBufferRef.current = pendingOptimisticInput;
+    return chunk.slice(cursor);
+  }
+
+  if (pendingOptimisticInput.length === 0) {
+    terminalOptimisticInputBufferRef.current = "";
+    return chunk.slice(cursor);
+  }
+
+  terminalOptimisticInputBufferRef.current = pendingOptimisticInput;
+  return "";
+}
+
+function parseSshHost(sshCommand: string): string {
+  const m = sshCommand.match(/@([^\s]+)/);
+  return m?.[1] ?? "ssh.app.daytona.io";
+}
+
+function getAnsiEscapeSequenceLength(chunk: string, start: number) {
+  if (chunk[start] !== "\u001b") {
+    return 0;
+  }
+  if (chunk[start + 1] !== "[") {
+    return 0;
+  }
+  for (let index = start + 2; index < chunk.length; index += 1) {
+    const code = chunk.charCodeAt(index);
+    if (code >= 64 && code <= 126) {
+      return index - start + 1;
+    }
+  }
+  return 0;
 }

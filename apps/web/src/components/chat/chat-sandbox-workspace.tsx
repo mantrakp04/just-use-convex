@@ -114,6 +114,11 @@ export function ChatSandboxWorkspace({
         id: activeTerminalId,
         active: false,
         cwd: "",
+        cols: 0,
+        rows: 0,
+        createdAt: "",
+        envs: {},
+        lazyStart: false,
       } satisfies TerminalSession,
     ];
   }, [activeTerminalId, terminalSessions]);
@@ -281,7 +286,7 @@ export function ChatSandboxWorkspace({
           />
           {sshSession && (
             <div className="mt-2 text-xs text-muted-foreground">
-              SSH expires: {new Date(sshSession.ssh.expiresAt).toLocaleString()}
+              SSH expires: {new Date(sshSession.expiresAt).toLocaleString()}
             </div>
           )}
         </TabsContent>

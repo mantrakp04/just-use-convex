@@ -262,7 +262,7 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, AgentArgs> {
     if (this.didRegisterCallableFunctions || !this.callableFunctions.length) {
       return;
     }
-    const streamingMethods = new Set(["openPtyTerminal"]);
+    const streamingMethods = new Set(["streamPtyTerminal"]);
 
     await Promise.all(this.callableFunctions.map(async (fn) => {
       const proto = Object.getPrototypeOf(fn);
