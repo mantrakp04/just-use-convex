@@ -5,64 +5,67 @@ description: Understand how the template is organized
 
 # Project Structure
 
-This template uses a monorepo structure powered by Turborepo, with clear separation between frontend and backend code.
+This template uses a monorepo structure powered by Turborepo, with clear separation between frontend, backend, and agent code.
 
 ## Overview
 
 ```
 just-use-convex/
 ├── apps/
-│   └── web/                    # Frontend application
+│   └── web/                    # TanStack Start frontend (React 19)
 ├── packages/
+│   ├── agent/                  # Cloudflare Workers AI agent
+│   │   └── src/
+│   │       ├── agent/          # AgentWorker, ConvexAdapter, prompts
+│   │       └── tools/          # Sandbox tools, web search, ask-user
 │   ├── backend/
 │   │   └── convex/             # Convex backend
 │   ├── config/                 # Shared TypeScript config
-│   └── env/                    # Environment variables
-├── package.json                # Root workspace config
+│   └── env/                    # T3 Env type-safe env vars
 ├── turbo.json                  # Turborepo configuration
-└── bun.lock                    # Bun lockfile
+└── package.json                # Root workspace config
 ```
 
 ## Frontend (`apps/web`)
 
-The frontend is built with TanStack Start and React:
+The frontend is built with TanStack Start and React 19:
 
 ```
-apps/web/
-├── src/
-│   ├── routes/                 # File-based routing
-│   │   ├── __root.tsx          # Root layout
-│   │   ├── (protected)/        # Auth-required routes
-│   │   │   ├── dashboard.tsx   # Dashboard page
-│   │   │   └── settings/       # Settings pages
-│   │   ├── (public)/           # Public routes
-│   │   │   ├── index.tsx       # Home page
-│   │   │   ├── auth.tsx        # Auth page
-│   │   │   └── docs/           # Documentation routes
-│   │   └── api/                # API routes
-│   │       └── auth/           # Auth API handlers
-│   ├── components/             # React components
-│   │   ├── ui/                 # shadcn/ui components
-│   │   ├── auth/               # Auth components
-│   │   ├── dashboard/          # Dashboard components
-│   │   └── todos/              # Todo feature components
-│   ├── hooks/                  # Custom React hooks
-│   │   ├── auth/               # Auth hooks
-│   │   │   ├── organization/   # Organization hooks
-│   │   │   └── user/           # User hooks
-│   │   ├── use-todos.ts        # Todo hooks
-│   │   └── use-paginated-query.ts
-│   ├── lib/                    # Utilities and configs
-│   │   ├── auth-client.ts      # Auth client setup
-│   │   ├── auth-server.ts      # Auth server setup
-│   │   ├── source.ts           # Fumadocs config
-│   │   ├── tweakcn.ts          # Theme utilities
-│   │   └── utils.ts            # General utilities
-│   ├── store/                  # State management
-│   └── utils/                  # Helper utilities
-├── content/
-│   └── docs/                   # MDX documentation files
-└── vite.config.ts              # Vite configuration
+apps/web/src/
+├── routes/                     # File-based TanStack Router
+│   ├── (protected)/            # Auth-required routes
+│   │   ├── chats/              # Chat list + detail views
+│   │   ├── dashboard.tsx       # Org dashboard
+│   │   └── settings/           # Org/team management
+│   ├── (public)/               # Public routes
+│   │   ├── auth.tsx            # Auth page
+│   │   └── docs/               # Documentation routes
+│   └── api/                    # API routes (auth handlers)
+├── components/                 # React components
+│   ├── ui/                     # shadcn/ui components
+│   ├── chat/                   # ChatInput, MessageList, MessageItems, ModelSelector
+│   ├── sandboxes/              # Sandbox UI, file explorer, terminal
+│   ├── todos/                  # Todo components
+│   ├── dashboard/              # Dashboard components
+│   ├── auth/                   # Auth components
+│   └── ai-elements/            # AI-specific visual components
+├── hooks/                      # Custom React hooks
+│   ├── use-chat.ts             # Agent chat instance management
+│   ├── use-chats.ts            # Chat CRUD + pagination
+│   ├── use-sandbox.ts          # Sandbox PTY, file explorer, SSH
+│   ├── use-sandboxes.ts        # Sandbox CRUD + pagination
+│   ├── use-todos.ts            # Todo CRUD + assignment
+│   ├── use-attachments.ts      # File upload with progress
+│   ├── use-openrouter-models.ts # Model listing + caching
+│   ├── use-model-filtering.ts  # Fuzzy search + favorites
+│   ├── use-paginated-query.ts  # Pagination type helpers
+│   └── auth/                   # Auth/org/user hooks
+├── providers/                  # Context providers
+│   └── agent.tsx               # Isolated React roots per chat connection
+├── store/                      # Jotai atoms
+│   ├── chat-settings.ts        # Model, reasoning effort, modalities
+│   └── favorite-models.ts      # Persisted model favorites
+└── lib/                        # Utilities, motion presets
 ```
 
 ## Backend (`packages/backend/convex`)
@@ -71,32 +74,40 @@ The Convex backend contains all server-side logic:
 
 ```
 packages/backend/convex/
-├── _generated/                 # Auto-generated types (don't edit)
-├── schema.ts                   # Database schema with Ents
-├── functions.ts                # zQuery/zMutation factories
-├── convex.config.ts            # Convex app configuration
-├── auth.ts                     # Better Auth setup
-├── auth.config.ts              # JWT provider config
-├── http.ts                     # HTTP routes
-├── healthCheck.ts              # Health check endpoint
-├── privateData.ts              # Private data queries
+├── schema.ts                   # Ent schema (6 tables)
+├── functions.ts                # zQuery/zMutation/zExternal* factories + triggers
 ├── tables/                     # Entity definitions
+│   ├── chats.ts                # Chat entity + indexes
+│   ├── sandboxes.ts            # Sandbox entity + Daytona trigger
 │   ├── todos.ts                # Todo entity
-│   └── todoAssignedUsers.ts    # Junction table
-├── todos/                      # Todo feature module
-│   ├── index.ts                # Exported queries/mutations
-│   ├── functions.ts            # Implementation logic
-│   ├── types.ts                # Zod schemas
-│   ├── stats.ts                # Statistics queries
-│   ├── statsTypes.ts           # Statistics schemas
-│   └── aggregates.ts           # Aggregate definitions
+│   ├── todoAssignedMembers.ts  # Junction table
+│   ├── globalAttachments.ts    # Org-wide attachments
+│   └── orgMemberAttachments.ts # Per-member attachments
+├── chats/                      # Chat module (CRUD, search, stats)
+├── sandboxes/                  # Sandbox module (CRUD, Daytona lifecycle)
+├── todos/                      # Todo module (CRUD, assignment)
+├── lib/                        # ConvexAdapter, auth helpers
 ├── betterAuth/                 # Better Auth integration
-│   ├── _generated/             # Auth generated types
-│   ├── schema.ts               # Auth database schema
-│   ├── adapter.ts              # Convex adapter
-│   ├── auth.ts                 # Auth client
-│   └── convex.config.ts        # Auth plugin config
 └── shared/                     # Shared utilities
+```
+
+## Agent (`packages/agent`)
+
+The Cloudflare Workers AI agent handles chat interactions, tool use, and sandbox orchestration:
+
+```
+packages/agent/
+├── alchemy.run.ts              # Alchemy IaC (DurableObject, Vectorize, secrets)
+└── src/
+    ├── index.ts                # Worker entry point + CORS
+    ├── agent/
+    │   ├── worker.ts           # AgentWorker (AIChatAgent + PlanAgent)
+    │   ├── convexAdapter.ts    # Convex HTTP client for agent
+    │   └── prompts/            # System + task prompts
+    └── tools/
+        ├── sandbox/            # File ops, PTY terminal, code interpreter
+        ├── web-search.ts       # Exa neural search
+        └── ask-user.ts         # Structured user questions
 ```
 
 ## Shared Packages
@@ -107,72 +118,43 @@ Shared TypeScript configuration for the monorepo.
 
 ### `packages/env`
 
-Centralized environment variable management with type-safe validation.
+Centralized environment variable management with T3 Env type-safe validation.
+
+## Module Pattern
+
+Each backend feature follows a consistent pattern:
+
+```
+feature/
+├── index.ts        # Exported queries/mutations (public API)
+├── functions.ts    # Business logic implementation
+├── types.ts        # Zod schemas for args
+├── aggregates.ts   # TableAggregate definitions
+└── stats.ts        # Statistics queries using aggregates
+```
+
+This separation keeps code organized and makes it easy to find related functionality.
 
 ## Key Files Explained
 
 ### `schema.ts`
 
-Defines your database schema using Convex Ents:
-
-```ts
-import { entDefinitions } from "./tables/todos";
-
-const schema = defineEnt({
-  ...entDefinitions,
-  // Additional tables defined by plugins
-});
-
-export default schema;
-```
+Defines the database schema using Convex Ents with 6 tables and their relationships (chats, sandboxes, todos, assigned members, and two attachment tables).
 
 ### `functions.ts`
 
-Creates typed query/mutation factories with automatic auth injection:
+Creates typed query/mutation factories with automatic auth injection and trigger registration:
 
-```ts
-export const zQuery = zCustomQuery(baseQuery, {
-  input: async (ctx) => {
-    const identity = await ctx.auth.getUserIdentity();
-    return {
-      ctx: {
-        ...ctx,
-        table: entsTableFactory(ctx, entDefinitions),
-        identity: parsedIdentity
-      },
-    };
-  },
-});
-```
+- `zQuery` / `zMutation` - Standard authenticated queries and mutations
+- `zExternalQuery` / `zExternalMutation` - For external service calls (e.g., agent)
+- `zInternalQuery` / `zInternalMutation` - Internal-only operations
 
-### `convex.config.ts`
+Each factory injects the authenticated user context and Ent table access.
 
-Composes your app with Convex plugins:
+### `alchemy.run.ts`
 
-```ts
-import { defineApp } from "convex/server";
-import betterAuth from "./betterAuth/convex.config";
-import aggregate from "@convex-dev/aggregate/convex.config";
+Defines the Cloudflare infrastructure using Alchemy IaC:
 
-const app = defineApp();
-app.use(betterAuth, { name: "betterAuth" });
-app.use(aggregate, { name: "aggregate" });
-
-export default app;
-```
-
-## Module Pattern
-
-Each feature follows a consistent pattern:
-
-```
-feature/
-├── index.ts        # Exports (public API)
-├── functions.ts    # Implementation
-├── types.ts        # Zod schemas for args
-└── aggregates.ts   # Optional: aggregate definitions
-```
-
-This separation keeps code organized and makes it easy to find related functionality.
-
-Next, dive into [Convex Fundamentals](/docs/fundamentals/queries-mutations).
+- **DurableObject** - AgentWorker for persistent WebSocket chat state
+- **Vectorize index** - RAG-ready message embeddings
+- **Secrets** - API keys and connection strings

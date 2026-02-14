@@ -1,103 +1,133 @@
 ---
 title: Agent Overview
-description: AI chat agent powered by Cloudflare Durable Objects, LangGraph, and Convex
+description: AI chat agent powered by Cloudflare Durable Objects, VoltAgent Core, and Convex
 ---
 
 # AI Agent Overview
 
-This template includes a fully-featured AI chat agent built on Cloudflare Durable Objects with LangGraph for stateful conversation management, integrated with Convex for data persistence.
+A fully-featured AI chat agent built on Cloudflare Durable Objects with VoltAgent Core's PlanAgent for multi-step task decomposition, integrated with Convex for data persistence and Daytona for sandboxed code execution.
 
 ## Key Features
 
-### Stateful Conversations
+### Multi-Step Planning with Sub-Agents
 
-Each chat session runs as an isolated Cloudflare Durable Object with persistent state:
+The agent uses VoltAgent Core's `PlanAgent` to decompose complex tasks into steps, delegating specialized work to sub-agents:
 
 ```ts
-export class AgentWorker extends AIChatAgent<Env, ChatState> {
-  private checkpointer: CloudflareDOCheckpointer | null = null;
-
-  // Each agent instance maintains its own state
-  override async onChatMessage(onFinish, options) {
-    const agent = createDeepAgent({
-      model,
-      systemPrompt: "You are a helpful assistant.",
-      checkpointer: this.getCheckpointer(),
-    });
-    // ...
-  }
-}
+const agent = new PlanAgent({
+  name: "Assistant",
+  systemPrompt: SYSTEM_PROMPT,
+  model: createAiClient(model, reasoningEffort),
+  tools: [webSearchToolkit, askUserToolkit],
+  task: {
+    taskDescription: TASK_PROMPT,
+    supervisorConfig: {
+      fullStreamEventForwarding: {
+        types: ["text-delta", "reasoning-delta", "tool-call", "tool-result", ...],
+      },
+    },
+  },
+  subagents: [daytonaSubAgent],
+  maxSteps: 100,
+});
 ```
 
 ### Multi-Model Support
 
-Switch between different LLM providers through OpenRouter:
+Switch between LLM providers through OpenRouter. Default model: `openai/gpt-5.2-chat`.
 
-| Provider | Models |
-|----------|--------|
-| OpenAI | GPT-4o, GPT-4.5, o1, o3 |
-| Anthropic | Claude 3.5 Sonnet, Claude 4 Opus |
-| Google | Gemini 2.0, Gemini 2.5 Pro |
+| Provider | Example Models |
+|----------|----------------|
+| OpenAI | GPT-5.2 Chat, GPT-4o, o3 |
+| Anthropic | Claude 4 Opus, Claude 3.5 Sonnet |
+| Google | Gemini 2.5 Pro |
 | DeepSeek | DeepSeek R1, DeepSeek V3 |
+
+### Reasoning Support
+
+Extended thinking with configurable effort levels (`low`, `medium`, `high`) passed through to OpenRouter:
+
+```ts
+const model = createAiClient("openai/o3", "medium");
+```
+
+### Sandbox Tools (Daytona)
+
+Each chat can have an attached Daytona sandbox with full filesystem and terminal access:
+
+- **File operations** -- list, read, write, edit, glob, grep
+- **Shell execution** -- run arbitrary commands
+- **PTY terminals** -- persistent terminal sessions with streaming output, resize, and close
+- **Code interpreter** -- stateful Python execution in notebook-like contexts
+- **Download URLs** -- generate direct file download links
+
+### Web Search (Exa)
+
+Neural search via Exa with category filtering, domain scoping, and date ranges. Results include text content, URLs, and metadata. Source citations are enforced inline.
+
+### Ask User
+
+Structured question tool that pauses execution to gather user input. Supports multiple questions (1-4), predefined options with descriptions, multi-select, and custom "Other" responses.
+
+### Vector Search (RAG)
+
+Chat messages are indexed in Cloudflare Vectorize (768 dimensions, cosine similarity). Before generating a response, the agent queries for relevant past messages across the user's chats and injects them as retrieval context.
 
 ### Real-Time Streaming
 
-Responses stream token-by-token using the Vercel AI SDK:
+Full event forwarding from PlanAgent to the frontend:
 
-```tsx
-function ChatMessage({ message }) {
-  // Messages stream in real-time
-  return <div>{message.content}</div>;
-}
-```
+- `text-delta` -- incremental text tokens
+- `reasoning-delta` -- reasoning/thinking tokens
+- `tool-input-start`, `tool-input-delta`, `tool-input-end` -- tool argument streaming
+- `tool-call`, `tool-result`, `tool-error` -- tool execution lifecycle
+- `source`, `error`, `finish` -- metadata events
 
-### Reasoning Models
+### Background Task Execution
 
-Extended thinking support for reasoning-capable models:
+Long-running tool calls can execute in the background with configurable timeout (default: 1 hour). The `task` tool from PlanAgent is patched with background support, allowing up to 30-minute foreground execution with optional background continuation.
 
-```ts
-const model = new ChatOpenAI({
-  model: "openai/o3-mini",
-  reasoning: {
-    effort: "medium", // "low" | "medium" | "high"
-  },
-});
-```
+### Authentication
+
+Dual auth strategy via `ConvexAdapter`:
+- **JWT tokens** -- standard Convex auth tokens
+- **External tokens** -- shared secret for service-to-service calls
+
+Token is parsed from WebSocket URL params. The adapter routes to the correct Convex query/mutation variants based on token type.
 
 ## Tech Stack
 
 | Component | Technology |
 |-----------|------------|
-| Agent Runtime | Cloudflare Durable Objects |
+| Agent Runtime | Cloudflare Durable Objects (`AIChatAgent`) |
+| Orchestration | VoltAgent Core (`PlanAgent` + sub-agents) |
 | LLM Gateway | OpenRouter API |
-| Orchestration | LangGraph + DeepAgents |
-| State Persistence | DO SQLite + Custom Checkpointer |
-| Streaming | Vercel AI SDK |
+| Sandbox | Daytona SDK (filesystem, PTY, code interpreter) |
+| Web Search | Exa neural search |
+| Vector Store | Cloudflare Vectorize |
+| Streaming | Vercel AI SDK (`createUIMessageStream`) |
 | Backend | Convex |
-| Frontend | React + agents/react |
+| Observability | VoltAgent VoltOps (optional) |
+| Infrastructure | Alchemy (IaC for Cloudflare) |
 
 ## How It Works
 
-1. **User sends a message** - The frontend connects to a Durable Object via WebSocket
-2. **Agent processes the message** - LangGraph orchestrates the conversation with checkpointing
-3. **LLM generates response** - OpenRouter routes to the selected model
-4. **Response streams back** - Token-by-token streaming via AI SDK
-5. **State persists** - Conversation history saved in DO SQLite
+1. **WebSocket connects** -- Frontend opens a connection to a Durable Object identified by chat ID, passing auth token, model, and reasoning effort as URL params
+2. **Agent initializes** -- `onConnect` creates the `ConvexAdapter`, fetches the chat document, initializes Daytona sandbox, registers callable PTY/FS functions, and builds the `PlanAgent` with sub-agents
+3. **Message received** -- `onChatMessage` updates the chat timestamp, generates a title on the first message, builds RAG context from Vectorize, and streams via `PlanAgent.streamText()`
+4. **Messages persist** -- `persistMessages` indexes messages in the vector store for future retrieval
+5. **State syncs** -- Frontend can update model/reasoning settings via `setState()`, which patches the agent and sub-agent models in real-time
 
 ## Getting Started
 
-The agent requires these environment variables:
+Required environment variables:
 
 ```bash
-# OpenRouter API
-OPENROUTER_API_KEY=your_api_key
-OPENROUTER_MODEL=openai/gpt-4o  # Default model
-
-# Convex backend
-CONVEX_URL=your_convex_deployment_url
-
-# Agent URL (for frontend)
-VITE_AGENT_URL=your_agent_worker_url
+OPENROUTER_API_KEY=sk-or-v1-xxxx
+CONVEX_URL=https://your-deployment.convex.cloud
+CONVEX_SITE_URL=https://your-deployment.convex.site
+SITE_URL=https://your-app.com
+VITE_AGENT_URL=https://your-agent.workers.dev  # Frontend .env
 ```
 
 Continue to [Architecture](/docs/agent/architecture) to understand how the agent system is built.

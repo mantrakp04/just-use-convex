@@ -1,217 +1,279 @@
 ---
 title: Agent Architecture
-description: Understanding the agent system architecture with Cloudflare Durable Objects and LangGraph
+description: Understanding the agent system architecture with Cloudflare Durable Objects and VoltAgent Core
 ---
 
 # Agent Architecture
 
-The agent system uses a multi-layered architecture combining Cloudflare Durable Objects for isolation, LangGraph for conversation orchestration, and Convex for data persistence.
+The agent system uses a multi-layered architecture combining Cloudflare Durable Objects for isolation, VoltAgent Core's PlanAgent for orchestration, Daytona for sandboxed execution, and Convex for data persistence.
 
 ## System Overview
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                         Frontend (React)                         │
-│  ┌─────────────┐  ┌──────────────┐  ┌───────────────────────┐   │
-│  │ AgentsProvider │  │ useAgentInstance │  │ Chat Components │   │
-│  └───────┬─────┘  └───────┬──────┘  └───────────┬───────────┘   │
-└──────────┼────────────────┼─────────────────────┼───────────────┘
-           │                │                     │
-           └────────────────┼─────────────────────┘
-                            │ WebSocket
-                            ▼
-┌─────────────────────────────────────────────────────────────────┐
-│               Cloudflare Durable Object (AgentWorker)            │
-│  ┌─────────────┐  ┌────────────────┐  ┌─────────────────────┐   │
-│  │ State Sync  │  │ LangGraph Agent │  │ SQLite Checkpointer │   │
-│  └─────────────┘  └───────┬────────┘  └─────────────────────┘   │
-└───────────────────────────┼─────────────────────────────────────┘
-                            │
-                            ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                        OpenRouter API                            │
-│  ┌─────────┐  ┌──────────┐  ┌────────┐  ┌─────────────────┐     │
-│  │ OpenAI  │  │ Anthropic │  │ Google │  │ Other Providers │     │
-│  └─────────┘  └──────────┘  └────────┘  └─────────────────┘     │
-└─────────────────────────────────────────────────────────────────┘
+AgentWorker (AIChatAgent / Durable Object)
+├── ConvexAdapter — JWT + external token auth, unified Convex HTTP client
+├── PlanAgent (VoltAgent Core) — multi-step task decomposition
+│   ├── Planning Toolkit — write_todos, update_todo for step tracking
+│   └── Daytona Sub-Agent — file ops (list, read, write, edit, glob, grep, exec, Python)
+├── Tools
+│   ├── web_search (Exa neural search)
+│   ├── ask_user (structured questions with options)
+│   └── Background task wrapper (foreground + background execution)
+├── Callable Functions
+│   ├── SandboxFsService — listFiles, downloadFile, downloadFolder, deleteEntry
+│   └── SandboxPtyService — openPtyTerminal, writePtyTerminal, resizePtyTerminal, closePtyTerminal, listPtyTerminalSessions
+├── Vectorize — chat message indexing (768 dims, cosine)
+└── Streaming — full event forwarding to frontend via createUIMessageStream
 ```
 
-## Durable Object Agent
+## Request Lifecycle
 
-Each chat session runs in an isolated Durable Object with its own state:
+### 1. WebSocket Connection (`onConnect`)
+
+When a frontend client connects:
 
 ```ts
-// packages/agent/src/index.ts
-export class AgentWorker extends AIChatAgent<Env, ChatState> {
-  private checkpointer: CloudflareDOCheckpointer | null = null;
-  private convexClient: ConvexHttpClient | null = null;
-
-  private getCheckpointer(): CloudflareDOCheckpointer {
-    if (!this.checkpointer) {
-      this.checkpointer = new CloudflareDOCheckpointer(
-        this.ctx.storage.sql as CloudflareSqlStorage
-      );
-    }
-    return this.checkpointer;
-  }
-
-  override async onChatMessage(onFinish, options): Promise<Response> {
-    const model = new ChatOpenAI({
-      model: this.state?.model || this.env.OPENROUTER_MODEL,
-      configuration: {
-        baseURL: "https://openrouter.ai/api/v1",
-        apiKey: this.env.OPENROUTER_API_KEY,
-      },
-    });
-
-    const agent = createDeepAgent({
-      model,
-      systemPrompt: "You are a helpful assistant.",
-      checkpointer: this.getCheckpointer(),
-    });
-
-    const streamEvents = agent.streamEvents(
-      { messages: [humanMessage] },
-      { configurable: { thread_id: this.name } }
-    );
-
-    return createUIMessageStreamResponse({
-      stream: toUIMessageStream(streamEvents),
-    });
-  }
+override async onConnect(connection: Connection, ctx: ConnectionContext): Promise<void> {
+  const url = new URL(ctx.request.url);
+  await this._init({
+    model: url.searchParams.get("model") ?? undefined,
+    reasoningEffort: url.searchParams.get("reasoningEffort"),
+    inputModalities: url.searchParams.get("inputModalities")?.split(","),
+    tokenConfig: parseTokenFromUrl(url) ?? undefined,
+  });
+  await this._prepAgent();
+  return await super.onConnect(connection, ctx);
 }
 ```
 
-### State Management
+The `_init` method:
+1. Stores init args in DO storage for reconnection
+2. Creates `ConvexAdapter` from token config (JWT or external token)
+3. Fetches the chat document from Convex (using token-type-appropriate query)
+4. Initializes Daytona client and retrieves the sandbox if the chat has one
+5. Registers callable functions (FS + PTY services) on the worker prototype
 
-The agent maintains two types of state:
+The `_prepAgent` method:
+1. Sets up VoltAgent registry and optional VoltOps observability
+2. Creates Daytona sub-agent from the sandbox toolkit
+3. Builds the PlanAgent with system prompt, tools, and sub-agents
+4. Adds planning toolkit (`write_todos`, `update_todo`)
+5. Patches the `task` tool with background execution support
 
-1. **Chat State** - Synced from frontend (model selection, reasoning effort)
-2. **Conversation State** - Managed by LangGraph checkpointer
+### 2. Message Processing (`onChatMessage`)
 
 ```ts
-type ChatState = {
-  model?: string;
-  reasoningEffort?: "low" | "medium" | "high";
-};
+override async onChatMessage(onFinish, options): Promise<Response> {
+  // 1. Update chat timestamp (fire-and-forget)
+  void this.convexAdapter.mutation(api.chats.index.update, { _id, patch: {} });
 
-// State updates from frontend
-override async onStateUpdate(state: ChatState, source: Connection | "server") {
+  // 2. Generate title on first message (fire-and-forget)
+  if (this.messages.length === 1) {
+    void generateTitle({ convexAdapter, chatId, userMessage });
+  }
+
+  // 3. Filter message parts by input modalities
+  const messagesForAgent = filterMessageParts(this.messages, this.state.inputModalities);
+
+  // 4. Build RAG context from Vectorize
+  const retrievalMessage = await buildRetrievalMessage({ env, memberId, queryText });
+
+  // 5. Inject retrieval context before last user message
+  const modelMessages = retrievalMessage
+    ? messagesForAgent.toSpliced(lastUserIdx, 0, retrievalMessage)
+    : messagesForAgent;
+
+  // 6. Stream via PlanAgent
+  const stream = await agent.streamText(modelMessages, { abortSignal });
+
+  // 7. Forward full stream to frontend
+  return createUIMessageStreamResponse({
+    stream: createUIMessageStream({
+      execute: ({ writer }) => parseStreamToUI(stream.fullStream, writer),
+    }),
+  });
+}
+```
+
+### 3. Message Persistence (`persistMessages`)
+
+After messages are saved to DO SQLite (via `AIChatAgent` base class), they are indexed in Cloudflare Vectorize:
+
+```ts
+override async persistMessages(messages: UIMessage[]): Promise<void> {
+  await super.persistMessages(messages);
+  await indexMessagesInVectorStore({ env, agentName, chatId, messages });
+}
+```
+
+Each message gets embedded (768-dim vectors) and upserted with metadata including role, chatId, messageId, and text content.
+
+### 4. Message Deletion (`updateMessages`)
+
+A callable function that syncs message state -- deletes removed messages from both DO SQLite and Vectorize, then re-persists the remaining set:
+
+```ts
+@callable()
+async updateMessages(messages) {
+  // Delete messages not in the new set
+  // Remove corresponding vectors from Vectorize
+  // Re-persist remaining messages
+}
+```
+
+### 5. Callable Functions (PTY Terminal Operations)
+
+Callable functions are registered dynamically from `SandboxFsService` and `SandboxPtyService`. The worker auto-discovers methods on these service objects and exposes them as callable RPC methods:
+
+- `openPtyTerminal` -- streaming callable that opens/connects a PTY session and streams output
+- `writePtyTerminal` -- send input to a PTY session
+- `resizePtyTerminal` -- resize terminal dimensions
+- `closePtyTerminal` -- kill and clean up a PTY session
+- `listPtyTerminalSessions` -- list active sessions
+- `listFiles`, `downloadFile`, `downloadFolder`, `deleteEntry` -- filesystem operations
+
+### 6. State Updates (`onStateUpdate`)
+
+When the frontend changes settings (model, reasoning effort):
+
+```ts
+override async onStateUpdate(state: AgentArgs, source: Connection | "server"): Promise<void> {
+  await this.ctx.storage.put("chatState", state);
+  await this._patchAgent(); // Updates model on PlanAgent + all sub-agents
   await super.onStateUpdate(state, source);
-}
-```
-
-## LangGraph Checkpointer
-
-Custom checkpointer implementation for Cloudflare DO SQLite:
-
-```ts
-// packages/agent/src/checkpointer.ts
-export class CloudflareDOCheckpointer extends BaseCheckpointSaver {
-  constructor(private sql: CloudflareSqlStorage) {
-    super();
-    this.setup();
-  }
-
-  private setup(): void {
-    // Create tables for checkpoints, writes, and blob storage
-    this.sql.exec(`
-      CREATE TABLE IF NOT EXISTS checkpoints (
-        thread_id TEXT NOT NULL,
-        checkpoint_ns TEXT NOT NULL DEFAULT '',
-        checkpoint_id TEXT NOT NULL,
-        parent_checkpoint_id TEXT,
-        type TEXT,
-        checkpoint BLOB,
-        metadata BLOB,
-        PRIMARY KEY (thread_id, checkpoint_ns, checkpoint_id)
-      );
-    `);
-  }
-
-  async getTuple(config: RunnableConfig): Promise<CheckpointTuple | undefined> {
-    // Retrieve checkpoint from SQLite
-  }
-
-  async put(config, checkpoint, metadata): Promise<RunnableConfig> {
-    // Save checkpoint to SQLite
-  }
 }
 ```
 
 ## Authentication Flow
 
-The agent validates requests through Convex:
+The `ConvexAdapter` handles two token types:
 
 ```ts
-private async _init(request: Request): Promise<void> {
-  const token = new URL(request.url).searchParams.get("token");
-  if (!token) {
-    throw new Error("Unauthorized: No token provided");
-  }
+// JWT token -- standard Convex auth
+const adapter = await createConvexAdapter(CONVEX_URL, { type: "jwt", token });
 
-  if (!this.convexClient) {
-    this.convexClient = new ConvexHttpClient(this.env.CONVEX_URL);
-    this.convexClient.setAuth(token);
-
-    // Verify chat exists and user has access
-    const chat = await this.convexClient.query(api.chats.index.get, {
-      _id: this.name as Id<"chats">,
-    });
-    if (!chat) {
-      throw new Error("Unauthorized: No chat found");
-    }
-  }
-}
+// External token -- shared secret for service calls
+const adapter = await createConvexAdapter(CONVEX_URL, { type: "ext", token });
 ```
+
+Token type determines which Convex function variants are called (e.g., `api.chats.index.get` vs `api.chats.index.getExt`).
 
 ## Request Routing
 
-Requests are routed to the correct Durable Object by chat ID:
-
 ```ts
+// packages/agent/src/index.ts
 export default {
-  async fetch(request: Request, env: Env): Promise<Response> {
-    return await routeAgentRequest(request, env, {
-      prefix: "agents",
-      cors: {
-        "Access-Control-Allow-Origin": env.SITE_URL,
-        "Access-Control-Allow-Credentials": "true",
-      },
-    }) || new Response("Not found", { status: 404 });
+  async fetch(request: Request, env: typeof worker.Env): Promise<Response> {
+    return (
+      (await routeAgentRequest(request, env, {
+        prefix: "agents",
+        cors: {
+          "Access-Control-Allow-Origin": env.SITE_URL,
+          "Access-Control-Allow-Credentials": "true",
+          "Access-Control-Allow-Methods": "GET, POST, HEAD, OPTIONS",
+          "Access-Control-Allow-Headers": "Content-Type, Authorization, Cookie, Upgrade, Connection, Sec-WebSocket-Key, Sec-WebSocket-Version, Sec-WebSocket-Extensions, Sec-WebSocket-Protocol",
+          "Access-Control-Max-Age": "86400",
+        },
+      })) || new Response("Not found", { status: 404 })
+    );
   },
 };
 ```
+
+The `routeAgentRequest` function from the `agents` package routes requests to the correct Durable Object by name (chat ID), using the `agents` prefix in the URL path.
+
+## Tools Architecture
+
+### PlanAgent Direct Tools
+
+These run in the supervisor agent context:
+
+| Tool | Source | Description |
+|------|--------|-------------|
+| `web_search` | Exa | Neural web search with source citations |
+| `ask_user` | Custom | Structured questions, pauses for user input via approval flow |
+| `write_todos` | VoltAgent | Create a step-by-step plan |
+| `update_todo` | VoltAgent | Update step status (pending/done) |
+| `task` | VoltAgent | Delegate work to a sub-agent (patched with background support) |
+
+### Daytona Sub-Agent Tools
+
+These run in a delegated sub-agent context:
+
+| Tool | Description |
+|------|-------------|
+| `list` | List files and directories with metadata |
+| `read` | Read file contents with offset/limit pagination |
+| `write` | Write or overwrite files |
+| `edit` | Text replacement (single or replaceAll) |
+| `glob` | Find files by glob pattern |
+| `grep` | Search file contents by pattern |
+| `exec` | Execute shell commands |
+| `stateful_code_exec` | Persistent Python REPL (notebook-like contexts by ID) |
+| `generate_download_url` | Generate direct download URLs for sandbox files |
+
+## Vector Search (RAG)
+
+Messages are indexed in Cloudflare Vectorize for cross-chat retrieval:
+
+```ts
+// Indexing: embed message text and upsert with metadata
+await vectorize.upsert([{
+  id: buildVectorId(agentName, messageId),
+  values: embedding,  // 768-dim
+  metadata: { role, chatId, messageId, text },
+}]);
+
+// Retrieval: query by last user message, scoped to member
+const results = await vectorize.query(embedding, {
+  topK: 6,
+  namespace: memberId,
+  returnMetadata: "all",
+});
+```
+
+Retrieved context is injected as a system message before the last user message.
 
 ## File Structure
 
 ```
 packages/agent/
-├── src/
-│   ├── index.ts           # AgentWorker class and request handling
-│   └── checkpointer.ts    # LangGraph checkpoint persistence
-├── alchemy.run.ts         # Deployment configuration
-├── wrangler.json          # Cloudflare Workers config
-└── package.json
-
-packages/backend/convex/
-├── chats/
-│   ├── functions.ts       # Chat CRUD operations
-│   ├── index.ts           # Exported queries/mutations
-│   └── tables/chats.ts    # Chat schema definition
+├── alchemy.run.ts              # IaC: DurableObject, Vectorize, secrets
+└── src/
+    ├── index.ts                # Entry point, CORS, routeAgentRequest
+    ├── client.ts               # OpenRouter AI client + embedding
+    ├── prompt.ts               # System + task prompts
+    ├── agent/
+    │   ├── worker.ts           # AgentWorker class (AIChatAgent)
+    │   ├── chat-meta.ts        # Title generation
+    │   ├── messages.ts         # Message text extraction + part filtering
+    │   ├── types.ts            # AgentArgs type
+    │   └── vectorize.ts        # Vector indexing + retrieval
+    ├── tools/
+    │   ├── sandbox/
+    │   │   ├── index.ts        # Daytona toolkit (file ops) + FS/PTY service factories
+    │   │   ├── pty.ts          # SandboxPtyService (PTY terminal management)
+    │   │   └── types.ts        # Zod schemas for sandbox tool parameters
+    │   ├── websearch.ts        # Exa web search toolkit
+    │   ├── ask-user.ts         # User interaction tool (approval-based)
+    │   └── utils/
+    │       └── wrapper.ts      # Background task + truncated output utilities
+    └── utils/
+        └── fullStreamParser.ts # VoltAgent stream → UI message stream adapter
 ```
 
 ## Key Dependencies
 
 ```json
 {
-  "agents": "^0.3.6",
-  "deepagents": "^1.6.0",
-  "@langchain/openai": "^0.5.16",
-  "@langchain/langgraph-checkpoint": "^1.0.0",
-  "ai": "^6.0.49",
-  "@ai-sdk/langchain": "^2.0.54"
+  "agents": "Cloudflare Agents SDK",
+  "@cloudflare/ai-chat": "AIChatAgent base class",
+  "@voltagent/core": "PlanAgent, Agent, AgentRegistry, createTool, createToolkit",
+  "ai": "Vercel AI SDK (UIMessage, streaming)",
+  "@daytonaio/sdk": "Daytona sandbox SDK",
+  "exa-js": "Exa neural search",
+  "convex": "Convex HTTP client"
 }
 ```
 
-Next, learn about [Frontend Integration](/docs/agent/frontend-integration).
+Next, learn about [Configuration](/docs/agent/configuration).

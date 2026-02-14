@@ -1,11 +1,11 @@
 ---
 title: Installation
-description: How to install and set up the Just-Use-Convex template
+description: How to install and set up the Just-Use-Convex platform
 ---
 
 # Installation
 
-This template uses a Turborepo monorepo structure with Bun as the package manager.
+This project uses a Turborepo monorepo structure with Bun as the package manager.
 
 ## Prerequisites
 
@@ -13,6 +13,7 @@ Before you begin, ensure you have:
 
 - [Bun](https://bun.sh/) v1.3.6 or later
 - A [Convex account](https://convex.dev/) (free tier available)
+- A [Cloudflare account](https://dash.cloudflare.com/) for agent deployment (optional for local dev)
 
 ## Quick Start
 
@@ -48,17 +49,32 @@ bunx convex env set SITE_URL http://localhost:3001
 bunx convex run auth:getLatestJwks | bunx convex env set JWKS
 ```
 
-
 Set the following environment variables in `apps/web/.env`:
 
 ```bash
-VITE_CONVEX_URL=https://<your-project>.convex.cloud # (located at `packages/backend/.env.local`)
-VITE_CONVEX_SITE_URL=https://<your-project>.convex.site # (located at `packages/backend/.env.local`)
+VITE_CONVEX_URL=https://your-project.convex.cloud
+VITE_CONVEX_SITE_URL=https://your-project.convex.site
 VITE_SITE_URL=http://localhost:3001
-VITE_DATA_BUDDY_CLIENT_ID=<optional>
+VITE_AGENT_URL=http://localhost:1337
+VITE_DEFAULT_MODEL=openai/gpt-5.2-chat
 ```
 
-### 5. Start Development Server
+### 5. Configure Agent Environment
+
+Create `packages/agent/.dev.vars` with the following:
+
+```bash
+# packages/agent/.dev.vars
+OPENROUTER_API_KEY=your-key
+CONVEX_URL=https://your-project.convex.cloud
+CONVEX_SITE_URL=https://your-project.convex.site
+SITE_URL=http://localhost:3001
+EXTERNAL_TOKEN=meow
+DAYTONA_API_KEY=your-key  # Optional: for sandbox features
+EXA_API_KEY=your-key      # Optional: for web search
+```
+
+### 6. Start Development Server
 
 ```bash
 bun run dev
@@ -70,8 +86,9 @@ Open [http://localhost:3001](http://localhost:3001) in your browser.
 
 | Command | Description |
 |---------|-------------|
-| `bun run dev` | Start all apps in development mode |
+| `bun run dev` | Start all apps (frontend + backend + agent) |
 | `bun run dev:web` | Start only the web application |
+| `bun run dev:server` | Start only the Convex backend |
 | `bun run dev:setup` | Setup and configure Convex project |
 | `bun run check-types` | TypeScript type checking across all packages |
 
@@ -83,6 +100,7 @@ Deploy directly to Vercel with all environment variables pre-configured:
 
 ## Next Steps
 
-- Read the [Introduction](/docs/getting-started/introduction) to understand the template architecture
+- Read the [Introduction](/docs/getting-started/introduction) to understand the platform architecture
 - Explore the [Project Structure](/docs/getting-started/project-structure) to navigate the codebase
 - Learn about [Authentication](/docs/auth/overview) to understand the auth flow
+- Check out the agent docs to understand AI integration and sandbox execution

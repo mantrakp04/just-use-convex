@@ -7,6 +7,16 @@ description: Learn how to read and write data with Convex queries and mutations
 
 Queries and mutations are the primary way to interact with your Convex database. This template enhances them with Zod validation and automatic auth context injection.
 
+## Query & Mutation Variants
+
+This template defines three variants for each operation type:
+
+| Variant | Auth Method | Use Case |
+|---------|-------------|----------|
+| `zQuery` / `zMutation` | JWT (user session) | Frontend client calls |
+| `zInternalQuery` / `zInternalMutation` | Identity passed as args | Server-to-server (internal functions, triggers) |
+| `zExternalQuery` / `zExternalMutation` | `externalToken` in args | Agent-side access (Cloudflare Workers, external services) |
+
 ## Queries
 
 Queries read data from the database. They are:
@@ -33,7 +43,7 @@ export const list = zQuery({
 ```ts
 export const getById = zQuery({
   args: z.object({
-    id: z.string(), // Todo ID
+    id: z.string(),
   }),
   handler: async (ctx, args) => {
     return await ctx.table("todos").get(args.id as Id<"todos">);
@@ -72,6 +82,29 @@ export const listByOrganization = zQuery({
 });
 ```
 
+### Using Search Indexes
+
+For full-text search, use the search index defined on the table:
+
+```ts
+// chats/index.ts
+export const search = zQuery({
+  args: z.object({
+    query: z.string(),
+  }),
+  handler: async (ctx, args) => {
+    return await ctx.db
+      .query("chats")
+      .withSearchIndex("title", (q) =>
+        q.search("title", args.query)
+          .eq("organizationId", ctx.identity.activeOrganizationId)
+          .eq("memberId", ctx.identity.memberId)
+      )
+      .collect();
+  },
+});
+```
+
 ## Mutations
 
 Mutations modify data. They are:
@@ -96,7 +129,27 @@ export const create = zMutation({
       priority: args.priority,
       status: "todo",
       organizationId: ctx.identity.activeOrganizationId,
-      userId: ctx.identity.userId,
+      memberId: ctx.identity.memberId,
+      updatedAt: Date.now(),
+    });
+  },
+});
+```
+
+### Chat Create Mutation
+
+```ts
+export const create = zMutation({
+  args: z.object({
+    title: z.string().min(1),
+  }),
+  handler: async (ctx, args) => {
+    return await ctx.table("chats").insert({
+      title: args.title,
+      organizationId: ctx.identity.activeOrganizationId,
+      memberId: ctx.identity.memberId,
+      isPinned: false,
+      updatedAt: Date.now(),
     });
   },
 });
@@ -151,6 +204,48 @@ export const remove = zMutation({
 });
 ```
 
+## External Queries & Mutations
+
+For agent-side access (e.g., from Cloudflare Workers), use `zExternalQuery` and `zExternalMutation`. These validate an `externalToken` from args instead of a JWT session:
+
+```ts
+import { zExternalQuery, zExternalMutation } from "../functions";
+
+// External query: validates externalToken from args
+export const getExt = zExternalQuery({
+  args: z.object({
+    chatId: z.string(),
+  }),
+  handler: async (ctx, args) => {
+    return await ctx.table("chats").get(args.chatId as Id<"chats">);
+  },
+});
+
+// External mutation: same token validation, write access
+export const updateExt = zExternalMutation({
+  args: z.object({
+    chatId: z.string(),
+    title: z.string().optional(),
+  }),
+  handler: async (ctx, args) => {
+    return await ctx.table("chats").patch(args.chatId as Id<"chats">, {
+      ...(args.title && { title: args.title }),
+      updatedAt: Date.now(),
+    });
+  },
+});
+```
+
+The external wrappers automatically inject `externalToken` plus the full identity fields (`userId`, `activeOrganizationId`, `memberId`, `organizationRole`, `activeTeamId`) into args. The caller must provide all of these. Inside the handler, `ctx.identity` works the same as `zQuery`/`zMutation`.
+
+### When to Use External vs Standard
+
+| Scenario | Use |
+|----------|-----|
+| Frontend React component | `zQuery` / `zMutation` |
+| Convex internal function calling another | `zInternalQuery` / `zInternalMutation` |
+| Cloudflare Worker / AI agent calling Convex | `zExternalQuery` / `zExternalMutation` |
+
 ## Context Object
 
 The `ctx` object in handlers provides:
@@ -159,19 +254,20 @@ The `ctx` object in handlers provides:
 |----------|-------------|
 | `ctx.table(name)` | Access a table with Ents API |
 | `ctx.db` | Raw Convex database access |
-| `ctx.identity` | Current user's auth context |
+| `ctx.identity` | Current user's auth context (parsed from JWT or external args) |
 | `ctx.auth` | Auth utilities |
 
 ### Identity Context
 
-When using `zQuery`/`zMutation`, the identity is automatically parsed:
+When using `zQuery`/`zMutation`, the identity is automatically parsed from the JWT. When using `zExternalQuery`/`zExternalMutation`, it is parsed from the args after token validation. Either way, the shape is the same:
 
 ```ts
 ctx.identity = {
   userId: "user_123",              // Better Auth user ID
   activeOrganizationId: "org_456", // Current organization
-  activeTeamId: "team_789",        // Current team (optional)
+  memberId: "member_789",          // Member ID within the org
   organizationRole: "member",      // User's role in org
+  activeTeamId: "team_012",        // Current team (optional)
 };
 ```
 
@@ -219,5 +315,31 @@ if (!todo) {
   throw new Error("Todo not found");
 }
 ```
+
+### 5. Delegate to Pure Functions
+
+Keep handlers thin by delegating to pure business logic functions:
+
+```ts
+// chats/index.ts
+import * as functions from "./functions";
+import * as types from "./types";
+
+export const list = zQuery({
+  args: types.ListArgs,
+  handler: async (ctx, args) => {
+    return await functions.ListChats(ctx, args);
+  },
+});
+
+export const getExt = zExternalQuery({
+  args: types.GetChatArgs,
+  handler: async (ctx, args) => {
+    return await functions.GetChat(ctx, args);
+  },
+});
+```
+
+This keeps the index file as a thin routing layer while business logic lives in `functions.ts`.
 
 Next, learn about [Schema Design](/docs/fundamentals/schema).

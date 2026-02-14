@@ -14,17 +14,36 @@ The schema is organized with each table defined in its own file under `tables/`:
 ```ts
 // schema.ts
 import { defineEntSchema, getEntDefinitions } from "convex-ents";
+import { chatsEnt } from "./tables/chats";
+import { sandboxesEnt } from "./tables/sandboxes";
 import { todosEnt } from "./tables/todos";
-import { todoAssignedUsersEnt } from "./tables/todoAssignedUsers";
+import { todoAssignedMembersEnt } from "./tables/todoAssignedMembers";
+import { globalAttachmentsEnt } from "./tables/globalAttachments";
+import { orgMemberAttachmentsEnt } from "./tables/orgMemberAttachments";
 
 const schema = defineEntSchema({
+  chats: chatsEnt,
+  sandboxes: sandboxesEnt,
   todos: todosEnt,
-  todoAssignedUsers: todoAssignedUsersEnt,
+  todoAssignedMembers: todoAssignedMembersEnt,
+  globalAttachments: globalAttachmentsEnt,
+  orgMemberAttachments: orgMemberAttachmentsEnt,
 });
 
 export default schema;
 export const entDefinitions = getEntDefinitions(schema);
 ```
+
+### Table Overview
+
+| Table | Purpose |
+|-------|---------|
+| `chats` | AI chat sessions scoped to org + member |
+| `sandboxes` | Daytona sandbox environments linked to chats |
+| `todos` | Task items with status, priority, and team assignment |
+| `todoAssignedMembers` | Junction table for many-to-many todo-member assignment |
+| `globalAttachments` | Deduplicated file storage (keyed by content hash) |
+| `orgMemberAttachments` | Per-org-member references to global attachments |
 
 ## Validators
 
@@ -49,11 +68,26 @@ Indexes are crucial for query performance. Define them on your table:
 ```ts
 const todosTable = Todos.table
   // Composite indexes with sort field last
-  .index("organizationId_userId", ["organizationId", "userId", "updatedAt"])
+  .index("organizationId_memberId", ["organizationId", "memberId", "updatedAt"])
   .index("organizationId", ["organizationId", "updatedAt"])
   .index("organizationId_teamId", ["organizationId", "teamId", "updatedAt"])
   // Single-field index
-  .index("userId", ["userId"]);
+  .index("memberId", ["memberId"]);
+```
+
+### Search Indexes
+
+For full-text search, use `searchIndex`:
+
+```ts
+const chatsTable = Chats.table
+  .index("organizationId_memberId_isPinned", ["organizationId", "memberId", "isPinned", "updatedAt"])
+  .index("organizationId", ["organizationId", "updatedAt"])
+  .index("memberId", ["memberId"])
+  .searchIndex("title", {
+    searchField: "title",
+    filterFields: ["organizationId", "memberId", "isPinned"],
+  });
 ```
 
 ### Index Usage Guidelines
@@ -74,7 +108,52 @@ ctx.db.query("todos")
 
 ## Defining Tables with Zod
 
-This template uses Zod schemas with `convex-helpers` to define fields, providing both runtime validation and type inference:
+This template uses Zod schemas with `convex-helpers` to define fields, providing both runtime validation and type inference.
+
+### Chats Table
+
+The chats table demonstrates an optional edge to sandboxes and a search index:
+
+```ts
+// tables/chats.ts
+import { z } from "zod";
+import { defineEntFromTable } from "convex-ents";
+import { Table } from "convex-helpers/server";
+import { convexToZodFields, zodToConvexFields } from "convex-helpers/server/zod4";
+import { sandboxesWithSystemFields } from "./sandboxes";
+
+export const chatsZodSchema = {
+  organizationId: z.string(),
+  memberId: z.string(),
+  title: z.string(),
+  isPinned: z.boolean(),
+  updatedAt: z.number(),
+  sandboxId: sandboxesWithSystemFields._id.optional(),
+};
+
+export const chatsFields = {
+  ...zodToConvexFields(chatsZodSchema),
+};
+
+export const Chats = Table("chats", chatsFields);
+
+const chatsTable = Chats.table
+  .index("organizationId_memberId_isPinned", ["organizationId", "memberId", "isPinned", "updatedAt"])
+  .index("organizationId", ["organizationId", "updatedAt"])
+  .index("memberId", ["memberId"])
+  .searchIndex("title", {
+    searchField: "title",
+    filterFields: ["organizationId", "memberId", "isPinned"],
+  });
+
+// Many chats belong to one sandbox (optional relationship)
+export const chatsEnt = defineEntFromTable(chatsTable)
+  .edge("sandbox", { to: "sandboxes", field: "sandboxId", optional: true });
+```
+
+Note how `sandboxId` references the sandboxes table using the Zod system fields from the sandboxes table definition. The `.edge()` call declares the relationship so you can traverse it with Ents.
+
+### Todos Table
 
 ```ts
 // tables/todos.ts
@@ -85,7 +164,7 @@ import { zodToConvexFields } from "convex-helpers/server/zod4";
 
 export const todosZodSchema = {
   organizationId: z.string(),
-  userId: z.string(),
+  memberId: z.string(),
   teamId: z.string().optional(),
   title: z.string(),
   description: z.string().optional(),
@@ -97,53 +176,168 @@ export const todosZodSchema = {
   updatedAt: z.number(),
 };
 
-// Convert Zod schema to Convex fields
 export const todosFields = zodToConvexFields(todosZodSchema);
 
-// Create a Table helper for type-safe queries
 export const Todos = Table("todos", todosFields);
 
-// Define indexes and edges
 const todosTable = Todos.table
-  .index("organizationId_userId", ["organizationId", "userId", "updatedAt"])
+  .index("organizationId_memberId", ["organizationId", "memberId", "updatedAt"])
   .index("organizationId", ["organizationId", "updatedAt"])
   .index("organizationId_teamId", ["organizationId", "teamId", "updatedAt"])
-  .index("userId", ["userId"]);
+  .index("memberId", ["memberId"]);
 
 export const todosEnt = defineEntFromTable(todosTable)
-  .edges("assignedUsers", { to: "todoAssignedUsers", ref: "todoId" });
+  .edges("assignedMembers", { to: "todoAssignedMembers", ref: "todoId" });
 ```
+
+## Sandboxes and Lifecycle Triggers
+
+The sandboxes table uses a Convex trigger to automatically provision and destroy Daytona sandbox environments when documents are inserted or deleted:
+
+```ts
+// tables/sandboxes.ts
+import { z } from "zod";
+import { defineEntFromTable } from "convex-ents";
+import { Table } from "convex-helpers/server";
+import { zodToConvexFields } from "convex-helpers/server/zod4";
+import type { Trigger } from "convex-helpers/server/triggers";
+import type { GenericMutationCtx } from "convex/server";
+import { internal } from "../_generated/api";
+import type { DataModel } from "../_generated/dataModel";
+
+export const sandboxesZodSchema = {
+  organizationId: z.string(),
+  userId: z.string(),
+  name: z.string(),
+  description: z.string().optional(),
+  updatedAt: z.number(),
+};
+
+export const sandboxesFields = zodToConvexFields(sandboxesZodSchema);
+
+export const Sandboxes = Table("sandboxes", sandboxesFields);
+
+const sandboxesTable = Sandboxes.table
+  .index("organizationId_userId", ["organizationId", "userId", "updatedAt"])
+  .index("organizationId", ["organizationId", "updatedAt"])
+  .index("userId", ["userId"])
+  .searchIndex("name", {
+    searchField: "name",
+    filterFields: ["organizationId", "userId"],
+  });
+
+// 1:many relationship - one sandbox has many chats
+export const sandboxesEnt = defineEntFromTable(sandboxesTable)
+  .edges("chats", { to: "chats", ref: "sandboxId" });
+
+// Lifecycle trigger: provision on insert, destroy on delete
+type MutationCtx = GenericMutationCtx<DataModel>;
+
+export const sandboxDaytonaTrigger: Trigger<MutationCtx, DataModel, "sandboxes"> = async (ctx, change) => {
+  if (change.operation === "insert") {
+    await ctx.scheduler.runAfter(0, internal.sandboxes.nodeFunctions.provision, {
+      sandboxId: change.id,
+    });
+    return;
+  }
+
+  if (change.operation === "delete") {
+    await ctx.scheduler.runAfter(0, internal.sandboxes.nodeFunctions.destroy, {
+      sandboxId: change.id,
+    });
+  }
+};
+```
+
+The trigger is registered in `functions.ts`:
+
+```ts
+const triggers = new Triggers<DataModel>();
+triggers.register("sandboxes", sandboxDaytonaTrigger);
+```
+
+This pattern ensures every sandbox document maps 1:1 to a real Daytona sandbox, with provisioning and cleanup handled automatically via the scheduler.
 
 ## Junction Tables
 
 For many-to-many relationships, define a junction table:
 
 ```ts
-// tables/todoAssignedUsers.ts
+// tables/todoAssignedMembers.ts
 import { z } from "zod";
 import { defineEntFromTable } from "convex-ents";
 import { Table } from "convex-helpers/server";
 import { zodToConvexFields } from "convex-helpers/server/zod4";
 import { v } from "convex/values";
 
-export const todoAssignedUsersZodSchema = {
-  userId: z.string(),
-  assignedBy: z.string(),
+export const todoAssignedMembersZodSchema = {
+  memberId: z.string(),
+  assignedByMemberId: z.string(),
 };
 
-export const todoAssignedUsersFields = {
-  ...zodToConvexFields(todoAssignedUsersZodSchema),
+export const todoAssignedMembersFields = {
+  ...zodToConvexFields(todoAssignedMembersZodSchema),
   todoId: v.id("todos"),
 };
 
-export const TodoAssignedUsers = Table("todoAssignedUsers", todoAssignedUsersFields);
+export const TodoAssignedMembers = Table("todoAssignedMembers", todoAssignedMembersFields);
 
-const todoAssignedUsersTable = TodoAssignedUsers.table
-  .index("userId", ["userId"])
-  .index("todoId_userId", ["todoId", "userId"]);
+const todoAssignedMembersTable = TodoAssignedMembers.table
+  .index("memberId", ["memberId"])
+  .index("todoId_memberId", ["todoId", "memberId"]);
 
-export const todoAssignedUsersEnt = defineEntFromTable(todoAssignedUsersTable)
+export const todoAssignedMembersEnt = defineEntFromTable(todoAssignedMembersTable)
   .edge("todo", { to: "todos", field: "todoId" });
+```
+
+## Attachment Tables (Deduplication Pattern)
+
+Attachments use a two-table pattern for content-addressable storage:
+
+### Global Attachments
+
+Stores the actual file once, keyed by content hash:
+
+```ts
+// tables/globalAttachments.ts
+export const globalAttachmentsZodSchema = {
+  hash: z.string(),
+  storageId: zid("_storage"),
+  size: z.number(),
+  contentType: z.string().optional(),
+};
+
+const globalAttachmentsTable = GlobalAttachments.table
+  .index("hash", ["hash"]);
+
+export const globalAttachmentsEnt = defineEntFromTable(globalAttachmentsTable)
+  .edges("orgMemberAttachments", { to: "orgMemberAttachments", ref: "globalAttachmentId" });
+```
+
+### Org Member Attachments
+
+Per-org-member references to global attachments, so the same file uploaded by different members only stores once:
+
+```ts
+// tables/orgMemberAttachments.ts
+export const orgMemberAttachmentsZodSchema = {
+  organizationId: z.string(),
+  memberId: z.string(),
+  globalAttachmentId: globalAttachmentsWithSystemFields._id,
+  fileName: z.string(),
+  contentType: z.string().optional(),
+  size: z.number(),
+  updatedAt: z.number(),
+};
+
+const orgMemberAttachmentsTable = OrgMemberAttachments.table
+  .index("organizationId_memberId", ["organizationId", "memberId", "updatedAt"])
+  .index("organizationId_memberId_globalAttachmentId", ["organizationId", "memberId", "globalAttachmentId"])
+  .index("organizationId", ["organizationId", "updatedAt"])
+  .index("memberId", ["memberId"]);
+
+export const orgMemberAttachmentsEnt = defineEntFromTable(orgMemberAttachmentsTable)
+  .edge("globalAttachment", { to: "globalAttachments", field: "globalAttachmentId" });
 ```
 
 ## Generated Types
@@ -153,6 +347,16 @@ After defining your schema, Convex generates TypeScript types:
 ```ts
 // _generated/dataModel.d.ts
 export type Doc<TableName extends TableNames> = {
+  chats: {
+    _id: Id<"chats">;
+    _creationTime: number;
+    organizationId: string;
+    memberId: string;
+    title: string;
+    isPinned: boolean;
+    updatedAt: number;
+    sandboxId?: Id<"sandboxes">;
+  };
   todos: {
     _id: Id<"todos">;
     _creationTime: number;
@@ -169,6 +373,8 @@ Use these types in your code:
 ```ts
 import { Doc, Id } from "./_generated/dataModel";
 
+type Chat = Doc<"chats">;
+type ChatId = Id<"chats">;
 type Todo = Doc<"todos">;
 type TodoId = Id<"todos">;
 ```
