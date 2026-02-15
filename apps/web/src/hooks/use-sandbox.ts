@@ -5,6 +5,7 @@ import { useAction } from "convex/react";
 import { toast } from "sonner";
 import type { Terminal as XtermTerminal } from "xterm";
 import type { FunctionReturnType } from "convex/server";
+import { env } from "@just-use-convex/env/web";
 import type {
   ExplorerEntry,
   ExplorerState,
@@ -17,8 +18,6 @@ export type { ExplorerEntry, ExplorerState, TerminalSession };
 export type ChatSshSessionState = FunctionReturnType<typeof api.sandboxes.nodeFunctions.createChatSshAccess> | null;
 export type ChatExplorerState = ExplorerState | null;
 export type ChatTerminalSessionsState = TerminalSession[];
-
-const TERMINAL_BACKGROUND = "#0b0f19";
 
 type AgentCaller = {
   call: (
@@ -110,9 +109,9 @@ export function useChatSandbox(chatId: Id<"chats">, agent: AgentCaller | null) {
       const session = !sshSession || isExpired ? await createSshAccess() : sshSession;
       if (!session?.token) return;
 
-      const host = session.sshCommand ? parseSshHost(session.sshCommand) : "ssh.app.daytona.io";
+      const host = session.sshCommand ? parseSshHost(session.sshCommand) : env.VITE_SANDBOX_SSH_HOST;
       const scheme = editor === "vscode" ? "vscode" : "cursor";
-      window.open(`${scheme}://vscode-remote/ssh-remote+${session.token}@${host}/home/daytona`, "_blank");
+      window.open(`${scheme}://vscode-remote/ssh-remote+${session.token}@${host}${env.VITE_SANDBOX_MOUNT_PATH}`, "_blank");
     },
     [createSshAccess, sshSession]
   );
@@ -120,13 +119,13 @@ export function useChatSandbox(chatId: Id<"chats">, agent: AgentCaller | null) {
   const refreshExplorer = useCallback(async (path?: string) => {
     if (!agent) return;
     try {
-      const resolvedPath = path ?? explorer?.path ?? "/";
+      const resolvedPath = path ?? explorer?.path ?? env.VITE_SANDBOX_MOUNT_PATH;
       const entries = (await agent.call("listFiles", [{ path: resolvedPath }])) as FileInfo[];
       setExplorer({
-        path: resolvedPath || "/",
+        path: resolvedPath,
         entries: entries.map((e) => ({
           name: e.name,
-          path: resolvedPath ? `${resolvedPath}/${e.name}` : e.name,
+          path: `${resolvedPath}/${e.name}`,
           isDir: e.isDir,
           size: e.size,
           modifiedAt: new Date(e.modTime).getTime(),
@@ -240,7 +239,7 @@ export function useChatSandbox(chatId: Id<"chats">, agent: AgentCaller | null) {
         scrollback: 20000,
         fontSize: 12,
         fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
-        theme: { background: TERMINAL_BACKGROUND, foreground: "#e5e7eb", cursor: "#f9fafb" },
+        theme: { background: env.VITE_TERMINAL_BACKGROUND, foreground: "#e5e7eb", cursor: "#f9fafb" },
       });
       const fitAddon = new FitAddon();
       term.loadAddon(fitAddon);
@@ -395,7 +394,7 @@ export function useChatSandbox(chatId: Id<"chats">, agent: AgentCaller | null) {
     activeTerminalId,
     focusTerminal: useCallback(() => terminalRef.current?.focus(), []),
     terminalContainerRef,
-    terminalBackground: TERMINAL_BACKGROUND,
+    terminalBackground: env.VITE_TERMINAL_BACKGROUND,
     isConnectingSsh: sshPending,
     isConnectingPreview: previewPending,
   };
@@ -417,6 +416,5 @@ function triggerDownload(decoded: string, filename: string, mime?: string) {
 }
 
 function parseSshHost(sshCommand: string): string {
-  return sshCommand.match(/@([^\s]+)/)?.[1] ?? "ssh.app.daytona.io";
+  return sshCommand.match(/@([^\s]+)/)?.[1] ?? env.VITE_SANDBOX_SSH_HOST;
 }
-

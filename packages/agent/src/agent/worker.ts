@@ -28,6 +28,7 @@ import {
   createConvexAdapter,
   parseTokenFromUrl,
 } from "@just-use-convex/backend/convex/lib/convexAdapter";
+import { env as agentDefaults } from "@just-use-convex/env/agent";
 import type { FunctionReturnType } from "convex/server";
 import { createAiClient } from "../client";
 import { SYSTEM_PROMPT, TASK_PROMPT } from "../prompt";
@@ -43,7 +44,6 @@ import {
 import { generateTitle } from "./chat-meta";
 import {
   extractMessageText,
-  type FilePartUrl,
   processMessagesForAgent,
 } from "./messages";
 import type { AgentArgs } from "./types";
@@ -58,7 +58,7 @@ import {
   createSandboxPtyFunctions,
 } from "../tools/sandbox";
 import { Daytona, type Sandbox } from "@daytonaio/sdk";
-import { ensureSandboxStarted } from "../tools/utils/sandbox";
+import { ensureSandboxStarted, downloadFileUrlsInSandbox } from "../tools/utils/sandbox";
 
 type CallableFunctionInstance = object;
 type CallableServiceMethodsMap = Record<string, (...args: unknown[]) => unknown>;
@@ -107,9 +107,9 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, AgentArgs> {
     this.chatDoc = chat;
 
     this.daytona = new Daytona({
-      apiKey: this.env.DAYTONA_API_KEY ?? '',
-      apiUrl: this.env.DAYTONA_API_URL ?? '',
-      target: this.env.DAYTONA_TARGET ?? '',
+      apiKey: this.env.DAYTONA_API_KEY ?? agentDefaults.DAYTONA_API_KEY,
+      apiUrl: this.env.DAYTONA_API_URL ?? agentDefaults.DAYTONA_API_URL,
+      target: this.env.DAYTONA_TARGET ?? agentDefaults.DAYTONA_TARGET,
     });
     if (!this.sandbox && this.chatDoc?.sandboxId) {
       this.sandbox = await this.daytona.get(this.chatDoc?.sandboxId);
@@ -230,9 +230,10 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, AgentArgs> {
 
     const tasks = agent.getTools().find((t) => t.name === "task");
     if (tasks) {
+      const maxBackgroundDuration = Number(this.env.MAX_BACKGROUND_DURATION_MS ?? agentDefaults.MAX_BACKGROUND_DURATION_MS);
       patchToolWithBackgroundSupport(tasks, this.backgroundTaskStore, this.truncatedOutputStore, {
         maxDuration: 30 * 60 * 1000,
-        maxBackgroundDuration: Number(this.env.MAX_BACKGROUND_DURATION_MS) || undefined,
+        maxBackgroundDuration: maxBackgroundDuration > 0 ? maxBackgroundDuration : undefined,
         allowAgentSetDuration: true,
         allowBackground: true,
       });
@@ -257,43 +258,6 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, AgentArgs> {
       writable: true,
       configurable: true,
     });
-  }
-
-  private async downloadFileUrlsInSandbox(
-    filePartUrls: FilePartUrl[]
-  ): Promise<string[] | null> {
-    const sandbox = this.sandbox;
-    if (!sandbox || filePartUrls.length === 0) return null;
-
-    try {
-      const uploadsDir = "/home/daytona/uploads";
-      const mkdirResult = await sandbox.process.executeCommand(`mkdir -p ${uploadsDir}`);
-      if (mkdirResult.exitCode !== 0) {
-        console.warn("Could not create uploads dir:", mkdirResult.result);
-        return null;
-      }
-
-      const paths: string[] = [];
-      await Promise.all(
-        filePartUrls.map(async ({ url, filename }, i) => {
-          try {
-            const res = await fetch(url);
-            if (!res.ok) throw new Error(`HTTP ${res.status}`);
-            const buf = Buffer.from(await res.arrayBuffer());
-            const safeName = filename.replace(/[/\\]/g, "_");
-            const path = `${uploadsDir}/${i}_${safeName}`;
-            await sandbox.fs.uploadFile(buf, path);
-            paths.push(path);
-          } catch (err) {
-            console.warn("Failed to download file from message:", url, err);
-          }
-        })
-      );
-      return paths;
-    } catch (err) {
-      console.warn("Daytona sandbox error during file upload:", err);
-      return null;
-    }
   }
 
   private async _registerCallableFunctions() {
@@ -456,7 +420,7 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, AgentArgs> {
             })
           : null,
         this.sandbox && lastUserFilePartUrls.length > 0
-          ? this.downloadFileUrlsInSandbox(lastUserFilePartUrls)
+          ? downloadFileUrlsInSandbox(this.sandbox, lastUserFilePartUrls)
           : null,
       ]);
 
@@ -497,5 +461,4 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, AgentArgs> {
       return new Response("Internal Server Error", { status: 500 });
     }
   }
-
 }
