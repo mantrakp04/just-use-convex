@@ -125,10 +125,101 @@ export function useOrgStats() {
 
 export type SearchResult = FunctionReturnType<typeof api.todos.index.search>;
 
+type SearchTimeFilters = FunctionArgs<typeof api.todos.index.search>["timeFilters"];
+
+/**
+ * Parses time filter expressions from a search query string.
+ * Supported syntax:
+ *   due:today, due:tomorrow, due:YYYY-MM-DD
+ *   due:YYYY-MM-DD..YYYY-MM-DD (range)
+ *   after:YYYY-MM-DD, before:YYYY-MM-DD
+ *   updated:today, updated:YYYY-MM-DD..YYYY-MM-DD
+ * Returns { cleanQuery, timeFilters }.
+ */
+function parseSearchTimeFilters(raw: string): { cleanQuery: string; timeFilters: SearchTimeFilters | undefined } {
+  const timeFilters: NonNullable<SearchTimeFilters> = {};
+  let cleanQuery = raw;
+
+  const resolveDate = (token: string): { from: number; to: number } | null => {
+    const now = new Date();
+    if (token === "today") {
+      const start = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+      return { from: start, to: start + 86_400_000 - 1 };
+    }
+    if (token === "tomorrow") {
+      const start = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1).getTime();
+      return { from: start, to: start + 86_400_000 - 1 };
+    }
+    if (token === "yesterday") {
+      const start = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1).getTime();
+      return { from: start, to: start + 86_400_000 - 1 };
+    }
+    // Range: YYYY-MM-DD..YYYY-MM-DD
+    const rangeMatch = token.match(/^(\d{4}-\d{2}-\d{2})\.\.(\d{4}-\d{2}-\d{2})$/);
+    if (rangeMatch) {
+      const from = new Date(rangeMatch[1]!).getTime();
+      const to = new Date(rangeMatch[2]!).getTime() + 86_400_000 - 1;
+      if (!isNaN(from) && !isNaN(to)) return { from, to };
+    }
+    // Single date: YYYY-MM-DD
+    const dateMatch = token.match(/^(\d{4}-\d{2}-\d{2})$/);
+    if (dateMatch) {
+      const start = new Date(dateMatch[1]!).getTime();
+      if (!isNaN(start)) return { from: start, to: start + 86_400_000 - 1 };
+    }
+    return null;
+  };
+
+  // due:<expr>
+  cleanQuery = cleanQuery.replace(/\bdue:(\S+)/gi, (_, expr: string) => {
+    const range = resolveDate(expr);
+    if (range) {
+      timeFilters.dueDateFrom = range.from;
+      timeFilters.dueDateTo = range.to;
+    }
+    return "";
+  });
+
+  // after:<date>
+  cleanQuery = cleanQuery.replace(/\bafter:(\S+)/gi, (_, expr: string) => {
+    const range = resolveDate(expr);
+    if (range) {
+      timeFilters.dueDateFrom = range.from;
+    }
+    return "";
+  });
+
+  // before:<date>
+  cleanQuery = cleanQuery.replace(/\bbefore:(\S+)/gi, (_, expr: string) => {
+    const range = resolveDate(expr);
+    if (range) {
+      timeFilters.dueDateTo = range.to;
+    }
+    return "";
+  });
+
+  // updated:<expr>
+  cleanQuery = cleanQuery.replace(/\bupdated:(\S+)/gi, (_, expr: string) => {
+    const range = resolveDate(expr);
+    if (range) {
+      timeFilters.updatedAtFrom = range.from;
+      timeFilters.updatedAtTo = range.to;
+    }
+    return "";
+  });
+
+  cleanQuery = cleanQuery.replace(/\s+/g, " ").trim();
+
+  const hasFilters = Object.keys(timeFilters).length > 0;
+  return { cleanQuery, timeFilters: hasFilters ? timeFilters : undefined };
+}
+
 export function useSearchTodos(query: string) {
+  const { cleanQuery, timeFilters } = parseSearchTimeFilters(query);
+  const hasQuery = cleanQuery.length > 0;
   return useQuery({
-    ...convexQuery(api.todos.index.search, query.length > 0 ? { query } : "skip"),
-    enabled: query.length > 0,
+    ...convexQuery(api.todos.index.search, hasQuery ? { query: cleanQuery, timeFilters } : "skip"),
+    enabled: hasQuery,
   });
 }
 

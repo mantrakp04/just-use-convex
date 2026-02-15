@@ -3,6 +3,13 @@ import { defineEntFromTable } from "convex-ents";
 import { Table } from "convex-helpers/server";
 import { convexToZodFields, zodToConvexFields } from "convex-helpers/server/zod4";
 
+export const todoTimeMetadataZodSchema = {
+  dueDate: z.number().nullable().optional(),
+  startTime: z.number().nullable().optional(),
+  endTime: z.number().nullable().optional(),
+  updatedAt: z.number(),
+};
+
 export const todosZodSchema = {
   organizationId: z.string(),
   memberId: z.string(),
@@ -10,11 +17,8 @@ export const todosZodSchema = {
   title: z.string(),
   description: z.string().optional(),
   status: z.enum(["todo", "in_progress", "done"]).default("todo"),
-  dueDate: z.number().nullable().optional(),
-  startTime: z.number().nullable().optional(),
-  endTime: z.number().nullable().optional(),
   priority: z.enum(["low", "medium", "high"]).default("medium"),
-  updatedAt: z.number(),
+  ...todoTimeMetadataZodSchema,
 };
 
 export const todosFields = zodToConvexFields(todosZodSchema);

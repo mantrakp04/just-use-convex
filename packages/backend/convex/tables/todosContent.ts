@@ -6,10 +6,12 @@ import { v } from "convex/values";
 import type { Trigger } from "convex-helpers/server/triggers";
 import type { GenericMutationCtx } from "convex/server";
 import type { DataModel } from "../_generated/dataModel";
+import { todoTimeMetadataZodSchema } from "./todos";
 
 export const todosContentZodSchema = {
   organizationId: z.string(),
   content: z.string(),
+  ...todoTimeMetadataZodSchema,
 };
 
 export const todosContentFields = {
@@ -20,7 +22,6 @@ export const todosContentFields = {
 export const TodosContent = Table("todosContent", todosContentFields);
 
 const todosContentTable = TodosContent.table
-  .index("todoId", ["todoId"])
   .searchIndex("content", {
     searchField: "content",
     filterFields: ["organizationId"],
@@ -46,6 +47,7 @@ interface TodoDoc {
   dueDate?: number | null;
   startTime?: number | null;
   endTime?: number | null;
+  updatedAt: number;
 }
 
 function buildTodoContent(todo: TodoDoc, assignedMemberIds: string[]): string {
@@ -79,13 +81,21 @@ async function upsertTodoContent(ctx: MutationCtx, todoId: string, todo: TodoDoc
     .withIndex("todoId", (q) => q.eq("todoId", todoId as never))
     .unique();
 
+  const timeMetadata = {
+    dueDate: todo.dueDate ?? undefined,
+    startTime: todo.startTime ?? undefined,
+    endTime: todo.endTime ?? undefined,
+    updatedAt: todo.updatedAt ?? Date.now(),
+  };
+
   if (existing) {
-    await ctx.db.patch(existing._id, { content });
+    await ctx.db.patch(existing._id, { content, ...timeMetadata });
   } else {
     await ctx.db.insert("todosContent", {
       todoId: todoId as never,
       organizationId: todo.organizationId,
       content,
+      ...timeMetadata,
     });
   }
 }
