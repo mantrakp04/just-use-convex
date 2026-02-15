@@ -59,6 +59,8 @@ import {
 } from "../tools/sandbox";
 import { Daytona, type Sandbox } from "@daytonaio/sdk";
 import { ensureSandboxStarted, downloadFileUrlsInSandbox } from "../tools/utils/sandbox";
+import { createWorkflowActionToolkit } from "../tools/workflow-actions";
+import { buildWorkflowSystemPrompt } from "../tools/workflow-prompt";
 
 type CallableFunctionInstance = object;
 type CallableServiceMethodsMap = Record<string, (...args: unknown[]) => unknown>;
@@ -310,6 +312,12 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, AgentArgs> {
 
   override async onRequest(request: Request): Promise<Response> {
     const url = new URL(request.url);
+
+    // Handle workflow execution requests directly (DO name is workflow-{id}, not a chat)
+    if (url.pathname.endsWith("/executeWorkflow") && request.method === "POST") {
+      return this._handleExecuteWorkflow(request);
+    }
+
     const inputModalitiesRaw = url.searchParams.get("inputModalities");
     await this._init({
       model: url.searchParams.get("model") ?? undefined,
@@ -374,6 +382,113 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, AgentArgs> {
     }
 
     await this.persistMessages(messages);
+  }
+
+  private async _handleExecuteWorkflow(request: Request): Promise<Response> {
+    try {
+      const url = new URL(request.url);
+      const tokenConfig = parseTokenFromUrl(url);
+      if (!tokenConfig) {
+        return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401 });
+      }
+
+      const body = await request.json() as {
+        executionId: string;
+        workflowId: string;
+        triggerPayload: string;
+      };
+
+      // 1. Create ConvexAdapter with the provided token
+      const adapter = await createConvexAdapter(this.env.CONVEX_URL, tokenConfig);
+
+      // 2. Fetch workflow definition from Convex (enrichArgs adds identity fields)
+      const workflow = await adapter.query(
+        api.workflows.index.getForExecutionExt,
+        { _id: body.workflowId as Id<"workflows"> } as never,
+      );
+
+      if (!workflow) {
+        return new Response(JSON.stringify({ error: "Workflow not found" }), { status: 404 });
+      }
+
+      // 3. Update execution status to "running" (enrichArgs adds identity fields)
+      await adapter.mutation(
+        api.workflows.index.updateExecutionStatusExt,
+        { executionId: body.executionId as Id<"workflowExecutions">, status: "running" } as never,
+      );
+
+      // 4. Build action toolkit (filtered to allowed actions)
+      const actionToolkit = createWorkflowActionToolkit(
+        workflow.allowedActions,
+        adapter,
+      );
+
+      // 5. Build workflow-specific prompt
+      const systemPrompt = buildWorkflowSystemPrompt(workflow, body.triggerPayload);
+
+      // 6. Determine model
+      const model = workflow.model ?? agentDefaults.DEFAULT_MODEL;
+
+      // 7. Create a one-shot PlanAgent with workflow prompt + action tools
+      const agent = new PlanAgent({
+        name: "WorkflowExecutor",
+        systemPrompt,
+        model: createAiClient(model),
+        tools: [actionToolkit],
+        planning: false,
+        maxSteps: 50,
+      });
+
+      // 8. Run the agent
+      const result = await agent.generateText([{
+        id: crypto.randomUUID(),
+        role: "user" as const,
+        parts: [{ type: "text" as const, text: "Execute this workflow now." }],
+      }]);
+
+      // 9. Report completion back to Convex (enrichArgs adds identity fields)
+      await adapter.mutation(
+        api.workflows.index.updateExecutionStatusExt,
+        {
+          executionId: body.executionId as Id<"workflowExecutions">,
+          status: "completed",
+          agentOutput: result.text,
+          completedAt: Date.now(),
+        } as never,
+      );
+
+      return new Response(JSON.stringify({ status: "completed" }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    } catch (error) {
+      console.error("executeWorkflow failed", error);
+
+      // Try to report failure
+      try {
+        const url = new URL(request.url);
+        const tokenConfig = parseTokenFromUrl(url);
+        if (tokenConfig) {
+          const adapter = await createConvexAdapter(this.env.CONVEX_URL, tokenConfig);
+          const body = await request.clone().json() as { executionId: string };
+          await adapter.mutation(
+            api.workflows.index.updateExecutionStatusExt,
+            {
+              executionId: body.executionId as Id<"workflowExecutions">,
+              status: "failed",
+              error: error instanceof Error ? error.message : String(error),
+              completedAt: Date.now(),
+            } as never,
+          );
+        }
+      } catch {
+        // Best effort
+      }
+
+      return new Response(JSON.stringify({
+        error: error instanceof Error ? error.message : "Workflow execution failed",
+      }), { status: 500 });
+    }
   }
 
   override async onChatMessage(

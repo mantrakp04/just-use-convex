@@ -5,6 +5,8 @@ import { chatsEnt } from "./tables/chats";
 import { sandboxesEnt } from "./tables/sandboxes";
 import { globalAttachmentsEnt } from "./tables/globalAttachments";
 import { orgMemberAttachmentsEnt } from "./tables/orgMemberAttachments";
+import { workflowsEnt } from "./tables/workflows";
+import { workflowExecutionsEnt } from "./tables/workflowExecutions";
 
 const schema = defineEntSchema({
   todos: todosEnt,
@@ -13,6 +15,8 @@ const schema = defineEntSchema({
   sandboxes: sandboxesEnt,
   globalAttachments: globalAttachmentsEnt,
   orgMemberAttachments: orgMemberAttachmentsEnt,
+  workflows: workflowsEnt,
+  workflowExecutions: workflowExecutionsEnt,
 });
 
 export default schema;

@@ -19,6 +19,7 @@ import type * as chats_functions from "../chats/functions.js";
 import type * as chats_index from "../chats/index.js";
 import type * as chats_stats from "../chats/stats.js";
 import type * as chats_types from "../chats/types.js";
+import type * as crons from "../crons.js";
 import type * as functions from "../functions.js";
 import type * as healthCheck from "../healthCheck.js";
 import type * as http from "../http.js";
@@ -40,12 +41,22 @@ import type * as tables_orgMemberAttachments from "../tables/orgMemberAttachment
 import type * as tables_sandboxes from "../tables/sandboxes.js";
 import type * as tables_todoAssignedMembers from "../tables/todoAssignedMembers.js";
 import type * as tables_todos from "../tables/todos.js";
+import type * as tables_workflowExecutions from "../tables/workflowExecutions.js";
+import type * as tables_workflows from "../tables/workflows.js";
 import type * as todos_aggregates from "../todos/aggregates.js";
 import type * as todos_functions from "../todos/functions.js";
 import type * as todos_index from "../todos/index.js";
 import type * as todos_stats from "../todos/stats.js";
 import type * as todos_statsTypes from "../todos/statsTypes.js";
 import type * as todos_types from "../todos/types.js";
+import type * as workflows_dispatch from "../workflows/dispatch.js";
+import type * as workflows_functions from "../workflows/functions.js";
+import type * as workflows_index from "../workflows/index.js";
+import type * as workflows_internalMutations from "../workflows/internalMutations.js";
+import type * as workflows_scheduler from "../workflows/scheduler.js";
+import type * as workflows_triggers from "../workflows/triggers.js";
+import type * as workflows_types from "../workflows/types.js";
+import type * as workflows_webhookQuery from "../workflows/webhookQuery.js";
 
 import type {
   ApiFromModules,
@@ -65,6 +76,7 @@ declare const fullApi: ApiFromModules<{
   "chats/index": typeof chats_index;
   "chats/stats": typeof chats_stats;
   "chats/types": typeof chats_types;
+  crons: typeof crons;
   functions: typeof functions;
   healthCheck: typeof healthCheck;
   http: typeof http;
@@ -86,12 +98,22 @@ declare const fullApi: ApiFromModules<{
   "tables/sandboxes": typeof tables_sandboxes;
   "tables/todoAssignedMembers": typeof tables_todoAssignedMembers;
   "tables/todos": typeof tables_todos;
+  "tables/workflowExecutions": typeof tables_workflowExecutions;
+  "tables/workflows": typeof tables_workflows;
   "todos/aggregates": typeof todos_aggregates;
   "todos/functions": typeof todos_functions;
   "todos/index": typeof todos_index;
   "todos/stats": typeof todos_stats;
   "todos/statsTypes": typeof todos_statsTypes;
   "todos/types": typeof todos_types;
+  "workflows/dispatch": typeof workflows_dispatch;
+  "workflows/functions": typeof workflows_functions;
+  "workflows/index": typeof workflows_index;
+  "workflows/internalMutations": typeof workflows_internalMutations;
+  "workflows/scheduler": typeof workflows_scheduler;
+  "workflows/triggers": typeof workflows_triggers;
+  "workflows/types": typeof workflows_types;
+  "workflows/webhookQuery": typeof workflows_webhookQuery;
 }>;
 
 /**
