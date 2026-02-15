@@ -60,6 +60,13 @@ export const listAssigned = zQuery({
   }
 });
 
+export const search = zQuery({
+  args: types.SearchArgs,
+  handler: async (ctx, args): Promise<ReturnType<typeof functions.SearchTodos>> => {
+    return await functions.SearchTodos(ctx, args);
+  }
+});
+
 // ═══════════════════════════════════════════════════════════════════
 // STATS QUERIES
 // ═══════════════════════════════════════════════════════════════════

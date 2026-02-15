@@ -36,4 +36,5 @@ const todosTable = Todos.table
   .index("memberId", ["memberId"]);
 
 export const todosEnt = defineEntFromTable(todosTable)
-  .edges("assignedMembers", { to: "todoAssignedMembers", ref: "todoId" });
+  .edges("assignedMembers", { to: "todoAssignedMembers", ref: "todoId" })
+  .edge("content", { to: "todosContent", ref: "todoId" });

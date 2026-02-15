@@ -67,3 +67,7 @@ export const ListAssignedTodosArgs = z.object({
   memberId: z.string().optional(),
   paginationOpts: zPaginationOpts,
 });
+
+export const SearchArgs = z.object({
+  query: z.string(),
+});

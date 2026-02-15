@@ -249,6 +249,31 @@ export async function UnassignMember(ctx: zMutationCtx, args: z.infer<typeof typ
   return true;
 }
 
+export async function SearchTodos(ctx: zQueryCtx, args: z.infer<typeof types.SearchArgs>) {
+  assertPermission(
+    ctx.identity.organizationRole,
+    { todo: ["read"] },
+    "You are not authorized to search todos"
+  );
+
+  const results = await ctx.db
+    .query("todosContent")
+    .withSearchIndex("content", (q) =>
+      q.search("content", args.query)
+        .eq("organizationId", ctx.identity.activeOrganizationId)
+    )
+    .take(20);
+
+  const todos = await Promise.all(
+    results.map(async (result) => {
+      const todo = await ctx.table("todos").get(result.todoId);
+      return todo;
+    })
+  );
+
+  return todos.filter((todo) => todo !== null);
+}
+
 export async function ListAssignedTodos(ctx: zQueryCtx, args: z.infer<typeof types.ListAssignedTodosArgs>) {
   const memberId = args.memberId ?? ctx.identity.memberId;
   assertScopedPermission(

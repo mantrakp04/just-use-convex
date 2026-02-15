@@ -7,7 +7,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Filter, X, LayoutGrid, List, Calendar } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Filter, X, LayoutGrid, List, Calendar, Search } from "lucide-react";
 import type {
   ViewMode,
   KanbanGroupBy,
@@ -33,6 +34,8 @@ interface DashboardToolbarProps {
   onFilterTeamIdChange: (teamId: string | "all") => void;
   filterMemberId: string | "all";
   onFilterMemberIdChange: (memberId: string | "all") => void;
+  searchQuery: string;
+  onSearchQueryChange: (query: string) => void;
   teams: Team[];
   members: Member[];
   onClearFilters: () => void;
@@ -51,6 +54,8 @@ export function DashboardToolbar({
   onFilterTeamIdChange,
   filterMemberId,
   onFilterMemberIdChange,
+  searchQuery,
+  onSearchQueryChange,
   teams,
   members,
   onClearFilters,
@@ -86,6 +91,26 @@ export function DashboardToolbar({
           </SelectContent>
         </Select>
       )}
+
+      {/* Search */}
+      <div className="relative">
+        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground" />
+        <Input
+          placeholder="Search todos..."
+          value={searchQuery}
+          onChange={(e) => onSearchQueryChange(e.target.value)}
+          className="w-48 pl-8 h-9"
+        />
+        {searchQuery && (
+          <button
+            type="button"
+            onClick={() => onSearchQueryChange("")}
+            className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+          >
+            <X className="size-3.5" />
+          </button>
+        )}
+      </div>
 
       <div className="flex-1" />
 

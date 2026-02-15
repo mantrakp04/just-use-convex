@@ -1,7 +1,7 @@
 import { useState, useMemo, useCallback, useRef } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { useAtom } from "jotai";
-import { useTodos, useTodosList, useOrgStats, type Todo, type TodoFilters } from "@/hooks/use-todos";
+import { useTodos, useTodosList, useSearchTodos, useOrgStats, type Todo, type TodoFilters } from "@/hooks/use-todos";
 import { useTeams } from "@/hooks/auth/organization/use-teams";
 import { useMembers } from "@/hooks/auth/organization/use-members";
 import { useUser } from "@/hooks/auth/user/use-user";
@@ -24,6 +24,7 @@ import {
   filterTeamIdAtom,
   filterMemberIdAtom,
   calendarDateRangeAtom,
+  searchQueryAtom,
 } from "@/store/dashboard";
 
 export const Route = createFileRoute("/(protected)/dashboard")({
@@ -46,6 +47,9 @@ function RouteComponent() {
   const [filterTeamId, setFilterTeamId] = useAtom(filterTeamIdAtom);
   const [filterMemberId, setFilterMemberId] = useAtom(filterMemberIdAtom);
   const [calendarDateRange, setCalendarDateRange] = useAtom(calendarDateRangeAtom);
+  const [searchQuery, setSearchQuery] = useAtom(searchQueryAtom);
+
+  const searchResults = useSearchTodos(searchQuery);
 
   const [dialogOpen, setDialogOpen] = useState(false);
   const [selectedTodo, setSelectedTodo] = useState<Todo | null>(null);
@@ -73,8 +77,10 @@ function RouteComponent() {
     return f;
   }, [filterPriority, filterStatus, filterTeamId, filterMemberId, user?.id, members, viewMode, calendarDateRange]);
 
+  const isSearching = searchQuery.length > 0;
   const todosQuery = useTodosList(filters);
-  const { results: todos, status } = todosQuery;
+  const { results: paginatedTodos, status } = todosQuery;
+  const todos = isSearching ? (searchResults.data ?? []) as Todo[] : paginatedTodos;
 
   const hasLoadedOnce = useRef(false);
   if (todos.length > 0 || status !== "LoadingFirstPage") {
@@ -100,6 +106,7 @@ function RouteComponent() {
     setFilterStatus("all");
     setFilterTeamId("all");
     setFilterMemberId("all");
+    setSearchQuery("");
   }, []);
 
   if (isInitialLoading) {
@@ -119,6 +126,8 @@ function RouteComponent() {
           onFilterTeamIdChange={setFilterTeamId}
           filterMemberId={filterMemberId}
           onFilterMemberIdChange={setFilterMemberId}
+          searchQuery={searchQuery}
+          onSearchQueryChange={setSearchQuery}
           teams={teams}
           members={members}
           onClearFilters={clearFilters}
@@ -147,6 +156,8 @@ function RouteComponent() {
         onFilterTeamIdChange={setFilterTeamId}
         filterMemberId={filterMemberId}
         onFilterMemberIdChange={setFilterMemberId}
+        searchQuery={searchQuery}
+        onSearchQueryChange={setSearchQuery}
         teams={teams}
         members={members}
         onClearFilters={clearFilters}

@@ -123,6 +123,15 @@ export function useOrgStats() {
   return useQuery(convexQuery(api.todos.index.getOrgStats, {}));
 }
 
+export type SearchResult = FunctionReturnType<typeof api.todos.index.search>;
+
+export function useSearchTodos(query: string) {
+  return useQuery({
+    ...convexQuery(api.todos.index.search, query.length > 0 ? { query } : "skip"),
+    enabled: query.length > 0,
+  });
+}
+
 export type TodoWithAssignees = FunctionReturnType<typeof api.todos.index.get>;
 
 export function useTodo(todoId: Id<"todos"> | undefined) {

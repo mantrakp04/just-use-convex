@@ -19,3 +19,4 @@ export const filterStatusAtom = atom<StatusFilterValue>("all");
 export const filterTeamIdAtom = atom<string | "all">("all");
 export const filterMemberIdAtom = atom<string | "all">("all");
 export const calendarDateRangeAtom = atom<DateRange | null>(null);
+export const searchQueryAtom = atom("");
