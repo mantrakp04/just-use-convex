@@ -146,7 +146,7 @@ const getHighlighter = (
       import("@shikijs/themes/github-light"),
       import("@shikijs/themes/github-dark"),
     ],
-    langs: [import(`@shikijs/langs/${language}`)],
+    langs: [import(/* @vite-ignore */ `@shikijs/langs/${language}`)],
     engine: createJavaScriptRegexEngine(),
   }) as Promise<HighlighterGeneric<BundledLanguage, BundledTheme>>;
 

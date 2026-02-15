@@ -18,14 +18,14 @@
     "better-auth": "catalog:",
     "convex": "catalog:",
     "convex-ents": "^0.18.1",
-    "convex-helpers": "^0.1.111",
+    "convex-helpers": "^0.1.112",
     "dotenv": "catalog:",
     "zod": "catalog:"
   },
   "devDependencies": {
     "@just-use-convex/env": "workspace:*",
     "@just-use-convex/config": "workspace:*",
-    "@types/node": "^24.10.11",
+    "@types/node": "^24.10.13",
     "typescript": "catalog:"
   }
 }
