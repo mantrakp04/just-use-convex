@@ -7,11 +7,11 @@ export function createWorkflowActionToolkit(
   allowedActions: string[],
   convexAdapter: ConvexAdapter,
 ): Toolkit {
-  const sendMessage = createTool({
-    name: "send_message",
-    description: "Send a message to a chat. Use this to post updates or notifications to a chat thread.",
+  const updateChatTitle = createTool({
+    name: "update_chat_title",
+    description: "Update a chat title.",
     parameters: z.object({
-      chatId: z.string().describe("The chat ID to send a message to"),
+      chatId: z.string().describe("The chat ID to update"),
       title: z.string().describe("Update the chat title with this value"),
     }),
     execute: async ({ chatId, title }) => {
@@ -36,6 +36,8 @@ export function createWorkflowActionToolkit(
       body: z.string().optional().describe("Request body (for POST/PUT/PATCH)"),
     }),
     execute: async ({ url, method = "GET", headers, body }) => {
+      assertSafeHttpUrl(url);
+
       const response = await fetch(url, {
         method,
         headers: headers ?? {},
@@ -66,7 +68,7 @@ export function createWorkflowActionToolkit(
   });
 
   const allTools = {
-    send_message: sendMessage,
+    send_message: updateChatTitle,
     http_request: httpRequest,
     notify,
   } as const;
@@ -83,4 +85,56 @@ export function createWorkflowActionToolkit(
     description: "Available actions for this workflow execution",
     tools,
   });
+}
+
+function assertSafeHttpUrl(rawUrl: string): void {
+  const url = new URL(rawUrl);
+  if (url.protocol !== "https:") {
+    throw new Error("Only HTTPS URLs are allowed.");
+  }
+
+  const hostname = url.hostname.toLowerCase();
+
+  if (
+    hostname === "localhost" ||
+    hostname.endsWith(".localhost") ||
+    hostname.endsWith(".local") ||
+    hostname === "metadata.google.internal"
+  ) {
+    throw new Error(`Blocked host: ${hostname}`);
+  }
+
+  if (isPrivateIpv4(hostname) || isPrivateIpv6(hostname)) {
+    throw new Error(`Blocked private address: ${hostname}`);
+  }
+}
+
+function isPrivateIpv4(hostname: string): boolean {
+  const parts = hostname.split(".");
+  if (parts.length !== 4 || parts.some((part) => part.length === 0)) return false;
+
+  const octets = parts.map((part) => Number(part));
+  if (octets.some((octet) => !Number.isInteger(octet) || octet < 0 || octet > 255)) {
+    return false;
+  }
+
+  const a = octets[0]!;
+  const b = octets[1]!;
+  if (a === 0 || a === 10 || a === 127) return true;
+  if (a === 169 && b === 254) return true;
+  if (a === 172 && b >= 16 && b <= 31) return true;
+  if (a === 192 && b === 168) return true;
+
+  return false;
+}
+
+function isPrivateIpv6(hostname: string): boolean {
+  if (!hostname.includes(":")) return false;
+  if (hostname === "::1") return true;
+
+  return (
+    hostname.startsWith("fc") ||
+    hostname.startsWith("fd") ||
+    hostname.startsWith("fe80:")
+  );
 }

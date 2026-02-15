@@ -41,7 +41,7 @@ export const workflowsZodSchema = {
   enabled: z.boolean(),
   trigger: z.string(), // JSON-serialized triggerSchema
   instructions: z.string(),
-  allowedActions: z.array(z.string()),
+  allowedActions: z.array(allowedActionSchema),
   model: z.string().optional(),
   updatedAt: z.number(),
 };
@@ -60,7 +60,8 @@ export const workflowsWithSystemFields = {
 
 const workflowsTable = Workflows.table
   .index("organizationId_memberId", ["organizationId", "memberId", "updatedAt"])
-  .index("organizationId_enabled", ["organizationId", "enabled"]);
+  .index("organizationId_enabled", ["organizationId", "enabled"])
+  .index("enabled", ["enabled"]);
 
 export const workflowsEnt = defineEntFromTable(workflowsTable)
   .edges("executions", { to: "workflowExecutions", ref: "workflowId" });

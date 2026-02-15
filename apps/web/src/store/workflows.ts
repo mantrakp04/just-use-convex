@@ -8,7 +8,7 @@ export type ScheduleMode = "every" | "at" | "cron";
 export type IntervalUnit = "minutes" | "hours" | "days";
 
 export const ALL_ACTIONS: { value: AllowedAction; label: string; description: string }[] = [
-  { value: "send_message", label: "Send Message", description: "Send a message to a chat" },
+  { value: "send_message", label: "Update Chat Title", description: "Rename a chat thread" },
   { value: "http_request", label: "HTTP Request", description: "Make an external HTTP request" },
   { value: "notify", label: "Notify", description: "Send a notification" },
 ];

@@ -62,6 +62,11 @@ export async function GetWorkflow(ctx: zQueryCtx, args: z.infer<typeof types.Get
 // Used by agent (external query) — no scoped permission, just org check
 export async function GetWorkflowForExecution(ctx: zQueryCtx, args: z.infer<typeof types.GetForExecutionArgs>) {
   const workflow = await ctx.table("workflows").getX(args._id);
+  assertOrganizationAccess(
+    workflow.organizationId,
+    ctx.identity.activeOrganizationId,
+    "You are not authorized to execute this workflow"
+  );
   return workflow.doc();
 }
 
@@ -191,6 +196,22 @@ export async function ListExecutions(ctx: zQueryCtx, args: z.infer<typeof types.
     "You are not authorized to view workflow executions"
   );
 
+  const workflow = await ctx.table("workflows").getX(args.workflowId);
+  assertOrganizationAccess(
+    workflow.organizationId,
+    ctx.identity.activeOrganizationId,
+    "You are not authorized to view workflow executions"
+  );
+  assertScopedPermission(
+    ctx.identity.organizationRole,
+    ctx.identity.memberId,
+    workflow.memberId,
+    { workflow: ["read"] },
+    { workflow: ["readAny"] },
+    "You are not authorized to view workflow executions",
+    "You are not authorized to view workflow executions"
+  );
+
   const executions = await withInvalidCursorRetry(
     args,
     (nextArgs) => ctx.db
@@ -250,10 +271,6 @@ export async function UpdateExecutionStatus(ctx: zMutationCtx, args: z.infer<typ
 // ═══════════════════════════════════════════════════════════════════
 
 function generateWebhookSecret(): string {
-  const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
-  let result = "";
-  for (let i = 0; i < 32; i++) {
-    result += chars.charAt(Math.floor(Math.random() * chars.length));
-  }
-  return result;
+  const bytes = crypto.getRandomValues(new Uint8Array(32));
+  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
 }

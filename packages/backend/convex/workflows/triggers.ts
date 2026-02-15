@@ -1,17 +1,14 @@
 import type { Trigger } from "convex-helpers/server/triggers";
 import type { GenericMutationCtx } from "convex/server";
-import { internal } from "../_generated/api";
+import { components, internal } from "../_generated/api";
 import type { DataModel } from "../_generated/dataModel";
+import type { EventType } from "./types";
+import { triggerSchema } from "../tables/workflows";
+import { isMemberRole, type MemberRole } from "../shared/auth";
 
 type MutationCtx = GenericMutationCtx<DataModel>;
 
-type EventName =
-  | "on_chat_create"
-  | "on_chat_delete"
-  | "on_sandbox_provision"
-  | "on_sandbox_delete"
-  | "on_todo_create"
-  | "on_todo_complete";
+type EventName = EventType;
 
 const TABLE_EVENT_MAP: Record<string, { insert?: EventName; delete?: EventName; update?: EventName }> = {
   chats: { insert: "on_chat_create", delete: "on_chat_delete" },
@@ -42,6 +39,9 @@ export function workflowEventTrigger<T extends "chats" | "sandboxes" | "todos">(
     if (mapping) {
       if (change.operation === "insert" && mapping.insert) {
         events.push(mapping.insert);
+      }
+      if (change.operation === "update" && mapping.update) {
+        events.push(mapping.update);
       }
       if (change.operation === "delete" && mapping.delete) {
         events.push(mapping.delete);
@@ -75,14 +75,21 @@ export function workflowEventTrigger<T extends "chats" | "sandboxes" | "todos">(
       .collect();
 
     for (const workflow of enabledWorkflows) {
-      let trigger: { type: string; event?: string };
+      let trigger: ReturnType<typeof triggerSchema.parse>;
       try {
-        trigger = JSON.parse(workflow.trigger);
+        trigger = triggerSchema.parse(JSON.parse(workflow.trigger));
       } catch {
         continue;
       }
 
       if (trigger.type !== "event") continue;
+
+      const organizationRole = await resolveWorkflowOrganizationRole(
+        ctx,
+        workflow.organizationId,
+        workflow.memberId,
+      );
+      if (!organizationRole) continue;
 
       for (const event of events) {
         if (trigger.event === event) {
@@ -100,11 +107,33 @@ export function workflowEventTrigger<T extends "chats" | "sandboxes" | "todos">(
             triggerPayload,
             userId: workflow.memberId, // use workflow owner's identity
             activeOrganizationId: workflow.organizationId,
-            organizationRole: "owner", // workflows run with elevated privileges
+            organizationRole,
             memberId: workflow.memberId,
           });
         }
       }
     }
   };
+}
+
+async function resolveWorkflowOrganizationRole(
+  ctx: { runQuery: unknown },
+  organizationId: string,
+  memberId: string,
+): Promise<MemberRole | null> {
+  const runQuery = ctx.runQuery as (query: unknown, args: unknown) => Promise<unknown>;
+  const member = await runQuery(components.betterAuth.adapter.findOne, {
+    model: "member",
+    where: [
+      { field: "_id", operator: "eq", value: memberId },
+      { field: "organizationId", operator: "eq", value: organizationId },
+    ],
+    select: ["role"],
+  });
+
+  const role = (member as { role?: unknown } | null)?.role;
+  if (typeof role !== "string" || !isMemberRole(role)) {
+    return null;
+  }
+  return role;
 }

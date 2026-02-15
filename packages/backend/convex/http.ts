@@ -1,9 +1,12 @@
-import { httpRouter } from "convex/server";
+import { httpRouter, type FunctionReturnType } from "convex/server";
+import type { Id } from "./_generated/dataModel";
 
 import { authComponent, createAuth } from "./auth";
 import { httpAction } from "./_generated/server";
-import { internal } from "./_generated/api";
+import { components, internal } from "./_generated/api";
 import { env } from "@just-use-convex/env/backend";
+import { triggerSchema } from "./tables/workflows";
+import { isMemberRole, type MemberRole } from "./shared/auth";
 
 const http = httpRouter();
 
@@ -25,9 +28,17 @@ const handleWorkflowWebhook = httpAction(async (ctx, request) => {
   }
 
   // Fetch workflow to validate
-  const workflow = await ctx.runQuery(internal.workflows.webhookQuery.getEnabledWorkflow, {
-    workflowId,
-  });
+  let workflow: FunctionReturnType<typeof internal.workflows.webhookQuery.getEnabledWorkflow>;
+  try {
+    workflow = await ctx.runQuery(internal.workflows.webhookQuery.getEnabledWorkflow, {
+      workflowId: workflowId as Id<"workflows">,
+    });
+  } catch {
+    return new Response(JSON.stringify({ error: "Invalid workflow id" }), {
+      status: 400,
+      headers: { "Content-Type": "application/json", ...buildCorsHeaders(request) },
+    });
+  }
 
   if (!workflow) {
     return new Response(JSON.stringify({ error: "Workflow not found or disabled" }), {
@@ -36,10 +47,10 @@ const handleWorkflowWebhook = httpAction(async (ctx, request) => {
     });
   }
 
-  // Validate HMAC signature
-  let trigger: { type: string; secret?: string };
+  // Validate webhook trigger config
+  let trigger: ReturnType<typeof triggerSchema.parse>;
   try {
-    trigger = JSON.parse(workflow.trigger);
+    trigger = triggerSchema.parse(JSON.parse(workflow.trigger));
   } catch {
     return new Response(JSON.stringify({ error: "Invalid workflow trigger" }), {
       status: 500,
@@ -56,7 +67,13 @@ const handleWorkflowWebhook = httpAction(async (ctx, request) => {
 
   // Validate signature header
   const signature = request.headers.get("x-webhook-signature");
-  if (trigger.secret && signature !== trigger.secret) {
+  if (!trigger.secret) {
+    return new Response(JSON.stringify({ error: "Webhook secret is not configured" }), {
+      status: 500,
+      headers: { "Content-Type": "application/json", ...buildCorsHeaders(request) },
+    });
+  }
+  if (!signature || !timingSafeEqual(signature, trigger.secret)) {
     return new Response(JSON.stringify({ error: "Invalid signature" }), {
       status: 401,
       headers: { "Content-Type": "application/json", ...buildCorsHeaders(request) },
@@ -71,12 +88,25 @@ const handleWorkflowWebhook = httpAction(async (ctx, request) => {
     // empty body is fine
   }
 
+  const parsedBody = parseJsonSafely(body);
   const triggerPayload = JSON.stringify({
     type: "webhook",
-    body: body ? JSON.parse(body) : {},
+    body: body.length === 0 ? {} : (parsedBody ?? body),
     headers: extractHeaders(request.headers),
     timestamp: Date.now(),
   });
+
+  const organizationRole = await resolveWorkflowOrganizationRole(
+    ctx,
+    workflow.organizationId,
+    workflow.memberId,
+  );
+  if (!organizationRole) {
+    return new Response(JSON.stringify({ error: "Workflow member role not found" }), {
+      status: 403,
+      headers: { "Content-Type": "application/json", ...buildCorsHeaders(request) },
+    });
+  }
 
   // Schedule dispatch
   await ctx.scheduler.runAfter(0, internal.workflows.dispatch.dispatchWorkflow, {
@@ -84,7 +114,7 @@ const handleWorkflowWebhook = httpAction(async (ctx, request) => {
     triggerPayload,
     userId: workflow.memberId,
     activeOrganizationId: workflow.organizationId,
-    organizationRole: "owner",
+    organizationRole,
     memberId: workflow.memberId,
   });
 
@@ -142,4 +172,45 @@ function extractHeaders(headers: Headers): Record<string, string> {
     result[key] = value;
   });
   return result;
+}
+
+function parseJsonSafely(value: string): unknown | null {
+  try {
+    return JSON.parse(value);
+  } catch {
+    return null;
+  }
+}
+
+function timingSafeEqual(a: string, b: string): boolean {
+  if (a.length !== b.length) return false;
+
+  let mismatch = 0;
+  for (let i = 0; i < a.length; i++) {
+    mismatch |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  }
+
+  return mismatch === 0;
+}
+
+async function resolveWorkflowOrganizationRole(
+  ctx: { runQuery: unknown },
+  organizationId: string,
+  memberId: string,
+): Promise<MemberRole | null> {
+  const runQuery = ctx.runQuery as (query: unknown, args: unknown) => Promise<unknown>;
+  const member = await runQuery(components.betterAuth.adapter.findOne, {
+    model: "member",
+    where: [
+      { field: "_id", operator: "eq", value: memberId },
+      { field: "organizationId", operator: "eq", value: organizationId },
+    ],
+    select: ["role"],
+  });
+
+  const role = (member as { role?: unknown } | null)?.role;
+  if (typeof role !== "string" || !isMemberRole(role)) {
+    return null;
+  }
+  return role;
 }

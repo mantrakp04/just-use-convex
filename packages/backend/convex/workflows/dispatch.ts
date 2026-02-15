@@ -29,7 +29,7 @@ export const dispatchWorkflow = internalAction({
     // namespace = kebab-cased DO binding name ("agent-worker")
     // instanceName = unique per workflow execution
     const agentUrl = env.AGENT_URL;
-    const doInstanceName = `workflow-${args.workflowId}`;
+    const doInstanceName = `workflow-${executionId}`;
 
     try {
       const response = await fetch(
