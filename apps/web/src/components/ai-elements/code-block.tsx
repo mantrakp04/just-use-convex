@@ -22,6 +22,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { createJavaScriptRegexEngine } from "shiki/engine/javascript";
 import {
   type BundledLanguage,
   type BundledTheme,
@@ -145,6 +146,7 @@ const getHighlighter = (
   const highlighterPromise = createHighlighter({
     themes: ["github-light", "github-dark"],
     langs: [language],
+    engine: createJavaScriptRegexEngine(),
   });
 
   highlighterCache.set(language, highlighterPromise);
