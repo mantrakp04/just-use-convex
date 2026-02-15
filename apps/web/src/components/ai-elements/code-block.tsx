@@ -22,14 +22,13 @@ import {
   useRef,
   useState,
 } from "react";
-import { createJavaScriptRegexEngine } from "shiki/engine/javascript";
+import type { BundledLanguage, BundledTheme } from "shiki";
 import {
-  type BundledLanguage,
-  type BundledTheme,
-  createHighlighter,
+  createHighlighterCore,
   type HighlighterGeneric,
   type ThemedToken,
-} from "shiki";
+} from "shiki/core";
+import { createJavaScriptRegexEngine } from "shiki/engine/javascript";
 
 // Shiki uses bitflags for font styles: 1=italic, 2=bold, 4=underline
 // biome-ignore lint/suspicious/noBitwiseOperators: shiki bitflag check
@@ -143,11 +142,14 @@ const getHighlighter = (
     return cached;
   }
 
-  const highlighterPromise = createHighlighter({
-    themes: ["github-light", "github-dark"],
-    langs: [language],
+  const highlighterPromise = createHighlighterCore({
+    themes: [
+      import("@shikijs/themes/github-light"),
+      import("@shikijs/themes/github-dark"),
+    ],
+    langs: [import(`@shikijs/langs/${language}`)],
     engine: createJavaScriptRegexEngine(),
-  });
+  }) as Promise<HighlighterGeneric<BundledLanguage, BundledTheme>>;
 
   highlighterCache.set(language, highlighterPromise);
   return highlighterPromise;

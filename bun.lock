@@ -27,6 +27,8 @@
         "@just-use-convex/agent": "workspace:*",
         "@radix-ui/react-use-controllable-state": "^1.2.2",
         "@rive-app/react-webgl2": "^4.26.2",
+        "@shikijs/langs": "^3.22.0",
+        "@shikijs/themes": "^3.22.0",
         "@streamdown/cjk": "^1.0.1",
         "@streamdown/code": "^1.0.1",
         "@streamdown/math": "^1.0.1",
