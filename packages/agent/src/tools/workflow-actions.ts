@@ -1,28 +1,20 @@
 import { createTool, createToolkit, type Toolkit } from "@voltagent/core";
 import { z } from "zod";
 import type { ConvexAdapter } from "@just-use-convex/backend/convex/lib/convexAdapter";
-import { api } from "@just-use-convex/backend/convex/_generated/api";
 
 export function createWorkflowActionToolkit(
   allowedActions: string[],
-  convexAdapter: ConvexAdapter,
+  _convexAdapter: ConvexAdapter,
 ): Toolkit {
-  const updateChatTitle = createTool({
-    name: "update_chat_title",
-    description: "Update a chat title.",
+  const sendMessage = createTool({
+    name: "send_message",
+    description: "Send a workflow message as part of execution output.",
     parameters: z.object({
-      chatId: z.string().describe("The chat ID to update"),
-      title: z.string().describe("Update the chat title with this value"),
+      message: z.string().describe("Message content to send"),
+      level: z.enum(["info", "warning", "error"]).optional().describe("Message level"),
     }),
-    execute: async ({ chatId, title }) => {
-      const updateFn = convexAdapter.getTokenType() === "ext"
-        ? api.chats.index.updateExt
-        : api.chats.index.update;
-      await convexAdapter.mutation(updateFn, {
-        _id: chatId,
-        patch: { title },
-      } as never);
-      return { success: true, chatId, title };
+    execute: async ({ message, level = "info" }) => {
+      return { sent: true, message, level, timestamp: Date.now() };
     },
   });
 
@@ -36,9 +28,7 @@ export function createWorkflowActionToolkit(
       body: z.string().optional().describe("Request body (for POST/PUT/PATCH)"),
     }),
     execute: async ({ url, method = "GET", headers, body }) => {
-      assertSafeHttpUrl(url);
-
-      const response = await fetch(url, {
+      const response = await fetchWithSafeRedirects(url, {
         method,
         headers: headers ?? {},
         body: ["POST", "PUT", "PATCH"].includes(method) ? body : undefined,
@@ -68,7 +58,7 @@ export function createWorkflowActionToolkit(
   });
 
   const allTools = {
-    send_message: updateChatTitle,
+    send_message: sendMessage,
     http_request: httpRequest,
     notify,
   } as const;
@@ -107,6 +97,52 @@ function assertSafeHttpUrl(rawUrl: string): void {
   if (isPrivateIpv4(hostname) || isPrivateIpv6(hostname)) {
     throw new Error(`Blocked private address: ${hostname}`);
   }
+}
+
+async function fetchWithSafeRedirects(
+  rawUrl: string,
+  init: RequestInit,
+): Promise<Response> {
+  let currentUrl = new URL(rawUrl);
+  let method = (init.method ?? "GET").toUpperCase();
+  let body = init.body;
+
+  for (let redirectCount = 0; redirectCount <= 5; redirectCount++) {
+    assertSafeHttpUrl(currentUrl.toString());
+
+    const response = await fetch(currentUrl.toString(), {
+      ...init,
+      method,
+      body,
+      redirect: "manual",
+    });
+
+    if (!isRedirectStatus(response.status)) {
+      return response;
+    }
+
+    if (redirectCount === 5) {
+      throw new Error("Too many redirects.");
+    }
+
+    const location = response.headers.get("location");
+    if (!location) {
+      throw new Error("Redirect response missing location header.");
+    }
+
+    currentUrl = new URL(location, currentUrl);
+
+    if (response.status === 303 || ((response.status === 301 || response.status === 302) && method !== "GET" && method !== "HEAD")) {
+      method = "GET";
+      body = undefined;
+    }
+  }
+
+  throw new Error("Unexpected redirect handling failure.");
+}
+
+function isRedirectStatus(status: number): boolean {
+  return status === 301 || status === 302 || status === 303 || status === 307 || status === 308;
 }
 
 function isPrivateIpv4(hostname: string): boolean {

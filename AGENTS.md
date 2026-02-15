@@ -226,7 +226,7 @@ File-based TanStack Router:
 - cleanup stale code when changing methods/approach
 - keep helper functions at the bottom of the file
 - always use convex ents for convex related stuff
-- whenever implementing something for convex, analyze adjecent and relevant files for similar pattern implementation
+- whenever implementing something for convex, analyze adjacent and relevant files for similar pattern implementation
 - whenever working with external libraries always query context7 for their relevant docs
 
 ## Background & Subagents
