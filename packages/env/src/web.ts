@@ -12,6 +12,8 @@ export const env = createEnv({
     VITE_TERMINAL_BACKGROUND: z.string().default("#0b0f19"),
     VITE_SANDBOX_MOUNT_PATH: z.string().default("/home/daytona"),
     VITE_SANDBOX_SSH_HOST: z.string().default("ssh.app.daytona.io"),
+    VITE_PUBLIC_POSTHOG_KEY: z.string(),
+    VITE_PUBLIC_POSTHOG_HOST: z.url(),
   },
   runtimeEnv: (import.meta as any).env,
   emptyStringAsUndefined: true,

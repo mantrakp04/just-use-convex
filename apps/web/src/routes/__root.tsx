@@ -19,8 +19,10 @@ import { Toaster } from "@/components/ui/sonner";
 import { authClient } from "@/lib/auth-client";
 import { getToken } from "@/lib/auth-server";
 import { seo } from '@/utils/seo'
+import { PostHogProvider } from 'posthog-js/react'
 
 import Header from "../components/header/index";
+import { env } from "@just-use-convex/env/web";
 
 const getAuth = createServerFn({ method: "GET" }).handler(async () => {
   return await getToken();
@@ -87,29 +89,36 @@ export const Route = createRootRouteWithContext<RouterAppContext>()({
 function RootDocument() {
   const context = useRouteContext({ from: Route.id });
   return (
-    <ConvexBetterAuthProvider
-      client={context.convexQueryClient.convexClient}
-      authClient={authClient}
-      initialToken={context.token}
-    >
-      <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
-        <html lang="en" suppressHydrationWarning>
-          <head>
-            <HeadContent />
-            <ThemeScript storageKey="theme" defaultTheme="system" attribute="class" enableSystem />
-          </head>
-          <body>
-            <div className="grid h-svh grid-rows-[auto_1fr]">
-              <Header />
-              <Outlet />
-            </div>
-            <Toaster richColors />
-            <ReactQueryDevtools buttonPosition="bottom-right" />
-            <TanStackRouterDevtools position="bottom-left" />
-            <Scripts />
-          </body>
-        </html>
-      </ThemeProvider>
-    </ConvexBetterAuthProvider>
+    <PostHogProvider apiKey={env.VITE_PUBLIC_POSTHOG_KEY} options={
+      {
+        api_host: env.VITE_PUBLIC_POSTHOG_HOST,
+        defaults: '2026-01-30',
+      }
+    }>
+      <ConvexBetterAuthProvider
+        client={context.convexQueryClient.convexClient}
+        authClient={authClient}
+        initialToken={context.token}
+      >
+        <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
+          <html lang="en" suppressHydrationWarning>
+            <head>
+              <HeadContent />
+              <ThemeScript storageKey="theme" defaultTheme="system" attribute="class" enableSystem />
+            </head>
+            <body>
+              <div className="grid h-svh grid-rows-[auto_1fr]">
+                <Header />
+                <Outlet />
+              </div>
+              <Toaster richColors />
+              <ReactQueryDevtools buttonPosition="bottom-right" />
+              <TanStackRouterDevtools position="bottom-left" />
+              <Scripts />
+            </body>
+          </html>
+        </ThemeProvider>
+      </ConvexBetterAuthProvider>
+    </PostHogProvider>
   );
 }
