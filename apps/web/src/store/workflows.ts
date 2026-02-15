@@ -1,32 +1,14 @@
 import { atom } from "jotai";
+import type { AllowedAction, EventType, TriggerType } from "@just-use-convex/backend/convex/workflows/types";
 
-export type TriggerType = "webhook" | "schedule" | "event";
+export type { AllowedAction, EventType, TriggerType };
 
 export type ScheduleMode = "every" | "at" | "cron";
 
 export type IntervalUnit = "minutes" | "hours" | "days";
 
-export type EventType =
-  | "on_chat_create"
-  | "on_chat_delete"
-  | "on_sandbox_provision"
-  | "on_sandbox_delete"
-  | "on_todo_create"
-  | "on_todo_complete";
-
-export type AllowedAction =
-  | "send_message"
-  | "create_todo"
-  | "run_sandbox_command"
-  | "web_search"
-  | "http_request"
-  | "notify";
-
 export const ALL_ACTIONS: { value: AllowedAction; label: string; description: string }[] = [
   { value: "send_message", label: "Send Message", description: "Send a message to a chat" },
-  { value: "create_todo", label: "Create Todo", description: "Create a new todo/task" },
-  { value: "run_sandbox_command", label: "Run Command", description: "Execute a command in a sandbox" },
-  { value: "web_search", label: "Web Search", description: "Search the web for information" },
   { value: "http_request", label: "HTTP Request", description: "Make an external HTTP request" },
   { value: "notify", label: "Notify", description: "Send a notification" },
 ];

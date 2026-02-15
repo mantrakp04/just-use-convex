@@ -404,7 +404,7 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, AgentArgs> {
       // 2. Fetch workflow definition from Convex (enrichArgs adds identity fields)
       const workflow = await adapter.query(
         api.workflows.index.getForExecutionExt,
-        { _id: body.workflowId as Id<"workflows"> } as never,
+        { _id: body.workflowId as Id<"workflows"> },
       );
 
       if (!workflow) {
@@ -414,7 +414,7 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, AgentArgs> {
       // 3. Update execution status to "running" (enrichArgs adds identity fields)
       await adapter.mutation(
         api.workflows.index.updateExecutionStatusExt,
-        { executionId: body.executionId as Id<"workflowExecutions">, status: "running" } as never,
+        { executionId: body.executionId as Id<"workflowExecutions">, status: "running" },
       );
 
       // 4. Build action toolkit (filtered to allowed actions)

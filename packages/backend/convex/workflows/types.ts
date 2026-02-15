@@ -1,5 +1,18 @@
 import { z } from "zod";
-import { workflowsZodSchema, workflowsWithSystemFields, triggerSchema, allowedActionSchema } from "../tables/workflows";
+import {
+  workflowsZodSchema,
+  workflowsWithSystemFields,
+  triggerSchema,
+  allowedActionSchema,
+  eventSchema,
+} from "../tables/workflows";
+
+/** Inferred from allowedActionSchema */
+export type AllowedAction = z.infer<typeof allowedActionSchema>;
+/** Inferred from eventSchema */
+export type EventType = z.infer<typeof eventSchema>;
+/** Inferred from triggerSchema discriminant */
+export type TriggerType = z.infer<typeof triggerSchema>["type"];
 import { workflowExecutionsWithSystemFields } from "../tables/workflowExecutions";
 import { paginationOptsValidator } from "convex/server";
 import { convexToZod } from "convex-helpers/server/zod4";
