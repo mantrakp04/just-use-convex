@@ -12,8 +12,8 @@ import type { Daytona, Sandbox } from "@daytonaio/sdk";
 import type { worker } from "../../alchemy.run";
 import type { Doc } from "@just-use-convex/backend/convex/_generated/dataModel";
 import type { ConvexAdapter } from "@just-use-convex/backend/convex/lib/convexAdapter";
-import { createAiClient } from "../client";
-import { SYSTEM_PROMPT, TASK_PROMPT } from "../prompt";
+import { createAiClient } from "./client";
+import { CHAT_SYSTEM_PROMPT, WORKFLOW_SYSTEM_PROMPT, TASK_PROMPT } from "./prompt";
 import { createAskUserToolkit } from "../tools/ask-user";
 import { createWebSearchToolkit } from "../tools/websearch";
 import { createDaytonaToolkit } from "../tools/sandbox";
@@ -21,10 +21,9 @@ import {
   type BackgroundTaskStore,
   type TruncatedOutputStore,
   patchToolWithBackgroundSupport,
-  withBackgroundTaskTools,
+  createBackgroundTaskToolkit,
 } from "../tools/utils/wrapper";
 import { createWorkflowActionToolkit } from "../tools/workflow-actions";
-import { buildWorkflowSystemPrompt } from "../tools/workflow-prompt";
 import { env as agentDefaults } from "@just-use-convex/env/agent";
 
 // ─── Types ────────────────────────────────────────────────────
@@ -43,17 +42,12 @@ export interface AgentDeps {
 
 export interface ChatModeConfig {
   mode: "chat";
-  sandboxDoc?: Doc<"sandboxes">;
+  chat: Doc<"chats"> & { sandbox?: Doc<"sandboxes"> | null };
 }
 
 export interface WorkflowModeConfig {
   mode: "workflow";
-  workflow: {
-    name: string;
-    description?: string;
-    instructions: string;
-    allowedActions: string[];
-  };
+  workflow: Doc<"workflows"> & { sandbox?: Doc<"sandboxes"> | null };
   triggerPayload: string;
   convexAdapter: ConvexAdapter;
 }
@@ -103,14 +97,14 @@ export async function buildPlanAgent(
 
   // System prompt
   const systemPrompt = config.mode === "chat"
-    ? SYSTEM_PROMPT(config.sandboxDoc)
-    : buildWorkflowSystemPrompt(config.workflow, config.triggerPayload);
+    ? CHAT_SYSTEM_PROMPT(config.chat)
+    : WORKFLOW_SYSTEM_PROMPT(config.workflow, config.triggerPayload);
 
   const agent = new PlanAgent({
     name: config.mode === "chat" ? "Assistant" : "WorkflowExecutor",
     systemPrompt,
     model: createAiClient(model, reasoningEffort),
-    tools: withBackgroundTaskTools(toolkits, backgroundTaskStore, truncatedOutputStore),
+    tools: [...toolkits, createBackgroundTaskToolkit(backgroundTaskStore, truncatedOutputStore)],
     planning: false,
     task: {
       taskDescription: TASK_PROMPT,

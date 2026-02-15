@@ -34,9 +34,16 @@ export async function ListWorkflows(ctx: zQueryCtx, args: z.infer<typeof types.L
     (nextArgs) => ({ ...nextArgs, paginationOpts: { ...nextArgs.paginationOpts, cursor: null } })
   );
 
+  const workflowsWithSandbox = await Promise.all(
+    workflows.page.map(async (w) => ({
+      ...w.doc(),
+      sandbox: await w.edge("sandbox"),
+    }))
+  );
+
   return {
     ...workflows,
-    page: workflows.page.map((w) => w.doc()),
+    page: workflowsWithSandbox,
   };
 }
 
@@ -56,7 +63,8 @@ export async function GetWorkflow(ctx: zQueryCtx, args: z.infer<typeof types.Get
     "You are not authorized to view this workflow",
     "You are not authorized to view this workflow"
   );
-  return workflow.doc();
+  const sandbox = await workflow.edge("sandbox");
+  return { ...workflow.doc(), sandbox };
 }
 
 // Used by agent (external query) — no scoped permission, just org check
@@ -67,7 +75,8 @@ export async function GetWorkflowForExecution(ctx: zQueryCtx, args: z.infer<type
     ctx.identity.activeOrganizationId,
     "You are not authorized to execute this workflow"
   );
-  return workflow.doc();
+  const sandbox = await workflow.edge("sandbox");
+  return { ...workflow.doc(), sandbox };
 }
 
 // ═══════════════════════════════════════════════════════════════════
@@ -83,6 +92,17 @@ export async function CreateWorkflow(ctx: zMutationCtx, args: z.infer<typeof typ
 
   const now = Date.now();
 
+  // Validate sandboxId if provided
+  if (args.data.sandboxId) {
+    const sandbox = await ctx.table("sandboxes").getX(args.data.sandboxId);
+    if (sandbox.organizationId !== ctx.identity.activeOrganizationId) {
+      throw new Error("Sandbox does not belong to your organization");
+    }
+    if (sandbox.userId !== ctx.identity.userId) {
+      throw new Error("Sandbox does not belong to you");
+    }
+  }
+
   // If webhook trigger, generate a secret
   let trigger = args.data.trigger;
   if (trigger.type === "webhook" && !trigger.secret) {
@@ -96,6 +116,7 @@ export async function CreateWorkflow(ctx: zMutationCtx, args: z.infer<typeof typ
     instructions: args.data.instructions,
     allowedActions: args.data.allowedActions,
     model: args.data.model,
+    sandboxId: args.data.sandboxId,
     enabled: false,
     organizationId: ctx.identity.activeOrganizationId,
     memberId: ctx.identity.memberId,
@@ -120,6 +141,17 @@ export async function UpdateWorkflow(ctx: zMutationCtx, args: z.infer<typeof typ
     "You are not authorized to update this workflow",
     "You are not authorized to update this workflow"
   );
+
+  // Validate sandboxId if being updated
+  if (args.patch.sandboxId) {
+    const sandbox = await ctx.table("sandboxes").getX(args.patch.sandboxId);
+    if (sandbox.organizationId !== ctx.identity.activeOrganizationId) {
+      throw new Error("Sandbox does not belong to your organization");
+    }
+    if (sandbox.userId !== ctx.identity.userId) {
+      throw new Error("Sandbox does not belong to you");
+    }
+  }
 
   const patchData: Record<string, unknown> = { updatedAt: Date.now() };
 

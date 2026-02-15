@@ -135,7 +135,7 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, AgentArgs> {
       },
       {
         mode: "chat",
-        sandboxDoc: this.chatDoc?.sandbox ?? undefined,
+        chat: this.chatDoc!,
       },
     );
 
@@ -303,14 +303,28 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, AgentArgs> {
 
       const model = workflow.model ?? agentDefaults.DEFAULT_MODEL;
 
+      // Initialize Daytona + sandbox if workflow has one attached
+      let daytona: Daytona | null = null;
+      let sandbox: Sandbox | null = null;
+
+      if (workflow.sandboxId) {
+        daytona = new Daytona({
+          apiKey: this.env.DAYTONA_API_KEY ?? agentDefaults.DAYTONA_API_KEY,
+          apiUrl: this.env.DAYTONA_API_URL ?? agentDefaults.DAYTONA_API_URL,
+          target: this.env.DAYTONA_TARGET ?? agentDefaults.DAYTONA_TARGET,
+        });
+        sandbox = await daytona.get(workflow.sandboxId);
+        await ensureSandboxStarted(sandbox);
+      }
+
       initVoltAgentRegistry(this.env, this.ctx.waitUntil.bind(this.ctx));
 
       const agent = await buildPlanAgent(
         {
           env: this.env,
           model,
-          daytona: this.daytona,
-          sandbox: this.sandbox,
+          daytona,
+          sandbox,
           backgroundTaskStore: this.backgroundTaskStore,
           truncatedOutputStore: this.truncatedOutputStore,
         },

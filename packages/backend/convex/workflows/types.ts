@@ -6,6 +6,7 @@ import {
   allowedActionSchema,
   eventSchema,
 } from "../tables/workflows";
+import { sandboxesWithSystemFields } from "../tables/sandboxes";
 
 /** Inferred from allowedActionSchema */
 export type AllowedAction = z.infer<typeof allowedActionSchema>;
@@ -41,6 +42,7 @@ export const CreateArgs = z.object({
     instructions: z.string(),
     allowedActions: z.array(allowedActionSchema),
     model: z.string().optional(),
+    sandboxId: sandboxesWithSystemFields._id.optional(),
   }),
 });
 
@@ -52,6 +54,7 @@ export const UpdateArgs = WorkflowWithSystemFields.pick({ _id: true }).extend({
     instructions: z.string(),
     allowedActions: z.array(allowedActionSchema),
     model: z.string().optional(),
+    sandboxId: sandboxesWithSystemFields._id.optional(),
     enabled: z.boolean(),
   }).partial(),
 });

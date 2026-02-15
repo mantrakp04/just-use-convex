@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
-import { ArrowLeft, Trash2, Copy } from "lucide-react";
+import { ArrowLeft, Trash2, Copy, Box } from "lucide-react";
 import { toast } from "sonner";
 import { ExecutionLog } from "./execution-log";
 
@@ -113,6 +113,23 @@ export function WorkflowDetail({ workflowId }: WorkflowDetailProps) {
             ))}
           </CardContent>
         </Card>
+
+        {workflow.sandbox && (
+          <Card>
+            <CardHeader className="py-3">
+              <CardTitle className="text-sm flex items-center gap-1.5">
+                <Box className="size-3.5" />
+                Sandbox
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="py-2 flex flex-col gap-1">
+              <span className="text-sm font-medium">{workflow.sandbox.name}</span>
+              {workflow.sandbox.description && (
+                <span className="text-xs text-muted-foreground">{workflow.sandbox.description}</span>
+              )}
+            </CardContent>
+          </Card>
+        )}
       </div>
 
       <Card>

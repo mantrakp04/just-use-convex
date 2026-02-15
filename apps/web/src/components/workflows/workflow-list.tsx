@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Trash2 } from "lucide-react";
+import { Plus, Trash2, Box } from "lucide-react";
 import { useCallback } from "react";
 
 export function WorkflowList() {
@@ -120,6 +120,12 @@ function WorkflowCard({
             <Badge variant="secondary" className="text-xs">
               {workflow.allowedActions.length} action{workflow.allowedActions.length !== 1 ? "s" : ""}
             </Badge>
+            {workflow.sandbox && (
+              <Badge variant="secondary" className="text-xs gap-1">
+                <Box className="size-3" />
+                {workflow.sandbox.name}
+              </Badge>
+            )}
           </div>
         </div>
         <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>

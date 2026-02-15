@@ -2,6 +2,7 @@ import { z } from "zod";
 import { defineEntFromTable } from "convex-ents";
 import { Table } from "convex-helpers/server";
 import { convexToZodFields, zodToConvexFields } from "convex-helpers/server/zod4";
+import { sandboxesWithSystemFields } from "./sandboxes";
 
 export const eventSchema = z.enum([
   "on_chat_create",
@@ -43,6 +44,7 @@ export const workflowsZodSchema = {
   instructions: z.string(),
   allowedActions: z.array(allowedActionSchema),
   model: z.string().optional(),
+  sandboxId: sandboxesWithSystemFields._id.optional(),
   updatedAt: z.number(),
 };
 
@@ -64,4 +66,5 @@ const workflowsTable = Workflows.table
   .index("enabled", ["enabled"]);
 
 export const workflowsEnt = defineEntFromTable(workflowsTable)
+  .edge("sandbox", { to: "sandboxes", field: "sandboxId", optional: true })
   .edges("executions", { to: "workflowExecutions", ref: "workflowId" });

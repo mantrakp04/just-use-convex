@@ -38,7 +38,8 @@ const sandboxesTable = Sandboxes.table
 
 // 1:many relationship - one sandbox has many chats
 export const sandboxesEnt = defineEntFromTable(sandboxesTable)
-  .edges("chats", { to: "chats", ref: "sandboxId" });
+  .edges("chats", { to: "chats", ref: "sandboxId" })
+  .edges("workflows", { to: "workflows", ref: "sandboxId" });
 
 type MutationCtx = GenericMutationCtx<DataModel>;
 

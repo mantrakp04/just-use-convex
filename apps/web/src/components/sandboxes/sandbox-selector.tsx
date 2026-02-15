@@ -1,5 +1,6 @@
 import { useRef, useCallback, useState } from "react";
 import { useAtom } from "jotai";
+import type { Id } from "@just-use-convex/backend/convex/_generated/dataModel";
 import { useSandbox, useSandboxes, useSandboxesList, type Sandbox } from "@/hooks/use-sandboxes";
 import { selectedSandboxIdAtom } from "@/store/sandbox";
 import { Button } from "@/components/ui/button";
@@ -27,7 +28,12 @@ const ITEM_HEIGHT = 28;
 const MAX_VISIBLE_ITEMS = 3;
 const MAX_LIST_HEIGHT = ITEM_HEIGHT * MAX_VISIBLE_ITEMS;
 
-export function SandboxSelector() {
+interface SandboxSelectorProps {
+  value?: Id<"sandboxes"> | null;
+  onChange?: (id: Id<"sandboxes"> | null) => void;
+}
+
+export function SandboxSelector({ value, onChange }: SandboxSelectorProps = {}) {
   const sandboxesQuery = useSandboxesList();
   const { createSandbox, isCreating, updateSandbox, isUpdating, deleteSandbox, isDeleting } = useSandboxes();
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -35,7 +41,12 @@ export function SandboxSelector() {
   const [deleteTarget, setDeleteTarget] = useState<Sandbox | null>(null);
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
-  const [selectedSandboxId, setSelectedSandboxId] = useAtom(selectedSandboxIdAtom);
+  const [atomSandboxId, setAtomSandboxId] = useAtom(selectedSandboxIdAtom);
+
+  // Support controlled mode (value/onChange props) or uncontrolled mode (atom fallback)
+  const isControlled = value !== undefined;
+  const selectedSandboxId = isControlled ? value : atomSandboxId;
+  const setSelectedSandboxId = isControlled ? (onChange ?? (() => {})) : setAtomSandboxId;
 
   const selectedSandboxQuery = useSandbox(selectedSandboxId ?? undefined);
   const selectedSandbox =

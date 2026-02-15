@@ -6,7 +6,7 @@ export { TruncatedOutputStore } from "./truncation";
 export { createWrappedTool, patchToolWithBackgroundSupport } from "./wrap";
 
 // ── Toolkit ────────────────────────────────────────────────────────────
-export { createBackgroundTaskToolkit, withBackgroundTaskTools } from "./toolkit";
+export { createBackgroundTaskToolkit } from "./toolkit";
 
 // ── Constants ──────────────────────────────────────────────────────────
 export { DEFAULT_MAX_DURATION_MS, TERMINAL_STATUSES } from "./types";
@@ -27,7 +27,6 @@ export type {
   StartBackgroundTaskInput,
   ToolCallConfig,
   ToolExecuteFn,
-  ToolOrToolkit,
   TruncatedOutput,
   TruncatedOutputStoreApi,
   WrappedExecuteFactoryOptions,

@@ -1,4 +1,5 @@
 import { atom } from "jotai";
+import type { Id } from "@just-use-convex/backend/convex/_generated/dataModel";
 import type { AllowedAction, EventType, TriggerType } from "@just-use-convex/backend/convex/workflows/types";
 
 export type { AllowedAction, EventType, TriggerType };
@@ -65,3 +66,4 @@ export const builderEventAtom = atom<EventType>("on_todo_create");
 export const builderInstructionsAtom = atom("");
 export const builderAllowedActionsAtom = atom<AllowedAction[]>(["notify"]);
 export const builderModelAtom = atom<string | undefined>(undefined);
+export const builderSandboxIdAtom = atom<Id<"sandboxes"> | null>(null);

@@ -22,6 +22,7 @@ import {
   builderEventAtom,
   builderInstructionsAtom,
   builderAllowedActionsAtom,
+  builderSandboxIdAtom,
   ALL_ACTIONS,
   intervalToCron,
   timeToCron,
@@ -31,6 +32,7 @@ import {
   type IntervalUnit,
   type AllowedAction,
 } from "@/store/workflows";
+import { SandboxSelector } from "@/components/sandboxes/sandbox-selector";
 import { TriggerConfig } from "./trigger-config";
 
 export function WorkflowBuilder() {
@@ -49,6 +51,7 @@ export function WorkflowBuilder() {
   const [event, setEvent] = useAtom(builderEventAtom);
   const [instructions, setInstructions] = useAtom(builderInstructionsAtom);
   const [allowedActions, setAllowedActions] = useAtom(builderAllowedActionsAtom);
+  const [sandboxId, setSandboxId] = useAtom(builderSandboxIdAtom);
 
   const handleSubmit = useCallback(async () => {
     if (!name.trim() || !instructions.trim()) return;
@@ -62,6 +65,7 @@ export function WorkflowBuilder() {
         trigger,
         instructions: instructions.trim(),
         allowedActions,
+        sandboxId: sandboxId ?? undefined,
       },
     });
 
@@ -70,9 +74,10 @@ export function WorkflowBuilder() {
     setDescription("");
     setInstructions("");
     setAllowedActions(["notify"]);
+    setSandboxId(null);
 
     navigate({ to: "/workflows" });
-  }, [name, description, triggerType, scheduleMode, intervalAmount, intervalUnit, intervalStart, atTime, cron, event, instructions, allowedActions, createWorkflow, navigate, setName, setDescription, setInstructions, setAllowedActions]);
+  }, [name, description, triggerType, scheduleMode, intervalAmount, intervalUnit, intervalStart, atTime, cron, event, instructions, allowedActions, sandboxId, createWorkflow, navigate, setName, setDescription, setInstructions, setAllowedActions, setSandboxId]);
 
   const toggleAction = useCallback(
     (action: AllowedAction) => {
@@ -117,6 +122,11 @@ export function WorkflowBuilder() {
               onChange={(e) => setDescription(e.target.value)}
               placeholder="Optional description"
             />
+          </div>
+
+          <div className="flex flex-col gap-2">
+            <Label>Sandbox</Label>
+            <SandboxSelector value={sandboxId} onChange={setSandboxId} />
           </div>
 
           <TriggerConfig

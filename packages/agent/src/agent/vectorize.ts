@@ -1,7 +1,7 @@
 import type { UIMessage } from "ai";
 import type { worker } from "../../alchemy.run.ts";
 import type { Id } from "@just-use-convex/backend/convex/_generated/dataModel";
-import { embedTexts } from "../client";
+import { embedTexts } from "./client.js";
 import { extractMessageText } from "./messages";
 
 export async function buildVectorId(agentName: string, messageId: string): Promise<string> {

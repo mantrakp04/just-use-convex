@@ -8,8 +8,7 @@ import {
 import type {
   BackgroundTask,
   BackgroundTaskStoreApi,
-  TruncatedOutputStoreApi,
-  ToolOrToolkit,
+  TruncatedOutputStoreApi
 } from "./types";
 
 const BACKGROUND_TASK_INSTRUCTIONS = `You have access to background task management tools for monitoring and controlling long-running operations.
@@ -189,12 +188,4 @@ export function createBackgroundTaskToolkit(
     instructions: BACKGROUND_TASK_INSTRUCTIONS,
     tools: [...createBackgroundTaskTools(backgroundStore), createReadOutputTool(outputStore)],
   });
-}
-
-export function withBackgroundTaskTools<T extends ToolOrToolkit>(
-  tools: T[],
-  backgroundStore: BackgroundTaskStoreApi,
-  outputStore: TruncatedOutputStoreApi,
-): (T | Toolkit)[] {
-  return [...tools, createBackgroundTaskToolkit(backgroundStore, outputStore)];
 }

@@ -1,23 +1,22 @@
-import type { UIMessage } from "ai";
 import type { Doc } from "@just-use-convex/backend/convex/_generated/dataModel";
 
-type SandboxDoc = Doc<"sandboxes">;
+export const CHAT_SYSTEM_PROMPT = (chat: Doc<"chats"> & { sandbox?: Doc<"sandboxes"> | null }) => `${CORE_SYSTEM_PROMPT}
 
-export const SYSTEM_PROMPT = (sandbox?: SandboxDoc) => `You are a capable AI assistant with planning and execution abilities.
-
-## Core Behavior
-
-- Be direct and concise. Avoid filler phrases and unnecessary preamble.
-- Think step-by-step for complex problems. Break down tasks before executing.
-- When uncertain, ask clarifying questions rather than making assumptions.
-- Provide accurate, factual information. If you don't know something, say so.
+${chat.sandbox ? createSandboxContextMessage(chat.sandbox) : ""}
 
 ## Communication
 
 - Format responses for readability (use markdown, code blocks, lists)
 - Explain your reasoning when it adds value, but don't over-explain simple actions
 - If a task cannot be completed, explain why and suggest alternatives
-${sandbox ? createSandboxContextMessage(sandbox) : ""}`;
+`;
+
+export const WORKFLOW_SYSTEM_PROMPT = (workflow: Doc<"workflows"> & { sandbox?: Doc<"sandboxes"> | null }, triggerPayload: string) => `${CORE_SYSTEM_PROMPT}
+
+${createSandboxContextMessage(workflow.sandbox)}
+
+${buildWorkflowSystemPrompt(workflow, triggerPayload)}
+`;
 
 export const TASK_PROMPT = `
 ## TASK MANAGEMENT
@@ -56,7 +55,7 @@ If user sends messages while you're processing:
 - If user cancels, next queued message is sent (configurable)
 `;
 
-function createSandboxContextMessage(sandbox?: SandboxDoc): UIMessage | null {
+function createSandboxContextMessage(sandbox?: Doc<"sandboxes"> | null): string | null {
   if (!sandbox) {
     return null;
   }
@@ -69,14 +68,34 @@ function createSandboxContextMessage(sandbox?: SandboxDoc): UIMessage | null {
     `- Description: ${sandboxDescription}`,
   ];
 
-  return {
-    id: `sandbox-context-${sandbox._id}`,
-    role: "system",
-    parts: [
-      {
-        type: "text",
-        text: lines.join("\n"),
-      },
-    ],
-  };
+  return lines.join("\n");
 }
+
+function buildWorkflowSystemPrompt(workflow: Doc<"workflows">, triggerPayload: string): string {
+  return `You are executing a workflow automation.
+
+## Workflow: ${workflow.name}
+${workflow.description ?? ""}
+
+## Instructions
+${workflow.instructions}
+
+## Trigger Context
+${triggerPayload}
+
+## Rules
+- Execute the workflow instructions
+- Be decisive and complete the workflow efficiently
+- Report what you did clearly
+- If an action fails, note the failure and continue with remaining actions
+- Do not ask for user input — workflows run autonomously`;
+}
+
+const CORE_SYSTEM_PROMPT = `You are a capable AI assistant with planning and execution abilities.
+
+## Core Behavior
+
+- Be direct and concise. Avoid filler phrases and unnecessary preamble.
+- Think step-by-step for complex problems. Break down tasks before executing.
+- When uncertain, ask clarifying questions rather than making assumptions.
+- Provide accurate, factual information. If you don't know something, say so.`;
