@@ -1,8 +1,5 @@
 import { z } from "zod";
-import type { PlanAgent } from "@voltagent/core";
-import type { Daytona, Sandbox } from "@daytonaio/sdk";
 import type { Doc, Id } from "@just-use-convex/backend/convex/_generated/dataModel";
-import type { ConvexAdapter } from "@just-use-convex/backend/convex/lib/convexAdapter";
 import type { TokenConfig } from "@just-use-convex/backend/convex/lib/convexAdapter";
 
 export type AgentArgs = {
@@ -41,15 +38,3 @@ export type ExecuteWorkflowRequest = z.infer<typeof executeWorkflowRequestSchema
 export type CallableFunctionInstance = object;
 export type CallableServiceMethodsMap = Record<string, (...args: unknown[]) => unknown>;
 export type CallableServiceMethod = keyof CallableServiceMethodsMap;
-export type WorkerRuntimeSnapshot = {
-  state: AgentArgs | undefined;
-  convexAdapter: ConvexAdapter | null;
-  planAgent: PlanAgent | null;
-  chatDoc: ChatRuntimeDoc | null;
-  workflowDoc: WorkflowRuntimeDoc | null;
-  modeConfig: ModeConfig | null;
-  daytona: Daytona | null;
-  sandbox: Sandbox | null;
-  callableFunctions: CallableFunctionInstance[];
-  didRegisterCallableFunctions: boolean;
-};

@@ -78,6 +78,14 @@ If playback fails, explicitly report that in the final response with the command
 
 User uses casual language ("bro", "dawg", "ugh"). Keep responses terse and actionable. When something breaks, diagnose fast, fix faster.
 
+### Clarification Gate (Mandatory)
+
+- before implementing any non-trivial change, ask for confirmation if scope/intent is not explicitly specified
+- do not assume architectural behavior for stateful flows (worker lifecycle, mode switching, persistence, auth propagation, background execution)
+- if multiple reasonable implementations exist, present options briefly and wait for selection before coding
+- when a change can affect cross-context behavior (chat vs workflow, server vs client, trigger vs interactive path), ask first and get approval
+- default to asking one targeted clarifying question rather than executing on inferred intent
+
 ---
 
 ## DO

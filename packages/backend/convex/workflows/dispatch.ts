@@ -43,7 +43,7 @@ export const dispatchWorkflow = internalAction({
         },
         body: JSON.stringify({
           executionId,
-          workflowId: args.workflowId,
+          workflow: args.workflowId,
           triggerPayload: args.triggerPayload ?? "{}",
         }),
       });

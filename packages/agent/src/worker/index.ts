@@ -40,7 +40,6 @@ import {
   type CallableServiceMethodsMap,
   type ModeConfig,
   type WorkflowRuntimeDoc,
-  type WorkerRuntimeSnapshot,
 } from "../agent/types";
 import {
   buildRetrievalMessage,
@@ -61,8 +60,6 @@ import {
 } from "./helpers";
 import { createWorkerPlanAgent } from "../agent/agent";
 
-type InitOptions = { persistInitArgs?: boolean };
-
 export class AgentWorker extends AIChatAgent<typeof worker.Env, AgentArgs> {
   private convexAdapter: ConvexAdapter | null = null;
   private planAgent: PlanAgent | null = null;
@@ -76,9 +73,10 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, AgentArgs> {
   private daytona: Daytona | null = null;
   private sandbox: Sandbox | null = null;
 
-  private async _init(args?: AgentArgs, options?: InitOptions): Promise<void> {
-    if (args && (options?.persistInitArgs ?? true)) {
+  private async _init(args?: AgentArgs): Promise<void> {
+    if (args) {
       await this.ctx.storage.put("initArgs", args);
+      this.planAgent = null;
     }
     const initArgs = (args ?? (await this.ctx.storage.get("initArgs"))) as AgentArgs | null;
     if (!initArgs) {
@@ -95,9 +93,7 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, AgentArgs> {
       throw new Error("Unauthorized: No token provided");
     }
     this.convexAdapter = await createConvexAdapter(this.env.CONVEX_URL, activeTokenConfig);
-    const modeConfig = initArgs.modeConfig
-      ?? currentState.modeConfig
-      ?? { mode: "chat", chat: this.name as Id<"chats"> };
+    const modeConfig = initArgs.modeConfig ?? getDefaultChatModeConfig(this.name as Id<"chats">);
     this.modeConfig = modeConfig;
     this.chatDoc = null;
     this.workflowDoc = null;
@@ -112,11 +108,6 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, AgentArgs> {
         throw new Error("Workflow not found");
       }
       this.workflowDoc = workflow;
-
-      await this.convexAdapter.mutation(
-        api.workflows.index.updateExecutionStatusExt,
-        { executionId: modeConfig.executionId, status: "running" },
-      );
 
       this.setState({
         ...resolveWorkflowExecutionState(currentState, workflow),
@@ -275,10 +266,7 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, AgentArgs> {
     return await this.convexAdapter.query(getFn, { _id: chatId });
   }
 
-  private async _markWorkflowExecutionFailed(
-    error: unknown,
-    executionId = this.modeConfig?.mode === "workflow" ? this.modeConfig.executionId : null,
-  ): Promise<void> {
+  private async _markWorkflowExecutionFailed(error: unknown, executionId: Id<"workflowExecutions"> | null): Promise<void> {
     if (!executionId || !this.convexAdapter) {
       return;
     }
@@ -297,7 +285,6 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, AgentArgs> {
   override async onRequest(request: Request): Promise<Response> {
     const url = new URL(request.url);
     const isExecuteWorkflow = url.pathname.endsWith("/executeWorkflow") && request.method === "POST";
-    const runtimeSnapshot = isExecuteWorkflow ? this._snapshotRuntime() : null;
     let executionId: Id<"workflowExecutions"> | null = null;
 
     try {
@@ -324,13 +311,20 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, AgentArgs> {
               triggerPayload: workflowRequest.triggerPayload,
             },
           }),
-          { persistInitArgs: false },
         );
-        this.planAgent = null;
+        if (!this.convexAdapter) {
+          throw new Error("No convex adapter");
+        }
+        await this.convexAdapter.mutation(api.workflows.index.updateExecutionStatusExt, {
+          executionId,
+          status: "running",
+        });
         return await this._handleExecuteWorkflow();
       }
 
-      await this._init(buildInitArgsFromUrl(url));
+      await this._init(buildInitArgsFromUrl(url, {
+        modeConfig: getDefaultChatModeConfig(this.name as Id<"chats">),
+      }));
       return await super.onRequest(request);
     } catch (error) {
       await this._markWorkflowExecutionFailed(error, executionId);
@@ -339,16 +333,14 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, AgentArgs> {
         JSON.stringify({ error: error instanceof Error ? error.message : "Internal Server Error" }),
         { status: 500 },
       );
-    } finally {
-      if (runtimeSnapshot) {
-        this._restoreRuntime(runtimeSnapshot);
-      }
     }
   }
 
   override async onConnect(connection: Connection, ctx: ConnectionContext): Promise<void> {
     const url = new URL(ctx.request.url);
-    await this._init(buildInitArgsFromUrl(url));
+    await this._init(buildInitArgsFromUrl(url, {
+      modeConfig: getDefaultChatModeConfig(this.name as Id<"chats">),
+    }));
     await this._prepAgent();
     return await super.onConnect(connection, ctx);
   }
@@ -526,7 +518,10 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, AgentArgs> {
         }),
       });
     } catch (error) {
-      await this._markWorkflowExecutionFailed(error);
+      await this._markWorkflowExecutionFailed(
+        error,
+        this.modeConfig?.mode === "workflow" ? this.modeConfig.executionId : null,
+      );
       console.error("onChatMessage failed", error);
       return new Response(
         JSON.stringify({ error: error instanceof Error ? error.message : "Internal Server Error" }),
@@ -542,34 +537,8 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, AgentArgs> {
   override async onChatMessage(onFinish: StreamTextOnFinishCallback<ToolSet>, options?: OnChatMessageOptions): Promise<Response> {
     return await this._onChatMessage(onFinish, options);
   }
+}
 
-  private _snapshotRuntime(): WorkerRuntimeSnapshot {
-    return {
-      state: this.state ? { ...this.state } : undefined,
-      convexAdapter: this.convexAdapter,
-      planAgent: this.planAgent,
-      chatDoc: this.chatDoc,
-      workflowDoc: this.workflowDoc,
-      modeConfig: this.modeConfig,
-      daytona: this.daytona,
-      sandbox: this.sandbox,
-      callableFunctions: this.callableFunctions,
-      didRegisterCallableFunctions: this.didRegisterCallableFunctions,
-    };
-  }
-
-  private _restoreRuntime(snapshot: WorkerRuntimeSnapshot): void {
-    if (snapshot.state) {
-      this.setState(snapshot.state);
-    }
-    this.convexAdapter = snapshot.convexAdapter;
-    this.planAgent = snapshot.planAgent;
-    this.chatDoc = snapshot.chatDoc;
-    this.workflowDoc = snapshot.workflowDoc;
-    this.modeConfig = snapshot.modeConfig;
-    this.daytona = snapshot.daytona;
-    this.sandbox = snapshot.sandbox;
-    this.callableFunctions = snapshot.callableFunctions;
-    this.didRegisterCallableFunctions = snapshot.didRegisterCallableFunctions;
-  }
+function getDefaultChatModeConfig(chatId: Id<"chats">): Extract<ModeConfig, { mode: "chat" }> {
+  return { mode: "chat", chat: chatId };
 }
