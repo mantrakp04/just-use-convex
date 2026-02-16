@@ -52,7 +52,7 @@ export const UpdateArgs = WorkflowWithSystemFields.pick({ _id: true }).extend({
     instructions: z.string(),
     allowedActions: z.array(allowedActionSchema),
     model: z.string().optional(),
-    sandboxId: sandboxesWithSystemFields._id.optional(),
+    sandboxId: sandboxesWithSystemFields._id.nullable().optional(),
     enabled: z.boolean(),
   }).partial(),
 });

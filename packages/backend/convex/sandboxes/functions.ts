@@ -7,6 +7,7 @@ import {
   assertPermission,
   assertScopedPermission,
 } from "../shared/auth";
+import { buildPatchData } from "../shared/patch";
 
 async function runSandboxesQuery(ctx: zQueryCtx, args: z.infer<typeof types.ListArgs>) {
   return ctx.table("sandboxes", "organizationId_userId", (q) => q
@@ -99,13 +100,7 @@ export async function UpdateSandbox(ctx: zMutationCtx, args: z.infer<typeof type
     "You are not authorized to update this sandbox"
   );
 
-  const patchData: Record<string, unknown> = { updatedAt: Date.now() };
-
-  for (const [key, value] of Object.entries(args.patch)) {
-    if (value !== undefined) {
-      patchData[key] = value;
-    }
-  }
+  const patchData = buildPatchData(args.patch);
 
   await sandbox.patch(patchData);
   return sandbox;

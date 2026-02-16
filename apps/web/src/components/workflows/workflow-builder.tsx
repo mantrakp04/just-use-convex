@@ -142,10 +142,11 @@ export function WorkflowBuilder({
     );
 
     if (isEditMode && workflow) {
+      // undefined = no change, null = unset, Id = set
       const patchedSandboxId =
-        workflow.sandboxId === (sandboxId ?? undefined)
+        (workflow.sandboxId ?? null) === sandboxId
           ? undefined
-          : (sandboxId ?? undefined);
+          : sandboxId;
 
       await updateWorkflow({
         _id: workflow._id,

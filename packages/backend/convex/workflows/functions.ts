@@ -3,6 +3,7 @@ import type { zMutationCtx, zQueryCtx } from "../functions";
 import type { Id } from "../_generated/dataModel";
 import * as types from "./types";
 import { withInvalidCursorRetry } from "../shared/pagination";
+import { buildPatchData } from "../shared/patch";
 import {
   assertOrganizationAccess,
   assertPermission,
@@ -143,7 +144,7 @@ export async function UpdateWorkflow(ctx: zMutationCtx, args: z.infer<typeof typ
     "You are not authorized to update this workflow"
   );
 
-  // Validate sandboxId if being updated
+  // Validate sandboxId if being set (null means unset)
   if (args.patch.sandboxId) {
     const sandbox = await ctx.table("sandboxes").getX(args.patch.sandboxId);
     if (sandbox.organizationId !== ctx.identity.activeOrganizationId) {
@@ -154,18 +155,12 @@ export async function UpdateWorkflow(ctx: zMutationCtx, args: z.infer<typeof typ
     }
   }
 
-  const patchData: Record<string, unknown> = { updatedAt: Date.now() };
-
-  for (const [key, value] of Object.entries(args.patch)) {
-    if (value !== undefined) {
-      if (key === "trigger") {
-        patchData[key] = JSON.stringify(value);
-        patchData.triggerType = (value as z.infer<typeof types.CreateArgs>["data"]["trigger"]).type;
-      } else {
-        patchData[key] = value;
-      }
-    }
-  }
+  const patchData = buildPatchData(args.patch, {
+    trigger: (value) => ({
+      trigger: JSON.stringify(value),
+      triggerType: (value as z.infer<typeof types.CreateArgs>["data"]["trigger"]).type,
+    }),
+  });
 
   await workflow.patch(patchData);
   return workflow;

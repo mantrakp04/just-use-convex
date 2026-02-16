@@ -7,6 +7,7 @@ import {
   assertPermission,
   assertScopedPermission,
 } from "../shared/auth";
+import { buildPatchData } from "../shared/patch";
 
 async function runTodosQuery(ctx: zQueryCtx, args: z.infer<typeof types.ListArgs>) {
   return ctx.table("todos", 'organizationId', (q) => q
@@ -155,13 +156,7 @@ export async function UpdateTodo(ctx: zMutationCtx, args: z.infer<typeof types.U
     "You are not authorized to update this todo"
   );
 
-  const patchData: Record<string, unknown> = { updatedAt: Date.now() };
-
-  for (const [key, value] of Object.entries(args.patch)) {
-    if (value !== undefined && value !== null) {
-      patchData[key] = value;
-    }
-  }
+  const patchData = buildPatchData(args.patch);
 
   await todo.patch(patchData);
   return todo.doc();
