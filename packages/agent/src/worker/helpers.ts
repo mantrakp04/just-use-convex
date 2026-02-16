@@ -4,8 +4,8 @@ import {
   type TokenConfig,
 } from "@just-use-convex/backend/convex/lib/convexAdapter";
 import { env as agentDefaults } from "@just-use-convex/env/agent";
-import { processMessagesForAgent } from "./messages";
-import type { AgentArgs, WorkflowRuntimeDoc } from "./types";
+import { processMessagesForAgent } from "../agent/messages";
+import type { AgentArgs, WorkflowRuntimeDoc } from "../agent/types";
 
 export type InitArgsOverrides = Pick<AgentArgs, "tokenConfig" | "modeConfig">;
 

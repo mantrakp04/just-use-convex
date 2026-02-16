@@ -19,18 +19,18 @@ import {
   createConvexAdapter,
 } from "@just-use-convex/backend/convex/lib/convexAdapter";
 import { env as agentDefaults } from "@just-use-convex/env/agent";
-import { createAiClient } from "./client";
+import { createAiClient } from "../agent/client";
 import { parseStreamToUI } from "../utils/fullStreamParser";
 import {
   BackgroundTaskStore,
   TruncatedOutputStore,
   patchToolWithBackgroundSupport,
 } from "../tools/utils/wrapper";
-import { generateTitle } from "./chat-meta";
+import { generateTitle } from "../agent/chat-meta";
 import {
   extractMessageText,
   processMessagesForAgent,
-} from "./messages";
+} from "../agent/messages";
 import {
   executeWorkflowRequestSchema,
   type AgentArgs,
@@ -41,12 +41,12 @@ import {
   type ModeConfig,
   type WorkflowRuntimeDoc,
   type WorkerRuntimeSnapshot,
-} from "./types";
+} from "../agent/types";
 import {
   buildRetrievalMessage,
   deleteMessageVectors,
   indexMessagesInVectorStore,
-} from "./vectorize";
+} from "../agent/vectorize";
 import {
   createSandboxFsFunctions,
   createSandboxPtyFunctions,
@@ -58,8 +58,8 @@ import {
   buildWorkflowExecutionMessages,
   parseTokenFromRequest,
   resolveWorkflowExecutionState,
-} from "./worker-helpers";
-import { createWorkerPlanAgent } from "./worker-plan-agent";
+} from "./helpers";
+import { createWorkerPlanAgent } from "../agent/agent";
 
 type InitOptions = { persistInitArgs?: boolean };
 
@@ -396,10 +396,6 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, AgentArgs> {
     await this.persistMessages(messages);
   }
 
-  private async _handleExecuteWorkflow(): Promise<Response> {
-    return await this._onChatMessage(() => {});
-  }
-
   private async _onChatMessage(
     _onFinish: StreamTextOnFinishCallback<ToolSet>,
     options?: OnChatMessageOptions
@@ -537,6 +533,10 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, AgentArgs> {
         { status: 500 },
       );
     }
+  }
+
+  private async _handleExecuteWorkflow(): Promise<Response> {
+    return await this._onChatMessage(() => {});
   }
 
   override async onChatMessage(onFinish: StreamTextOnFinishCallback<ToolSet>, options?: OnChatMessageOptions): Promise<Response> {
