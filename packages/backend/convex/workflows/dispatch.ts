@@ -70,8 +70,10 @@ export const dispatchWorkflowBatch = internalAction({
     dispatches: v.array(v.object(dispatchWorkflowArgs)),
   },
   handler: async (ctx, args) => {
-    for (const dispatchArgs of args.dispatches) {
-      await ctx.runAction(internal.workflows.dispatch.dispatchWorkflow, dispatchArgs);
-    }
+    await Promise.all(
+      args.dispatches.map((dispatchArgs) =>
+        ctx.runAction(internal.workflows.dispatch.dispatchWorkflow, dispatchArgs)
+      ),
+    );
   },
 });
