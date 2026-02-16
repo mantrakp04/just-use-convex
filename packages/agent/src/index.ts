@@ -1,5 +1,5 @@
 import { routeAgentRequest } from "agents";
-import type { worker } from "../alchemy.run";
+import type { worker } from "@just-use-convex/infra/agent";
 
 export { AgentWorker } from "./agent/worker";
 

@@ -1,7 +1,7 @@
 import { createTool, createToolkit } from "@voltagent/core";
 import { queryVectorizedMessages } from "../agent/vectorize";
 import { z } from "zod";
-import type { worker } from "../../alchemy.run";
+import type { worker } from "@just-use-convex/infra/agent";
 
 export function createVectorizeToolkit(env: typeof worker.Env, memberId: string | undefined) {
   const vectorizeSearchTool = createTool({

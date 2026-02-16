@@ -20,7 +20,7 @@ import {
   setWaitUntil,
   type Toolkit,
 } from "@voltagent/core";
-import type { worker } from "../../alchemy.run";
+import type { worker } from "@just-use-convex/infra/agent";
 import { api } from "@just-use-convex/backend/convex/_generated/api";
 import type { Id } from "@just-use-convex/backend/convex/_generated/dataModel";
 import {

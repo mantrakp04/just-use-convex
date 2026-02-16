@@ -4,9 +4,9 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "bunx alchemy dev alchemy.run.ts",
-    "deploy": "bunx alchemy deploy alchemy.run.ts",
-    "destroy": "bunx alchemy destroy alchemy.run.ts",
+    "dev": "cd ../infra && bun run dev:agent",
+    "deploy": "cd ../infra && bun run deploy:agent",
+    "destroy": "cd ../infra && bun run destroy:agent",
     "check-types": "tsc --noEmit",
     "build": "tsc --noEmit"
   },

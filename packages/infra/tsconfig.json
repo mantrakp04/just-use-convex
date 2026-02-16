@@ -5,5 +5,5 @@
     "lib": ["ESNext"],
     "noEmit": true
   },
-  "include": ["web/**/*.ts"]
+  "include": ["**/*.ts"]
 }
