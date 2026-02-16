@@ -79,8 +79,9 @@ function RouteComponent() {
 
   const isSearching = searchQuery.length > 0;
   const todosQuery = useTodosList(filters);
-  const { results: paginatedTodos, status } = todosQuery;
-  const todos = isSearching ? (searchResults.data ?? []) as Todo[] : paginatedTodos;
+  const { results: paginatedTodos, status: paginatedStatus } = todosQuery;
+  const todos = isSearching ? (searchResults.data ?? []) : paginatedTodos;
+  const status = isSearching ? "Exhausted" as const : paginatedStatus;
 
   const hasLoadedOnce = useRef(false);
   if (todos.length > 0 || status !== "LoadingFirstPage") {

@@ -5,8 +5,8 @@ import { zodToConvexFields } from "convex-helpers/server/zod4";
 import { v } from "convex/values";
 import type { Trigger } from "convex-helpers/server/triggers";
 import type { GenericMutationCtx } from "convex/server";
-import type { DataModel } from "../_generated/dataModel";
-import { todoTimeMetadataZodSchema } from "./todos";
+import type { DataModel, Id } from "../_generated/dataModel";
+import { todoTimeMetadataZodSchema, todosZodSchema } from "./todos";
 
 export const todosContentZodSchema = {
   organizationId: z.string(),
@@ -36,19 +36,7 @@ export const todosContentEnt = defineEntFromTable(todosContentTable)
 
 type MutationCtx = GenericMutationCtx<DataModel>;
 
-interface TodoDoc {
-  organizationId: string;
-  memberId: string;
-  title: string;
-  description?: string;
-  status?: string;
-  priority?: string;
-  teamId?: string;
-  dueDate?: number | null;
-  startTime?: number | null;
-  endTime?: number | null;
-  updatedAt: number;
-}
+type TodoDoc = z.input<z.ZodObject<typeof todosZodSchema>>;
 
 function buildTodoContent(todo: TodoDoc, assignedMemberIds: string[]): string {
   const parts = [
@@ -69,16 +57,16 @@ function buildTodoContent(todo: TodoDoc, assignedMemberIds: string[]): string {
   return parts.join(", ");
 }
 
-async function upsertTodoContent(ctx: MutationCtx, todoId: string, todo: TodoDoc) {
+async function upsertTodoContent(ctx: MutationCtx, todoId: Id<"todos">, todo: TodoDoc) {
   const assignments = await ctx.db
     .query("todoAssignedMembers")
-    .withIndex("todoId_memberId", (q) => q.eq("todoId", todoId as never))
+    .withIndex("todoId_memberId", (q) => q.eq("todoId", todoId))
     .collect();
   const content = buildTodoContent(todo, assignments.map((a) => a.memberId));
 
   const existing = await ctx.db
     .query("todosContent")
-    .withIndex("todoId", (q) => q.eq("todoId", todoId as never))
+    .withIndex("todoId", (q) => q.eq("todoId", todoId))
     .unique();
 
   const timeMetadata = {
@@ -92,7 +80,7 @@ async function upsertTodoContent(ctx: MutationCtx, todoId: string, todo: TodoDoc
     await ctx.db.patch(existing._id, { content, ...timeMetadata });
   } else {
     await ctx.db.insert("todosContent", {
-      todoId: todoId as never,
+      todoId,
       organizationId: todo.organizationId,
       content,
       ...timeMetadata,

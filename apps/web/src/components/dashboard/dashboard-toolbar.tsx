@@ -131,7 +131,7 @@ export function DashboardToolbar({
                 <span>Due tomorrow</span>
                 <code className="text-[11px] bg-muted px-1 rounded">due:2026-03-15</code>
                 <span>Due on date</span>
-                <code className="text-[11px] bg-muted px-1 rounded">due:03-01..03-31</code>
+                <code className="text-[11px] bg-muted px-1 rounded">due:2026-03-01..2026-03-31</code>
                 <span>Due in range</span>
                 <code className="text-[11px] bg-muted px-1 rounded">after:2026-03-01</code>
                 <span>Due after date</span>

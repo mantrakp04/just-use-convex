@@ -262,7 +262,7 @@ export async function SearchTodos(ctx: zQueryCtx, args: z.infer<typeof types.Sea
       q.search("content", args.query)
         .eq("organizationId", ctx.identity.activeOrganizationId)
     )
-    .take(40);
+    .take(100);
 
   const todos = await Promise.all(
     results.map(async (result) => {

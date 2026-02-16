@@ -12,6 +12,7 @@ export type { Priority, TodoStatus };
 type ListArgs = FunctionArgs<typeof api.todos.index.list>;
 export type TodoFilters = ListArgs["filters"];
 export type Todo = FunctionReturnType<typeof api.todos.index.list>["page"][number];
+export type SearchTodoItem = NonNullable<FunctionReturnType<typeof api.todos.index.search>[number]>;
 
 const INITIAL_NUM_ITEMS = 20;
 const EMPTY_FILTERS: TodoFilters = {};
@@ -216,9 +217,9 @@ function parseSearchTimeFilters(raw: string): { cleanQuery: string; timeFilters:
 
 export function useSearchTodos(query: string) {
   const { cleanQuery, timeFilters } = parseSearchTimeFilters(query);
-  const hasQuery = cleanQuery.length > 0;
+  const hasQuery = cleanQuery.length > 0 || timeFilters !== undefined;
   return useQuery({
-    ...convexQuery(api.todos.index.search, hasQuery ? { query: cleanQuery, timeFilters } : "skip"),
+    ...convexQuery(api.todos.index.search, hasQuery ? { query: cleanQuery || "*", timeFilters } : "skip"),
     enabled: hasQuery,
   });
 }
