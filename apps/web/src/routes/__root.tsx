@@ -22,7 +22,7 @@ import { seo } from '@/utils/seo'
 import { PostHogProvider } from 'posthog-js/react'
 
 import Header from "../components/header/index";
-import { env } from "@just-use-convex/env/web";
+import { webEnv } from "@just-use-convex/env/web";
 
 const getAuth = createServerFn({ method: "GET" }).handler(async () => {
   return await getToken();
@@ -89,9 +89,9 @@ export const Route = createRootRouteWithContext<RouterAppContext>()({
 function RootDocument() {
   const context = useRouteContext({ from: Route.id });
   return (
-    <PostHogProvider apiKey={env.VITE_PUBLIC_POSTHOG_KEY} options={
+    <PostHogProvider apiKey={webEnv.VITE_PUBLIC_POSTHOG_KEY} options={
       {
-        api_host: env.VITE_PUBLIC_POSTHOG_HOST,
+        api_host: webEnv.VITE_PUBLIC_POSTHOG_HOST,
         defaults: '2026-01-30',
       }
     }>

@@ -25,7 +25,7 @@ export const serverEnv = createEnv({
   extends: [webEnv],
   server: {
     ALCHEMY_PASSWORD: z.string().optional(),
-    VERCEL_ACCESS_TOKEN: z.string().min(1),
+    VERCEL_ACCESS_TOKEN: z.string().optional(),
     VERCEL_GIT_REPO: z.string().default("mantrakp04/just-use-convex"),
     VERCEL_PROJECT_NAME: z.string().optional(),
   },

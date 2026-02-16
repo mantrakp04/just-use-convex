@@ -22,7 +22,7 @@ const chatMessagesIndex = await VectorizeIndex("chat-messages", {
 
 export const worker = await Worker("agent-worker", {
   entrypoint: "../agent/src/index.ts",
-  url: true,
+  url: false,
   compatibility: "node",
   bindings: {
     agentWorker: agentWorkerNamespace,

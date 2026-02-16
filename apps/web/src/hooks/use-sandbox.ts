@@ -5,7 +5,7 @@ import { useAction } from "convex/react";
 import { toast } from "sonner";
 import type { Terminal as XtermTerminal } from "xterm";
 import type { FunctionReturnType } from "convex/server";
-import { env } from "@just-use-convex/env/web";
+import { webEnv } from "@just-use-convex/env/web";
 import type {
   ExplorerEntry,
   ExplorerState,
@@ -109,9 +109,9 @@ export function useChatSandbox(chatId: Id<"chats">, agent: AgentCaller | null) {
       const session = !sshSession || isExpired ? await createSshAccess() : sshSession;
       if (!session?.token) return;
 
-      const host = session.sshCommand ? parseSshHost(session.sshCommand) : env.VITE_SANDBOX_SSH_HOST;
+      const host = session.sshCommand ? parseSshHost(session.sshCommand) : webEnv.VITE_SANDBOX_SSH_HOST;
       const scheme = editor === "vscode" ? "vscode" : "cursor";
-      window.open(`${scheme}://vscode-remote/ssh-remote+${session.token}@${host}${env.VITE_SANDBOX_MOUNT_PATH}`, "_blank");
+      window.open(`${scheme}://vscode-remote/ssh-remote+${session.token}@${host}${webEnv.VITE_SANDBOX_MOUNT_PATH}`, "_blank");
     },
     [createSshAccess, sshSession]
   );
@@ -119,7 +119,7 @@ export function useChatSandbox(chatId: Id<"chats">, agent: AgentCaller | null) {
   const refreshExplorer = useCallback(async (path?: string) => {
     if (!agent) return;
     try {
-      const resolvedPath = path ?? explorer?.path ?? env.VITE_SANDBOX_MOUNT_PATH;
+      const resolvedPath = path ?? explorer?.path ?? webEnv.VITE_SANDBOX_MOUNT_PATH;
       const entries = (await agent.call("listFiles", [{ path: resolvedPath }])) as FileInfo[];
       setExplorer({
         path: resolvedPath,
@@ -239,7 +239,7 @@ export function useChatSandbox(chatId: Id<"chats">, agent: AgentCaller | null) {
         scrollback: 20000,
         fontSize: 12,
         fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
-        theme: { background: env.VITE_TERMINAL_BACKGROUND, foreground: "#e5e7eb", cursor: "#f9fafb" },
+        theme: { background: webEnv.VITE_TERMINAL_BACKGROUND, foreground: "#e5e7eb", cursor: "#f9fafb" },
       });
       const fitAddon = new FitAddon();
       term.loadAddon(fitAddon);
@@ -394,7 +394,7 @@ export function useChatSandbox(chatId: Id<"chats">, agent: AgentCaller | null) {
     activeTerminalId,
     focusTerminal: useCallback(() => terminalRef.current?.focus(), []),
     terminalContainerRef,
-    terminalBackground: env.VITE_TERMINAL_BACKGROUND,
+    terminalBackground: webEnv.VITE_TERMINAL_BACKGROUND,
     isConnectingSsh: sshPending,
     isConnectingPreview: previewPending,
   };
@@ -416,5 +416,5 @@ function triggerDownload(decoded: string, filename: string, mime?: string) {
 }
 
 function parseSshHost(sshCommand: string): string {
-  return sshCommand.match(/@([^\s]+)/)?.[1] ?? env.VITE_SANDBOX_SSH_HOST;
+  return sshCommand.match(/@([^\s]+)/)?.[1] ?? webEnv.VITE_SANDBOX_SSH_HOST;
 }

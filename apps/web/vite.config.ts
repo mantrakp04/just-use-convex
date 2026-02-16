@@ -8,6 +8,7 @@ import mdx from 'fumadocs-mdx/vite';
 import * as MdxConfig from './source.config';
 
 export default defineConfig({
+  envDir: "../../packages/infra",
   plugins: [mdx(MdxConfig), tsconfigPaths(), tailwindcss(), tanstackStart(), viteReact(), nitro({ preset: 'vercel'})],
   server: {
     port: 3001,

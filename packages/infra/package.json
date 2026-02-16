@@ -4,12 +4,11 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev:agent": "bunx alchemy dev agent.ts",
-    "deploy:agent": "bunx alchemy deploy agent.ts",
-    "destroy:agent": "bunx alchemy destroy agent.ts",
-    "dev:web": "bunx alchemy dev web.ts",
-    "deploy:web": "bunx alchemy deploy web.ts",
-    "destroy:web": "bunx alchemy destroy web.ts",
+    "dev:agent": "alchemy dev agent.ts",
+    "deploy:agent": "alchemy deploy agent.ts",
+    "destroy:agent": "alchemy destroy agent.ts",
+    "deploy:web": "alchemy deploy web.ts",
+    "destroy:web": "alchemy destroy web.ts",
     "check-types": "tsc --noEmit"
   },
   "dependencies": {

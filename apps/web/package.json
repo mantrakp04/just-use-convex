@@ -4,9 +4,8 @@
   "type": "module",
   "scripts": {
     "build": "vite build",
-    "analyze": "BUILD_SOURCEMAP=true NODE_OPTIONS=--max-old-space-size=8192 bun run build && bunx source-map-explorer --only-mapped --no-border-checks '.output/public/assets/*.js'",
     "serve": "vite preview",
-    "dev": "cd ../../packages/infra && bun run dev:web",
+    "dev": "vite dev",
     "deploy": "cd ../../packages/infra && bun run deploy:web",
     "destroy": "cd ../../packages/infra && bun run destroy:web",
     "check-types": "tsc --noEmit"
