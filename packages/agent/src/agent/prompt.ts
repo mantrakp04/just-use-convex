@@ -82,12 +82,16 @@ ${workflow.instructions}
 ## Trigger Context
 ${triggerPayload}
 
+## Actions Context
+Use the following actions during / at end of execution, these are configured by user and must be realized:
+${workflow.allowedActions.map((action) => `- ${action}`).join("\n")}
+
 ## Rules
-- Execute the workflow instructions
 - Be decisive and complete the workflow efficiently
-- Report what you did clearly
 - If an action fails, note the failure and continue with remaining actions
-- Do not ask for user input — workflows run autonomously`;
+- Do not ask for user input — workflows run autonomously
+- Always use the actions context to carry out the workflow instructions
+`;
 }
 
 const CORE_SYSTEM_PROMPT = `You are a capable AI assistant with planning and execution abilities.

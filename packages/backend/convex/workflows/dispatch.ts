@@ -70,10 +70,18 @@ export const dispatchWorkflowBatch = internalAction({
     dispatches: v.array(v.object(dispatchWorkflowArgs)),
   },
   handler: async (ctx, args) => {
-    await Promise.all(
+    const results = await Promise.allSettled(
       args.dispatches.map((dispatchArgs) =>
         ctx.runAction(internal.workflows.dispatch.dispatchWorkflow, dispatchArgs)
       ),
     );
+
+    const failed = results.filter((result) => result.status === "rejected");
+    if (failed.length > 0) {
+      console.error(
+        `[workflows.dispatchWorkflowBatch] ${failed.length}/${args.dispatches.length} dispatches failed`,
+        failed.map((result) => (result as PromiseRejectedResult).reason),
+      );
+    }
   },
 });

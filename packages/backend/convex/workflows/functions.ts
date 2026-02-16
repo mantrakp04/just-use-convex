@@ -188,8 +188,7 @@ export async function DeleteWorkflow(ctx: zMutationCtx, args: z.infer<typeof typ
     "You are not authorized to delete this workflow"
   );
 
-  await deleteWorkflowExecutionsInBatches(ctx, workflow._id);
-
+  // Let Convex Ents cascade deletion through the required executions edge.
   await workflow.delete();
   return true;
 }
@@ -368,38 +367,4 @@ async function getLatestChatId(
 
 function getWorkflowExecutionNamespace(workflowId: Id<"workflows">): string {
   return `workflow-${workflowId}`;
-}
-
-const EXECUTION_DELETE_BATCH_SIZE = 100;
-const MAX_EXECUTIONS_DELETE_PER_MUTATION = 2000;
-
-async function deleteWorkflowExecutionsInBatches(
-  ctx: zMutationCtx,
-  workflowId: Id<"workflows">,
-): Promise<void> {
-  let cursor: string | null = null;
-  let deletedCount = 0;
-
-  while (true) {
-    const page = await ctx.db
-      .query("workflowExecutions")
-      .withIndex("workflowId_startedAt", (q) => q.eq("workflowId", workflowId))
-      .paginate({
-        numItems: EXECUTION_DELETE_BATCH_SIZE,
-        cursor,
-      });
-
-    for (const execution of page.page) {
-      await ctx.db.delete(execution._id);
-      deletedCount += 1;
-      if (deletedCount > MAX_EXECUTIONS_DELETE_PER_MUTATION) {
-        throw new Error("Too many workflow executions to delete in one operation");
-      }
-    }
-
-    if (page.isDone) {
-      return;
-    }
-    cursor = page.continueCursor;
-  }
 }

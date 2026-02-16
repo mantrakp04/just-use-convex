@@ -76,7 +76,8 @@ const workflowsTable = Workflows.table
   .index("organizationId_enabled", ["organizationId", "enabled"])
   .index("organizationId_enabled_triggerType", ["organizationId", "enabled", "triggerType"])
   .index("enabled", ["enabled"])
-  .index("enabled_triggerType", ["enabled", "triggerType"]);
+  .index("enabled_triggerType", ["enabled", "triggerType"])
+  .index("enabled_triggerType_updatedAt", ["enabled", "triggerType", "updatedAt"]);
 
 export const workflowsEnt = defineEntFromTable(workflowsTable)
   .edge("sandbox", { to: "sandboxes", field: "sandboxId", optional: true })

@@ -9,9 +9,10 @@ export const tick = internalMutation({
     // Query all enabled schedule-type workflows
     const enabledWorkflows = await ctx.db
       .query("workflows")
-      .withIndex("enabled_triggerType", (q) =>
+      .withIndex("enabled_triggerType_updatedAt", (q) =>
         q.eq("enabled", true).eq("triggerType", "schedule")
       )
+      .order("desc")
       .collect();
 
     const now = Date.now();
