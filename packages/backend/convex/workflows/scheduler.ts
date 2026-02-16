@@ -1,7 +1,12 @@
+import type { FunctionArgs } from "convex/server";
 import { internalMutation } from "../_generated/server";
 import { internal } from "../_generated/api";
 import { triggerSchema } from "../tables/workflows";
 import { resolveWorkflowMemberIdentity } from "./memberIdentity";
+
+type DispatchWorkflowBatchArgs = FunctionArgs<
+  typeof internal.workflows.dispatch.dispatchWorkflowBatch
+>;
 
 export const tick = internalMutation({
   args: {},
@@ -16,14 +21,7 @@ export const tick = internalMutation({
       .collect();
 
     const now = Date.now();
-    const dispatches: {
-      workflowId: typeof enabledWorkflows[number]["_id"];
-      triggerPayload: string;
-      userId: string;
-      activeOrganizationId: string;
-      organizationRole: string;
-      memberId: string;
-    }[] = [];
+    const dispatches: DispatchWorkflowBatchArgs["dispatches"] = [];
 
     for (const workflow of enabledWorkflows) {
       let trigger: ReturnType<typeof triggerSchema.parse>;
@@ -58,6 +56,7 @@ export const tick = internalMutation({
         activeOrganizationId: workflow.organizationId,
         organizationRole: memberIdentity.role,
         memberId: workflow.memberId,
+        activeTeamId: undefined,
       });
     }
 
@@ -112,7 +111,7 @@ function matchesCronField(field: string, value: number, min: number, max: number
     if (v.includes("/")) {
       const [basePart, stepPart] = v.split("/");
       const step = parseInt(stepPart ?? "", 10);
-      if (isNaN(step) || step <= 0) return false;
+      if (isNaN(step) || step <= 0) { continue; }
 
       if (basePart === "*") {
         if ((value - min) % step === 0) return true;
@@ -129,7 +128,7 @@ function matchesCronField(field: string, value: number, min: number, max: number
       }
 
       const start = parseInt(basePart ?? "", 10);
-      if (isNaN(start)) return false;
+      if (isNaN(start)) { continue; }
       if (value >= start && value <= max && (value - start) % step === 0) {
         return true;
       }

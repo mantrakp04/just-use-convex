@@ -118,6 +118,7 @@ export function workflowEventTrigger<T extends "chats" | "sandboxes" | "todos">(
             activeOrganizationId: workflow.organizationId,
             organizationRole: memberIdentity.role,
             memberId: workflow.memberId,
+            activeTeamId: undefined,
           });
         }
       }

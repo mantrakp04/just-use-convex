@@ -310,6 +310,11 @@ export async function CreateExecution(ctx: zMutationCtx, args: z.infer<typeof ty
 
 export async function UpdateExecutionStatus(ctx: zMutationCtx, args: z.infer<typeof types.UpdateExecutionStatusArgs>) {
   const execution = await ctx.table("workflowExecutions").getX(args.executionId);
+  assertOrganizationAccess(
+    execution.organizationId,
+    ctx.identity.activeOrganizationId,
+    "You are not authorized to update this execution"
+  );
 
   const patchData: Record<string, unknown> = { status: args.status };
   if (args.agentOutput !== undefined) patchData.agentOutput = args.agentOutput;
