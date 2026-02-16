@@ -9,6 +9,7 @@ import { triggerSchema } from "./tables/workflows";
 import { resolveWorkflowMemberIdentity } from "./workflows/memberIdentity";
 
 const http = httpRouter();
+const SENSITIVE_WEBHOOK_HEADERS = ["x-webhook-signature", "authorization", "cookie"];
 
 authComponent.registerRoutes(http, createAuth);
 
@@ -92,7 +93,7 @@ const handleWorkflowWebhook = httpAction(async (ctx, request) => {
   const triggerPayload = JSON.stringify({
     type: "webhook",
     body: body.length === 0 ? {} : (parsedBody ?? body),
-    headers: extractHeaders(request.headers),
+    headers: extractHeaders(request.headers, SENSITIVE_WEBHOOK_HEADERS),
     timestamp: Date.now(),
   });
 
@@ -166,9 +167,16 @@ function buildCorsHeaders(request: Request): Record<string, string> {
   return headers;
 }
 
-function extractHeaders(headers: Headers): Record<string, string> {
+function extractHeaders(
+  headers: Headers,
+  exclude: readonly string[] = [],
+): Record<string, string> {
+  const excludedHeaders = new Set(exclude.map((header) => header.toLowerCase()));
   const result: Record<string, string> = {};
   headers.forEach((value, key) => {
+    if (excludedHeaders.has(key.toLowerCase())) {
+      return;
+    }
     result[key] = value;
   });
   return result;

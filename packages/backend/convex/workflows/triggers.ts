@@ -1,5 +1,5 @@
 import type { Trigger } from "convex-helpers/server/triggers";
-import type { GenericMutationCtx } from "convex/server";
+import type { FunctionArgs, GenericMutationCtx } from "convex/server";
 import { internal } from "../_generated/api";
 import type { DataModel } from "../_generated/dataModel";
 import type { EventType } from "./types";
@@ -7,6 +7,9 @@ import { triggerSchema } from "../tables/workflows";
 import { resolveWorkflowMemberIdentity } from "./memberIdentity";
 
 type MutationCtx = GenericMutationCtx<DataModel>;
+type DispatchWorkflowBatchArgs = FunctionArgs<
+  typeof internal.workflows.dispatch.dispatchWorkflowBatch
+>;
 
 type EventName = EventType;
 
@@ -78,14 +81,7 @@ export function workflowEventTrigger<T extends "chats" | "sandboxes" | "todos">(
       )
       .collect();
 
-    const dispatches: {
-      workflowId: typeof enabledWorkflows[number]["_id"];
-      triggerPayload: string;
-      userId: string;
-      activeOrganizationId: string;
-      organizationRole: string;
-      memberId: string;
-    }[] = [];
+    const dispatches: DispatchWorkflowBatchArgs["dispatches"] = [];
 
     for (const workflow of enabledWorkflows) {
       let trigger: ReturnType<typeof triggerSchema.parse>;

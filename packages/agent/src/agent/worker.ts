@@ -46,7 +46,11 @@ import {
   extractMessageText,
   processMessagesForAgent,
 } from "./messages";
-import type { AgentArgs } from "./types";
+import {
+  workflowInitPayloadSchema,
+  type AgentArgs,
+  type ModeConfig,
+} from "./types";
 import {
   buildRetrievalMessage,
   deleteMessageVectors,
@@ -60,7 +64,6 @@ import {
 import { createWorkflowActionToolkit } from "../tools/workflow-actions";
 import { Daytona, type Sandbox } from "@daytonaio/sdk";
 import { ensureSandboxStarted, downloadFileUrlsInSandbox } from "../tools/utils/sandbox";
-import type { ModeConfig } from "./types";
 
 type CallableFunctionInstance = object;
 type CallableServiceMethodsMap = Record<string, (...args: unknown[]) => unknown>;
@@ -432,18 +435,39 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, AgentArgs> {
       return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401 });
     }
 
-    const { executionId, workflowId, triggerPayload } = await request.json() as {
-      executionId: string;
-      workflowId: string;
-      triggerPayload: string;
-    };
+    let executionId: Id<"workflowExecutions"> | null = null;
+    try {
+      const parsedRequestBody = workflowInitPayloadSchema.safeParse(await request.json());
+      if (!parsedRequestBody.success) {
+        return new Response(JSON.stringify({ error: "Invalid request body" }), { status: 400 });
+      }
 
-    await this._init({
-      tokenConfig,
-      workflowInit: { workflowId, executionId, triggerPayload },
-    });
+      const requestBody = parsedRequestBody.data;
+      executionId = requestBody.executionId as Id<"workflowExecutions">;
+      await this._init({
+        tokenConfig,
+        workflowInit: requestBody,
+      });
 
-    return this._onChatMessage(() => {});
+      return this._onChatMessage(() => {});
+    } catch (error) {
+      if (executionId && this.convexAdapter) {
+        await this.convexAdapter.mutation(
+          api.workflows.index.updateExecutionStatusExt,
+          {
+            executionId,
+            status: "failed",
+            error: error instanceof Error ? error.message : String(error),
+            completedAt: Date.now(),
+          },
+        ).catch(() => {});
+      }
+
+      return new Response(
+        JSON.stringify({ error: error instanceof Error ? error.message : "Internal Server Error" }),
+        { status: 500 },
+      );
+    }
   }
 
   private async _onChatMessage(
@@ -507,7 +531,7 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, AgentArgs> {
             status: "completed",
             agentOutput: result.text,
             completedAt: Date.now(),
-          } as never,
+          },
         );
 
         return new Response(JSON.stringify({ status: "completed" }), {
@@ -574,7 +598,7 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, AgentArgs> {
             status: "failed",
             error: error instanceof Error ? error.message : String(error),
             completedAt: Date.now(),
-          } as never,
+          },
         ).catch(() => {});
       }
       console.error("onChatMessage failed", error);

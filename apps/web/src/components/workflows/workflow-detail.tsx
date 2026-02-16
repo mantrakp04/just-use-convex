@@ -81,11 +81,13 @@ export function WorkflowDetail({ workflowId }: WorkflowDetailProps) {
         </div>
         <div className="flex items-center gap-2">
           <Button
-            variant="ghost"
-            size="icon"
+            variant="outline"
+            size="sm"
             onClick={() => setIsEditing(true)}
+            className="gap-1.5"
           >
             <Pencil className="size-4" />
+            Edit
           </Button>
           <Switch
             checked={workflow.enabled}

@@ -1,5 +1,14 @@
+import { z } from "zod";
 import type { TokenConfig } from "@just-use-convex/backend/convex/lib/convexAdapter";
 import type { Doc } from "@just-use-convex/backend/convex/_generated/dataModel";
+
+export const workflowInitPayloadSchema = z.object({
+  workflowId: z.string(),
+  executionId: z.string(),
+  triggerPayload: z.string(),
+});
+
+export type WorkflowInitPayload = z.infer<typeof workflowInitPayloadSchema>;
 
 export type AgentArgs = {
   model?: string;
@@ -7,11 +16,7 @@ export type AgentArgs = {
   inputModalities?: string[];
   tokenConfig?: TokenConfig;
   modeConfig?: ModeConfig;
-  workflowInit?: {
-    workflowId: string;
-    executionId: string;
-    triggerPayload: string;
-  };
+  workflowInit?: WorkflowInitPayload;
 };
 
 export interface ChatModeConfig {

@@ -142,6 +142,11 @@ export function WorkflowBuilder({
     );
 
     if (isEditMode && workflow) {
+      const patchedSandboxId =
+        workflow.sandboxId === (sandboxId ?? undefined)
+          ? undefined
+          : (sandboxId ?? undefined);
+
       await updateWorkflow({
         _id: workflow._id,
         patch: {
@@ -149,7 +154,7 @@ export function WorkflowBuilder({
           trigger,
           instructions: instructions.trim(),
           allowedActions,
-          sandboxId: sandboxId ?? undefined,
+          sandboxId: patchedSandboxId,
         },
       });
     } else {

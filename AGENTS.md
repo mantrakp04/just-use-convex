@@ -221,6 +221,7 @@ File-based TanStack Router:
 - do not shy away from refactoring bad patterns, be proactive
 - avoid defining new types; infer and derive from existing types/packages (use `Pick`/`Omit` and TS utility types)
 - keep shared/custom types centralized in `types.ts` files (avoid inline object type blocks in implementation files)
+- when adding runtime validation, define/export the schema in `types.ts` and infer the type from it; import both instead of local guards/schemas
 - if you change server-side code, always verify affected client-side usage (and vice versa)
 - keep codebase DRY
 - cleanup stale code when changing methods/approach
@@ -228,6 +229,16 @@ File-based TanStack Router:
 - always use convex ents for convex related stuff
 - whenever implementing something for convex, analyze adjacent and relevant files for similar pattern implementation
 - whenever working with external libraries always query context7 for their relevant docs
+
+### Refactoring Principles
+
+- **everything is a config** — behavior differences between modes (chat vs workflow, streaming vs non-streaming) should be driven by a discriminated union config, not separate code paths
+- **one init, one execution path** — all setup/resolution logic belongs in a single `_init` method; callers pass raw params, init resolves them into state. never duplicate adapter creation, doc fetching, or resource setup across handlers
+- **thin handlers, fat init** — HTTP/WS entry points should only parse the request and delegate. business logic (fetching docs, status updates, resolving IDs into full objects) lives in init or the shared execution method
+- **branch on config, don't fork methods** — when adding a new mode, add a branch in the existing flow (`if (isWorkflow) ...`), don't create a parallel method that duplicates 80% of the logic
+- **no non-serializable state in persisted storage** — class instances with methods (adapters, SDK clients) are kept as in-memory properties only; DO storage and `setState` only get plain data
+- **unify shared infra, extract the delta** — sandbox setup, daytona init, agent prep are shared across modes. only the mode-specific delta (workflow actions toolkit, execution status updates, chat title gen) gets branched
+- **derive types from existing fields** — use `Extract<ModeConfig, { mode: "chat" }>["chat"]` over redeclaring the type; keep the discriminated union as the single source of truth
 
 ## Background & Subagents
 
@@ -244,6 +255,23 @@ File-based TanStack Router:
 - post a concise end summary with:
   - validated + fixed comments
   - rejected comments with reason
+  - checks run and status
+
+## Refactor Flow
+
+- **scope first** — read the target file(s) and `Grep` all imports/usages across the codebase to understand blast radius before touching anything
+- **map dependencies** — catalog every consumer, re-export, and type reference; build a dependency graph (file + line) so nothing gets orphaned
+- **apply refactoring principles** — enforce the patterns from the Refactoring Principles section above (config-driven, one init, thin handlers, no forked methods, derive types)
+- **spawn parallel subagents** — one per independent file/module being refactored; block dependent files on their upstream refactor completing
+- **preserve public API** — unless explicitly asked to change it, keep all exported function signatures, prop interfaces, and hook return types identical; refactor internals only
+- **migrate consumers incrementally** — if the public API must change, update all consumers in the same pass; never leave a broken import
+- **delete dead code** — after moving/consolidating, `Grep` for any now-unused exports, types, helpers, and constants; remove them completely (no `// removed` comments, no `_deprecated` renames)
+- **centralize types** — pull any inline object types into the nearest `types.ts`; use `Pick`/`Omit`/`Extract` from existing definitions
+- **run checks after each logical unit** — `bun check-types` after each file group is done, not just at the end; catch regressions early
+- **post a concise end summary** with:
+  - files changed (moved, split, deleted)
+  - public API changes (if any)
+  - dead code removed
   - checks run and status
 
 ## Shadcn → Framer Motion Flow
