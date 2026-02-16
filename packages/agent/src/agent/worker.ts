@@ -62,6 +62,7 @@ import {
   createSandboxPtyFunctions,
 } from "../tools/sandbox";
 import { createWorkflowActionToolkit } from "../tools/workflow-actions";
+import { createWorkflowToolkit } from "../tools/workflows";
 import { Daytona, type Sandbox } from "@daytonaio/sdk";
 import { ensureSandboxStarted, downloadFileUrlsInSandbox } from "../tools/utils/sandbox";
 
@@ -181,7 +182,11 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, AgentArgs> {
     const modeConfig = this.modeConfig;
 
     const subagents: Agent[] = [];
-    const toolkitPromises: Promise<Toolkit>[] = [];
+    const toolkitPromises: Promise<Toolkit>[] = [
+      ...(modeConfig.mode === "workflow" && this.convexAdapter
+        ? [createWorkflowToolkit(modeConfig.workflow._id, this.convexAdapter)]
+        : []),
+    ];
     if (this.sandbox && this.daytona) {
       toolkitPromises.push(createDaytonaToolkit(this.daytona, this.sandbox));
     }

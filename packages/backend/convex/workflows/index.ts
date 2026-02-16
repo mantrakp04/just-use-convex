@@ -13,7 +13,21 @@ export const list = zQuery({
   },
 });
 
+export const listExt = zExternalQuery({
+  args: types.ListArgs,
+  handler: async (ctx, args): Promise<ReturnType<typeof functions.ListWorkflows>> => {
+    return await functions.ListWorkflows(ctx, args);
+  },
+});
+
 export const get = zQuery({
+  args: types.GetArgs,
+  handler: async (ctx, args): Promise<ReturnType<typeof functions.GetWorkflow>> => {
+    return await functions.GetWorkflow(ctx, args);
+  },
+});
+
+export const getExt = zExternalQuery({
   args: types.GetArgs,
   handler: async (ctx, args): Promise<ReturnType<typeof functions.GetWorkflow>> => {
     return await functions.GetWorkflow(ctx, args);
@@ -46,7 +60,21 @@ export const update = zMutation({
   },
 });
 
+export const updateExt = zExternalMutation({
+  args: types.UpdateArgs,
+  handler: async (ctx, args): Promise<ReturnType<typeof functions.UpdateWorkflow>> => {
+    return await functions.UpdateWorkflow(ctx, args);
+  },
+});
+
 export const deleteWorkflow = zMutation({
+  args: types.DeleteArgs,
+  handler: async (ctx, args): Promise<ReturnType<typeof functions.DeleteWorkflow>> => {
+    return await functions.DeleteWorkflow(ctx, args);
+  },
+});
+
+export const deleteWorkflowExt = zExternalMutation({
   args: types.DeleteArgs,
   handler: async (ctx, args): Promise<ReturnType<typeof functions.DeleteWorkflow>> => {
     return await functions.DeleteWorkflow(ctx, args);
@@ -71,7 +99,21 @@ export const listExecutions = zQuery({
   },
 });
 
+export const listExecutionsExt = zExternalQuery({
+  args: types.ListExecutionsArgs,
+  handler: async (ctx, args): Promise<ReturnType<typeof functions.ListExecutions>> => {
+    return await functions.ListExecutions(ctx, args);
+  },
+});
+
 export const getExecution = zQuery({
+  args: types.GetExecutionArgs,
+  handler: async (ctx, args): Promise<ReturnType<typeof functions.GetExecution>> => {
+    return await functions.GetExecution(ctx, args);
+  },
+});
+
+export const getExecutionExt = zExternalQuery({
   args: types.GetExecutionArgs,
   handler: async (ctx, args): Promise<ReturnType<typeof functions.GetExecution>> => {
     return await functions.GetExecution(ctx, args);
