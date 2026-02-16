@@ -5,6 +5,8 @@ import {
   triggerSchema,
   allowedActionSchema,
   eventSchema,
+  executionModeSchema,
+  inputModalitySchema,
 } from "../tables/workflows";
 import { sandboxesWithSystemFields } from "../tables/sandboxes";
 
@@ -14,6 +16,10 @@ export type AllowedAction = z.infer<typeof allowedActionSchema>;
 export type EventType = z.infer<typeof eventSchema>;
 /** Inferred from triggerSchema discriminant */
 export type TriggerType = z.infer<typeof triggerSchema>["type"];
+/** Inferred from executionModeSchema */
+export type ExecutionMode = z.infer<typeof executionModeSchema>;
+/** Inferred from inputModalitySchema */
+export type InputModality = z.infer<typeof inputModalitySchema>;
 import { workflowExecutionsWithSystemFields } from "../tables/workflowExecutions";
 import { paginationOptsValidator } from "convex/server";
 import { convexToZod } from "convex-helpers/server/zod4";
@@ -37,10 +43,12 @@ export const GetArgs = WorkflowWithSystemFields.pick({ _id: true });
 export const CreateArgs = z.object({
   data: z.object({
     name: z.string(),
+    executionMode: executionModeSchema.default("isolated"),
     trigger: triggerSchema,
     instructions: z.string(),
     allowedActions: z.array(allowedActionSchema),
     model: z.string().optional(),
+    inputModalities: z.array(inputModalitySchema).default(["text"]),
     sandboxId: sandboxesWithSystemFields._id.optional(),
   }),
 });
@@ -48,10 +56,12 @@ export const CreateArgs = z.object({
 export const UpdateArgs = WorkflowWithSystemFields.pick({ _id: true }).extend({
   patch: z.object({
     name: z.string(),
+    executionMode: executionModeSchema,
     trigger: triggerSchema,
     instructions: z.string(),
     allowedActions: z.array(allowedActionSchema),
     model: z.string().optional(),
+    inputModalities: z.array(inputModalitySchema),
     sandboxId: sandboxesWithSystemFields._id.nullable().optional(),
     enabled: z.boolean(),
   }).partial(),

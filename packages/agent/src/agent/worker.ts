@@ -69,6 +69,19 @@ import { ensureSandboxStarted, downloadFileUrlsInSandbox } from "../tools/utils/
 type CallableFunctionInstance = object;
 type CallableServiceMethodsMap = Record<string, (...args: unknown[]) => unknown>;
 type CallableServiceMethod = keyof CallableServiceMethodsMap;
+type InitOptions = { persistInitArgs?: boolean };
+type WorkerRuntimeSnapshot = {
+  state: AgentArgs | undefined;
+  convexAdapter: ConvexAdapter | null;
+  planAgent: PlanAgent | null;
+  chatDoc: Extract<ModeConfig, { mode: "chat" }>["chat"] | null;
+  modeConfig: ModeConfig | null;
+  daytona: Daytona | null;
+  sandbox: Sandbox | null;
+  callableFunctions: CallableFunctionInstance[];
+  didRegisterCallableFunctions: boolean;
+  executionId: Id<"workflowExecutions"> | null;
+};
 
 export class AgentWorker extends AIChatAgent<typeof worker.Env, AgentArgs> {
   private convexAdapter: ConvexAdapter | null = null;
@@ -83,8 +96,8 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, AgentArgs> {
   private sandbox: Sandbox | null = null;
   private executionId: Id<"workflowExecutions"> | null = null;
 
-  private async _init(args?: AgentArgs): Promise<void> {
-    if (args) {
+  private async _init(args?: AgentArgs, options?: InitOptions): Promise<void> {
+    if (args && (options?.persistInitArgs ?? true)) {
       await this.ctx.storage.put("initArgs", args);
     }
     const initArgs = (args ?? (await this.ctx.storage.get("initArgs"))) as AgentArgs | null;
@@ -120,9 +133,7 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, AgentArgs> {
       );
 
       this.modeConfig = { mode: "workflow", workflow, triggerPayload };
-      if (!currentState.model) {
-        this.setState({ ...currentState, model: workflow.model ?? agentDefaults.DEFAULT_MODEL } as AgentArgs);
-      }
+      this.setState(resolveWorkflowExecutionState(currentState, workflow));
     } else if (initArgs.modeConfig) {
       this.modeConfig = initArgs.modeConfig;
     }
@@ -151,9 +162,13 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, AgentArgs> {
       apiUrl: this.env.DAYTONA_API_URL ?? agentDefaults.DAYTONA_API_URL,
       target: this.env.DAYTONA_TARGET ?? agentDefaults.DAYTONA_TARGET,
     });
-    if (sandboxId && !this.sandbox) {
-      this.sandbox = await this.daytona.get(sandboxId);
+    if (sandboxId) {
+      if (!this.sandbox || this.sandbox.id !== sandboxId) {
+        this.sandbox = await this.daytona.get(sandboxId);
+      }
       await ensureSandboxStarted(this.sandbox);
+    } else {
+      this.sandbox = null;
     }
 
     this.callableFunctions = [
@@ -441,6 +456,7 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, AgentArgs> {
     }
 
     let executionId: Id<"workflowExecutions"> | null = null;
+    const runtimeSnapshot = this._snapshotRuntime();
     try {
       const parsedRequestBody = workflowInitPayloadSchema.safeParse(await request.json());
       if (!parsedRequestBody.success) {
@@ -452,7 +468,8 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, AgentArgs> {
       await this._init({
         tokenConfig,
         workflowInit: requestBody,
-      });
+      }, { persistInitArgs: false });
+      this.planAgent = null;
 
       return this._onChatMessage(() => {});
     } catch (error) {
@@ -472,6 +489,8 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, AgentArgs> {
         JSON.stringify({ error: error instanceof Error ? error.message : "Internal Server Error" }),
         { status: 500 },
       );
+    } finally {
+      this._restoreRuntime(runtimeSnapshot);
     }
   }
 
@@ -617,6 +636,56 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, AgentArgs> {
   override async onChatMessage(onFinish: StreamTextOnFinishCallback<ToolSet>, options?: OnChatMessageOptions): Promise<Response> {
     return await this._onChatMessage(onFinish, options);
   }
+
+  private _snapshotRuntime(): WorkerRuntimeSnapshot {
+    return {
+      state: this.state ? { ...this.state } : undefined,
+      convexAdapter: this.convexAdapter,
+      planAgent: this.planAgent,
+      chatDoc: this.chatDoc,
+      modeConfig: this.modeConfig,
+      daytona: this.daytona,
+      sandbox: this.sandbox,
+      callableFunctions: this.callableFunctions,
+      didRegisterCallableFunctions: this.didRegisterCallableFunctions,
+      executionId: this.executionId,
+    };
+  }
+
+  private _restoreRuntime(snapshot: WorkerRuntimeSnapshot): void {
+    if (snapshot.state) {
+      this.setState(snapshot.state);
+    }
+    this.convexAdapter = snapshot.convexAdapter;
+    this.planAgent = snapshot.planAgent;
+    this.chatDoc = snapshot.chatDoc;
+    this.modeConfig = snapshot.modeConfig;
+    this.daytona = snapshot.daytona;
+    this.sandbox = snapshot.sandbox;
+    this.callableFunctions = snapshot.callableFunctions;
+    this.didRegisterCallableFunctions = snapshot.didRegisterCallableFunctions;
+    this.executionId = snapshot.executionId;
+  }
+}
+
+function resolveWorkflowExecutionState(
+  currentState: AgentArgs,
+  workflow: Extract<ModeConfig, { mode: "workflow" }>["workflow"],
+): AgentArgs {
+  const fallbackModel = workflow.model ?? agentDefaults.DEFAULT_MODEL;
+  if (workflow.executionMode === "isolated") {
+    return {
+      ...currentState,
+      model: fallbackModel,
+      inputModalities: workflow.inputModalities,
+    };
+  }
+
+  return {
+    ...currentState,
+    model: currentState.model ?? fallbackModel,
+    inputModalities: currentState.inputModalities ?? workflow.inputModalities,
+  };
 }
 
 function parseTokenFromRequest(request: Request): TokenConfig | null {

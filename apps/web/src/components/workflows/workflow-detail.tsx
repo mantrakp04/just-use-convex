@@ -105,10 +105,6 @@ export function WorkflowDetail({ workflowId }: WorkflowDetailProps) {
         </div>
       </div>
 
-      {workflow.description && (
-        <p className="shrink-0 text-muted-foreground text-sm">{workflow.description}</p>
-      )}
-
       <div className="grid shrink-0 grid-cols-2 gap-4">
         <Card>
           <CardHeader className="py-3">
@@ -124,7 +120,7 @@ export function WorkflowDetail({ workflowId }: WorkflowDetailProps) {
                 {cronToHumanReadable(trigger.cron)}
               </span>
             )}
-{trigger.type === "webhook" && (
+            {trigger.type === "webhook" && (
               <Button variant="outline" size="sm" onClick={copyWebhookUrl} className="w-fit gap-1">
                 <Copy className="size-3" />
                 Copy URL
@@ -143,6 +139,17 @@ export function WorkflowDetail({ workflowId }: WorkflowDetailProps) {
                 {action}
               </Badge>
             ))}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="py-3">
+            <CardTitle className="text-sm">Execution</CardTitle>
+          </CardHeader>
+          <CardContent className="py-2 flex flex-col gap-1">
+            <Badge variant="secondary" className="w-fit">
+              {workflow.executionMode === "isolated" ? "Isolated" : "Latest Chat"}
+            </Badge>
           </CardContent>
         </Card>
 

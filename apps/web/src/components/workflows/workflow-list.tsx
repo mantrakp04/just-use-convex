@@ -2,7 +2,7 @@ import { useNavigate } from "@tanstack/react-router";
 import { useWorkflows, useWorkflowsList, type Workflow } from "@/hooks/use-workflows";
 import { cronToHumanReadable } from "@/store/workflows";
 import { Button } from "@/components/ui/button";
-import { Card, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Card, CardHeader, CardTitle } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { Plus, Trash2, Box } from "lucide-react";
@@ -100,11 +100,6 @@ function WorkflowCard({
       <CardHeader className="flex flex-row items-center justify-between py-3">
         <div className="flex flex-col gap-1 min-w-0">
           <CardTitle className="text-base">{workflow.name}</CardTitle>
-          {workflow.description && (
-            <CardDescription className="text-xs truncate">
-              {workflow.description}
-            </CardDescription>
-          )}
           <div className="flex items-center gap-2 mt-1">
             <Badge variant="outline" className="text-xs">
               {trigger.type}
@@ -121,6 +116,9 @@ function WorkflowCard({
             )}
             <Badge variant="secondary" className="text-xs">
               {workflow.allowedActions.length} action{workflow.allowedActions.length !== 1 ? "s" : ""}
+            </Badge>
+            <Badge variant="secondary" className="text-xs">
+              {workflow.executionMode === "isolated" ? "Isolated" : "Latest Chat"}
             </Badge>
             {workflow.sandbox && (
               <Badge variant="secondary" className="text-xs gap-1">

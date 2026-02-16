@@ -29,10 +29,12 @@ const triggerSchema = z.discriminatedUnion("type", [
 const workflowPatchSchema = z
   .object({
     name: z.string().optional(),
+    executionMode: z.enum(["isolated", "latestChat"]).optional(),
     trigger: triggerSchema.optional(),
     instructions: z.string().optional(),
     allowedActions: z.array(z.enum(["send_message", "http_request", "notify"])).optional(),
     model: z.string().optional(),
+    inputModalities: z.array(z.enum(["text", "image", "file"])).optional(),
     sandboxId: z.string().nullable().optional(),
     enabled: z.boolean().optional(),
   })

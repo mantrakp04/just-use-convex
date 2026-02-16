@@ -16,7 +16,7 @@ export const dispatchWorkflow = internalAction({
   args: dispatchWorkflowArgs,
   handler: async (ctx, args) => {
     // 1. Create execution record
-    const executionId = await ctx.runMutation(internal.workflows.index.createExecution, {
+    const { executionId, namespace } = await ctx.runMutation(internal.workflows.index.createExecution, {
       workflowId: args.workflowId,
       triggerPayload: args.triggerPayload,
       userId: args.userId,
@@ -27,11 +27,11 @@ export const dispatchWorkflow = internalAction({
     });
 
     // 2. POST to CF Worker to execute workflow
-    // URL format: /agents/{namespace}/{instanceName}/path
-    // namespace = kebab-cased DO binding name ("agent-worker")
-    // instanceName = unique per workflow execution
+    // URL format: /agents/{agentNamespace}/{instanceName}/path
+    // agentNamespace = kebab-cased DO binding name ("agent-worker")
+    // instanceName = workflow namespace (isolated workflow namespace or latest chat id)
     const agentUrl = env.AGENT_URL;
-    const doInstanceName = `workflow-${executionId}`;
+    const doInstanceName = namespace;
 
     try {
       const response = await fetch(`${agentUrl}/agents/agent-worker/${doInstanceName}/executeWorkflow`, {

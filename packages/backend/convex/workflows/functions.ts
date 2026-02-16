@@ -113,11 +113,13 @@ export async function CreateWorkflow(ctx: zMutationCtx, args: z.infer<typeof typ
 
   const workflow = await ctx.table("workflows").insert({
     name: args.data.name,
+    executionMode: args.data.executionMode,
     triggerType: trigger.type,
     trigger: JSON.stringify(trigger),
     instructions: args.data.instructions,
     allowedActions: args.data.allowedActions,
     model: args.data.model,
+    inputModalities: args.data.inputModalities,
     sandboxId: args.data.sandboxId,
     enabled: false,
     organizationId: ctx.identity.activeOrganizationId,
@@ -162,7 +164,10 @@ export async function UpdateWorkflow(ctx: zMutationCtx, args: z.infer<typeof typ
     }),
   });
 
-  await workflow.patch(patchData);
+  await workflow.patch({
+    ...patchData,
+    updatedAt: Date.now(),
+  });
   return workflow;
 }
 
@@ -275,7 +280,19 @@ export async function CreateExecution(ctx: zMutationCtx, args: z.infer<typeof ty
     triggerPayload: args.triggerPayload,
     startedAt: Date.now(),
   });
-  return execution;
+
+  const namespace = await resolveExecutionNamespace(
+    ctx,
+    workflow.executionMode,
+    workflow._id,
+    workflow.organizationId,
+    workflow.memberId,
+  );
+
+  return {
+    executionId: execution,
+    namespace,
+  };
 }
 
 export async function UpdateExecutionStatus(ctx: zMutationCtx, args: z.infer<typeof types.UpdateExecutionStatusArgs>) {
@@ -298,6 +315,56 @@ export async function UpdateExecutionStatus(ctx: zMutationCtx, args: z.infer<typ
 function generateWebhookSecret(): string {
   const bytes = crypto.getRandomValues(new Uint8Array(32));
   return Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+async function resolveExecutionNamespace(
+  ctx: zMutationCtx,
+  executionMode: z.infer<typeof types.Workflow.shape.executionMode>,
+  workflowId: Id<"workflows">,
+  organizationId: string,
+  memberId: string,
+): Promise<string> {
+  if (executionMode === "isolated") {
+    return getWorkflowExecutionNamespace(workflowId);
+  }
+
+  const latestChatId = await getLatestChatId(ctx, organizationId, memberId);
+  return latestChatId ?? getWorkflowExecutionNamespace(workflowId);
+}
+
+async function getLatestChatId(
+  ctx: zMutationCtx,
+  organizationId: string,
+  memberId: string,
+): Promise<Id<"chats"> | null> {
+  const paginationOpts = { numItems: 1, cursor: null };
+  const [latestUnpinned, latestPinned] = await Promise.all([
+    ctx.table("chats", "organizationId_memberId_isPinned", (q) => q
+      .eq("organizationId", organizationId)
+      .eq("memberId", memberId)
+      .eq("isPinned", false)
+    )
+      .order("desc")
+      .paginate(paginationOpts),
+    ctx.table("chats", "organizationId_memberId_isPinned", (q) => q
+      .eq("organizationId", organizationId)
+      .eq("memberId", memberId)
+      .eq("isPinned", true)
+    )
+      .order("desc")
+      .paginate(paginationOpts),
+  ]);
+
+  const unpinnedDoc = latestUnpinned.page[0]?.doc();
+  const pinnedDoc = latestPinned.page[0]?.doc();
+  if (!unpinnedDoc && !pinnedDoc) return null;
+  if (!unpinnedDoc) return pinnedDoc!._id;
+  if (!pinnedDoc) return unpinnedDoc._id;
+  return unpinnedDoc.updatedAt >= pinnedDoc.updatedAt ? unpinnedDoc._id : pinnedDoc._id;
+}
+
+function getWorkflowExecutionNamespace(workflowId: Id<"workflows">): string {
+  return `workflow-${workflowId}`;
 }
 
 const EXECUTION_DELETE_BATCH_SIZE = 100;
