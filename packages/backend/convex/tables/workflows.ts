@@ -13,6 +13,12 @@ export const eventSchema = z.enum([
   "on_todo_complete",
 ]);
 
+export const triggerTypeSchema = z.enum([
+  "webhook",
+  "schedule",
+  "event",
+]);
+
 export const triggerSchema = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("webhook"),
@@ -40,6 +46,7 @@ export const workflowsZodSchema = {
   name: z.string(),
   description: z.string().optional(),
   enabled: z.boolean(),
+  triggerType: triggerTypeSchema,
   trigger: z.string(), // JSON-serialized triggerSchema
   instructions: z.string(),
   allowedActions: z.array(allowedActionSchema),
@@ -63,7 +70,9 @@ export const workflowsWithSystemFields = {
 const workflowsTable = Workflows.table
   .index("organizationId_memberId", ["organizationId", "memberId", "updatedAt"])
   .index("organizationId_enabled", ["organizationId", "enabled"])
-  .index("enabled", ["enabled"]);
+  .index("organizationId_enabled_triggerType", ["organizationId", "enabled", "triggerType"])
+  .index("enabled", ["enabled"])
+  .index("enabled_triggerType", ["enabled", "triggerType"]);
 
 export const workflowsEnt = defineEntFromTable(workflowsTable)
   .edge("sandbox", { to: "sandboxes", field: "sandboxId", optional: true })

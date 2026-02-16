@@ -25,7 +25,7 @@ export function WorkflowList() {
   );
 
   return (
-    <div className="flex h-full min-h-0 flex-col gap-4">
+    <div className="flex h-full min-h-0 flex-col gap-4 w-full max-w-4xl mx-auto">
       <div className="flex shrink-0 items-center justify-between">
         <div>
           <h1 className="text-2xl font-semibold">Workflows</h1>
@@ -94,7 +94,7 @@ function WorkflowCard({
 
   return (
     <Card
-      className="cursor-pointer hover:bg-muted/50 transition-colors"
+      className="cursor-pointer hover:bg-muted/50 transition-colors border-border border"
       onClick={onClick}
     >
       <CardHeader className="flex flex-row items-center justify-between py-3">

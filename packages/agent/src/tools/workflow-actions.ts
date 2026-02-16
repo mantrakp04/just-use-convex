@@ -106,12 +106,14 @@ async function fetchWithSafeRedirects(
   let currentUrl = new URL(rawUrl);
   let method = (init.method ?? "GET").toUpperCase();
   let body = init.body;
+  let headers = init.headers;
 
   for (let redirectCount = 0; redirectCount <= 5; redirectCount++) {
     assertSafeHttpUrl(currentUrl.toString());
 
     const response = await fetch(currentUrl.toString(), {
       ...init,
+      headers,
       method,
       body,
       redirect: "manual",
@@ -130,7 +132,13 @@ async function fetchWithSafeRedirects(
       throw new Error("Redirect response missing location header.");
     }
 
-    currentUrl = new URL(location, currentUrl);
+    const nextUrl = new URL(location, currentUrl);
+
+    if (nextUrl.origin !== currentUrl.origin) {
+      headers = stripSensitiveHeaders(headers);
+    }
+
+    currentUrl = nextUrl;
 
     if (response.status === 303 || ((response.status === 301 || response.status === 302) && method !== "GET" && method !== "HEAD")) {
       method = "GET";
@@ -143,6 +151,14 @@ async function fetchWithSafeRedirects(
 
 function isRedirectStatus(status: number): boolean {
   return status === 301 || status === 302 || status === 303 || status === 307 || status === 308;
+}
+
+function stripSensitiveHeaders(headersInit: HeadersInit | undefined): Headers {
+  const headers = new Headers(headersInit ?? {});
+  headers.delete("authorization");
+  headers.delete("proxy-authorization");
+  headers.delete("cookie");
+  return headers;
 }
 
 function isPrivateIpv4(hostname: string): boolean {

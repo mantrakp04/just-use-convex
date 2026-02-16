@@ -1,7 +1,7 @@
 import { internalMutation } from "../_generated/server";
-import { components, internal } from "../_generated/api";
+import { internal } from "../_generated/api";
 import { triggerSchema } from "../tables/workflows";
-import { isMemberRole, type MemberRole } from "../shared/auth";
+import { resolveWorkflowMemberIdentity } from "./memberIdentity";
 
 export const tick = internalMutation({
   args: {},
@@ -9,10 +9,20 @@ export const tick = internalMutation({
     // Query all enabled schedule-type workflows
     const enabledWorkflows = await ctx.db
       .query("workflows")
-      .withIndex("enabled", (q) => q.eq("enabled", true))
+      .withIndex("enabled_triggerType", (q) =>
+        q.eq("enabled", true).eq("triggerType", "schedule")
+      )
       .collect();
 
     const now = Date.now();
+    const dispatches: {
+      workflowId: typeof enabledWorkflows[number]["_id"];
+      triggerPayload: string;
+      userId: string;
+      activeOrganizationId: string;
+      organizationRole: string;
+      memberId: string;
+    }[] = [];
 
     for (const workflow of enabledWorkflows) {
       let trigger: ReturnType<typeof triggerSchema.parse>;
@@ -33,20 +43,26 @@ export const tick = internalMutation({
         scheduledAt: now,
       });
 
-      const organizationRole = await resolveWorkflowOrganizationRole(
+      const memberIdentity = await resolveWorkflowMemberIdentity(
         ctx,
         workflow.organizationId,
         workflow.memberId,
       );
-      if (!organizationRole) continue;
+      if (!memberIdentity) continue;
 
-      await ctx.scheduler.runAfter(0, internal.workflows.dispatch.dispatchWorkflow, {
+      dispatches.push({
         workflowId: workflow._id,
         triggerPayload,
-        userId: workflow.memberId,
+        userId: memberIdentity.userId,
         activeOrganizationId: workflow.organizationId,
-        organizationRole,
+        organizationRole: memberIdentity.role,
         memberId: workflow.memberId,
+      });
+    }
+
+    if (dispatches.length > 0) {
+      await ctx.scheduler.runAfter(0, internal.workflows.dispatch.dispatchWorkflowBatch, {
+        dispatches,
       });
     }
   },
@@ -134,26 +150,4 @@ function matchesCronField(field: string, value: number, min: number, max: number
   }
 
   return false;
-}
-
-async function resolveWorkflowOrganizationRole(
-  ctx: { runQuery: unknown },
-  organizationId: string,
-  memberId: string,
-): Promise<MemberRole | null> {
-  const runQuery = ctx.runQuery as (query: unknown, args: unknown) => Promise<unknown>;
-  const member = await runQuery(components.betterAuth.adapter.findOne, {
-    model: "member",
-    where: [
-      { field: "_id", operator: "eq", value: memberId },
-      { field: "organizationId", operator: "eq", value: organizationId },
-    ],
-    select: ["role"],
-  });
-
-  const role = (member as { role?: unknown } | null)?.role;
-  if (typeof role !== "string" || !isMemberRole(role)) {
-    return null;
-  }
-  return role;
 }

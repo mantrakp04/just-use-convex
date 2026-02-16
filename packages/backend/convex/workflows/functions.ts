@@ -1,5 +1,6 @@
 import type { z } from "zod";
 import type { zMutationCtx, zQueryCtx } from "../functions";
+import type { Id } from "../_generated/dataModel";
 import * as types from "./types";
 import { withInvalidCursorRetry } from "../shared/pagination";
 import {
@@ -112,6 +113,7 @@ export async function CreateWorkflow(ctx: zMutationCtx, args: z.infer<typeof typ
   const workflow = await ctx.table("workflows").insert({
     name: args.data.name,
     description: args.data.description,
+    triggerType: trigger.type,
     trigger: JSON.stringify(trigger),
     instructions: args.data.instructions,
     allowedActions: args.data.allowedActions,
@@ -159,6 +161,7 @@ export async function UpdateWorkflow(ctx: zMutationCtx, args: z.infer<typeof typ
     if (value !== undefined) {
       if (key === "trigger") {
         patchData[key] = JSON.stringify(value);
+        patchData.triggerType = (value as z.infer<typeof types.CreateArgs>["data"]["trigger"]).type;
       } else {
         patchData[key] = value;
       }
@@ -186,11 +189,7 @@ export async function DeleteWorkflow(ctx: zMutationCtx, args: z.infer<typeof typ
     "You are not authorized to delete this workflow"
   );
 
-  // Cascade delete executions
-  const executions = await workflow.edge("executions");
-  for (const execution of executions) {
-    await ctx.table("workflowExecutions").getX(execution._id).then((e) => e.delete());
-  }
+  await deleteWorkflowExecutionsInBatches(ctx, workflow._id);
 
   await workflow.delete();
   return true;
@@ -305,4 +304,38 @@ export async function UpdateExecutionStatus(ctx: zMutationCtx, args: z.infer<typ
 function generateWebhookSecret(): string {
   const bytes = crypto.getRandomValues(new Uint8Array(32));
   return Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+const EXECUTION_DELETE_BATCH_SIZE = 100;
+const MAX_EXECUTIONS_DELETE_PER_MUTATION = 2000;
+
+async function deleteWorkflowExecutionsInBatches(
+  ctx: zMutationCtx,
+  workflowId: Id<"workflows">,
+): Promise<void> {
+  let cursor: string | null = null;
+  let deletedCount = 0;
+
+  while (true) {
+    const page = await ctx.db
+      .query("workflowExecutions")
+      .withIndex("workflowId_startedAt", (q) => q.eq("workflowId", workflowId))
+      .paginate({
+        numItems: EXECUTION_DELETE_BATCH_SIZE,
+        cursor,
+      });
+
+    for (const execution of page.page) {
+      await ctx.db.delete(execution._id);
+      deletedCount += 1;
+      if (deletedCount > MAX_EXECUTIONS_DELETE_PER_MUTATION) {
+        throw new Error("Too many workflow executions to delete in one operation");
+      }
+    }
+
+    if (page.isDone) {
+      return;
+    }
+    cursor = page.continueCursor;
+  }
 }

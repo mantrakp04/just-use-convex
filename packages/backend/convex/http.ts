@@ -3,10 +3,10 @@ import type { Id } from "./_generated/dataModel";
 
 import { authComponent, createAuth } from "./auth";
 import { httpAction } from "./_generated/server";
-import { components, internal } from "./_generated/api";
+import { internal } from "./_generated/api";
 import { env } from "@just-use-convex/env/backend";
 import { triggerSchema } from "./tables/workflows";
-import { isMemberRole, type MemberRole } from "./shared/auth";
+import { resolveWorkflowMemberIdentity } from "./workflows/memberIdentity";
 
 const http = httpRouter();
 
@@ -96,12 +96,12 @@ const handleWorkflowWebhook = httpAction(async (ctx, request) => {
     timestamp: Date.now(),
   });
 
-  const organizationRole = await resolveWorkflowOrganizationRole(
+  const memberIdentity = await resolveWorkflowMemberIdentity(
     ctx,
     workflow.organizationId,
     workflow.memberId,
   );
-  if (!organizationRole) {
+  if (!memberIdentity) {
     return new Response(JSON.stringify({ error: "Workflow member role not found" }), {
       status: 403,
       headers: { "Content-Type": "application/json", ...buildCorsHeaders(request) },
@@ -112,9 +112,9 @@ const handleWorkflowWebhook = httpAction(async (ctx, request) => {
   await ctx.scheduler.runAfter(0, internal.workflows.dispatch.dispatchWorkflow, {
     workflowId: workflow._id,
     triggerPayload,
-    userId: workflow.memberId,
+    userId: memberIdentity.userId,
     activeOrganizationId: workflow.organizationId,
-    organizationRole,
+    organizationRole: memberIdentity.role,
     memberId: workflow.memberId,
   });
 
@@ -183,34 +183,14 @@ function parseJsonSafely(value: string): unknown | null {
 }
 
 function timingSafeEqual(a: string, b: string): boolean {
-  if (a.length !== b.length) return false;
-
+  const maxLen = Math.max(a.length, b.length);
+  const paddedA = a.padEnd(maxLen, "\0");
+  const paddedB = b.padEnd(maxLen, "\0");
   let mismatch = 0;
-  for (let i = 0; i < a.length; i++) {
-    mismatch |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  for (let i = 0; i < maxLen; i++) {
+    mismatch |= paddedA.charCodeAt(i) ^ paddedB.charCodeAt(i);
   }
 
+  mismatch |= a.length ^ b.length;
   return mismatch === 0;
-}
-
-async function resolveWorkflowOrganizationRole(
-  ctx: { runQuery: unknown },
-  organizationId: string,
-  memberId: string,
-): Promise<MemberRole | null> {
-  const runQuery = ctx.runQuery as (query: unknown, args: unknown) => Promise<unknown>;
-  const member = await runQuery(components.betterAuth.adapter.findOne, {
-    model: "member",
-    where: [
-      { field: "_id", operator: "eq", value: memberId },
-      { field: "organizationId", operator: "eq", value: organizationId },
-    ],
-    select: ["role"],
-  });
-
-  const role = (member as { role?: unknown } | null)?.role;
-  if (typeof role !== "string" || !isMemberRole(role)) {
-    return null;
-  }
-  return role;
 }

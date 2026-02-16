@@ -1,10 +1,10 @@
 import type { Trigger } from "convex-helpers/server/triggers";
 import type { GenericMutationCtx } from "convex/server";
-import { components, internal } from "../_generated/api";
+import { internal } from "../_generated/api";
 import type { DataModel } from "../_generated/dataModel";
 import type { EventType } from "./types";
 import { triggerSchema } from "../tables/workflows";
-import { isMemberRole, type MemberRole } from "../shared/auth";
+import { resolveWorkflowMemberIdentity } from "./memberIdentity";
 
 type MutationCtx = GenericMutationCtx<DataModel>;
 
@@ -50,7 +50,11 @@ export function workflowEventTrigger<T extends "chats" | "sandboxes" | "todos">(
 
     // Special case: todo completion
     if (tableName === "todos") {
-      const completeEvent = getTodoCompleteEvent(change as never);
+      const completeEvent = getTodoCompleteEvent({
+        operation: change.operation,
+        oldDoc: asRecord(change.oldDoc),
+        newDoc: asRecord(change.newDoc),
+      });
       if (completeEvent) events.push(completeEvent);
     }
 
@@ -58,21 +62,30 @@ export function workflowEventTrigger<T extends "chats" | "sandboxes" | "todos">(
 
     // Get the doc for building trigger payload
     const doc = change.operation === "delete"
-      ? change.oldDoc
-      : change.newDoc;
+      ? asRecord(change.oldDoc)
+      : asRecord(change.newDoc);
 
     if (!doc) return;
 
-    const organizationId = (doc as Record<string, unknown>).organizationId as string | undefined;
+    const organizationId = doc.organizationId as string | undefined;
     if (!organizationId) return;
 
     // Query enabled workflows in this org with matching event triggers
     const enabledWorkflows = await ctx.db
       .query("workflows")
-      .withIndex("organizationId_enabled", (q) =>
-        q.eq("organizationId", organizationId).eq("enabled", true)
+      .withIndex("organizationId_enabled_triggerType", (q) =>
+        q.eq("organizationId", organizationId).eq("enabled", true).eq("triggerType", "event")
       )
       .collect();
+
+    const dispatches: {
+      workflowId: typeof enabledWorkflows[number]["_id"];
+      triggerPayload: string;
+      userId: string;
+      activeOrganizationId: string;
+      organizationRole: string;
+      memberId: string;
+    }[] = [];
 
     for (const workflow of enabledWorkflows) {
       let trigger: ReturnType<typeof triggerSchema.parse>;
@@ -84,12 +97,12 @@ export function workflowEventTrigger<T extends "chats" | "sandboxes" | "todos">(
 
       if (trigger.type !== "event") continue;
 
-      const organizationRole = await resolveWorkflowOrganizationRole(
+      const memberIdentity = await resolveWorkflowMemberIdentity(
         ctx,
         workflow.organizationId,
         workflow.memberId,
       );
-      if (!organizationRole) continue;
+      if (!memberIdentity) continue;
 
       for (const event of events) {
         if (trigger.event === event) {
@@ -102,38 +115,29 @@ export function workflowEventTrigger<T extends "chats" | "sandboxes" | "todos">(
             timestamp: Date.now(),
           });
 
-          await ctx.scheduler.runAfter(0, internal.workflows.dispatch.dispatchWorkflow, {
+          dispatches.push({
             workflowId: workflow._id,
             triggerPayload,
-            userId: workflow.memberId, // use workflow owner's identity
+            userId: memberIdentity.userId,
             activeOrganizationId: workflow.organizationId,
-            organizationRole,
+            organizationRole: memberIdentity.role,
             memberId: workflow.memberId,
           });
         }
       }
     }
+
+    if (dispatches.length > 0) {
+      await ctx.scheduler.runAfter(0, internal.workflows.dispatch.dispatchWorkflowBatch, {
+        dispatches,
+      });
+    }
   };
 }
 
-async function resolveWorkflowOrganizationRole(
-  ctx: { runQuery: unknown },
-  organizationId: string,
-  memberId: string,
-): Promise<MemberRole | null> {
-  const runQuery = ctx.runQuery as (query: unknown, args: unknown) => Promise<unknown>;
-  const member = await runQuery(components.betterAuth.adapter.findOne, {
-    model: "member",
-    where: [
-      { field: "_id", operator: "eq", value: memberId },
-      { field: "organizationId", operator: "eq", value: organizationId },
-    ],
-    select: ["role"],
-  });
-
-  const role = (member as { role?: unknown } | null)?.role;
-  if (typeof role !== "string" || !isMemberRole(role)) {
-    return null;
+function asRecord(value: unknown): Record<string, unknown> | undefined {
+  if (!value || typeof value !== "object") {
+    return undefined;
   }
-  return role;
+  return value as Record<string, unknown>;
 }

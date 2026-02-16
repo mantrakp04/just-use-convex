@@ -9,7 +9,7 @@ export type ScheduleMode = "every" | "at" | "cron";
 export type IntervalUnit = "minutes" | "hours" | "days";
 
 export const ALL_ACTIONS: { value: AllowedAction; label: string; description: string }[] = [
-  { value: "send_message", label: "Update Chat Title", description: "Rename a chat thread" },
+  { value: "send_message", label: "Send Message", description: "Send a workflow output message" },
   { value: "http_request", label: "HTTP Request", description: "Make an external HTTP request" },
   { value: "notify", label: "Notify", description: "Send a notification" },
 ];
@@ -35,8 +35,11 @@ export function intervalToCron(amount: number, unit: IntervalUnit, startFrom?: s
   const m = startMin ?? 0;
 
   switch (unit) {
-    case "minutes":
-      return startFrom ? `${m}-59/${amount} ${h} * * *` : `*/${amount} * * * *`;
+    case "minutes": {
+      if (!startFrom) return `*/${amount} * * * *`;
+      if (60 % amount === 0) return `${m}-59/${amount} * * * *`;
+      return `*/${amount} * * * *`;
+    }
     case "hours":
       return startFrom ? `${m} ${h}-23/${amount} * * *` : `0 */${amount} * * *`;
     case "days":
@@ -82,9 +85,12 @@ export function cronToHumanReadable(cron: string): string {
 
   // M-H/N H * * * — every N minutes starting at H:M
   const minRangeMatch = min.match(/^(\d+)-59\/(\d+)$/);
-  if (minRangeMatch && hour !== "*") {
+  if (minRangeMatch) {
     const startMin = minRangeMatch[1];
     const n = minRangeMatch[2];
+    if (hour === "*") {
+      return `Every ${n} min at :${startMin.padStart(2, "0")}`;
+    }
     const h = hour.padStart(2, "0");
     return `Every ${n} min from ${h}:${startMin}`;
   }

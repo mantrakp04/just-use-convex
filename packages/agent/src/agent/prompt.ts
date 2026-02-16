@@ -13,7 +13,7 @@ ${chat.sandbox ? createSandboxContextMessage(chat.sandbox) : ""}
 
 export const WORKFLOW_SYSTEM_PROMPT = (workflow: Doc<"workflows"> & { sandbox?: Doc<"sandboxes"> | null }, triggerPayload: string) => `${CORE_SYSTEM_PROMPT}
 
-${createSandboxContextMessage(workflow.sandbox)}
+${workflow.sandbox ? createSandboxContextMessage(workflow.sandbox) : ""}
 
 ${buildWorkflowSystemPrompt(workflow, triggerPayload)}
 `;

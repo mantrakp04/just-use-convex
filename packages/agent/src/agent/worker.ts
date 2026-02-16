@@ -27,6 +27,7 @@ import {
   ConvexAdapter,
   createConvexAdapter,
   parseTokenFromUrl,
+  type TokenConfig,
 } from "@just-use-convex/backend/convex/lib/convexAdapter";
 import { env as agentDefaults } from "@just-use-convex/env/agent";
 import type { FunctionReturnType } from "convex/server";
@@ -257,10 +258,6 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, AgentArgs> {
       }),
     ]);
 
-    for (const subagent of subagents) {
-      agent.addSubAgent(subagent);
-    }
-
     this.planAgent = agent;
     await this._patchAgent();
 
@@ -420,9 +417,10 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, AgentArgs> {
 
   private async _handleExecuteWorkflow(request: Request): Promise<Response> {
     let executionId: Id<"workflowExecutions"> | null = null;
+    let adapter: ConvexAdapter | null = null;
+    let tokenConfig: TokenConfig | null = null;
     try {
-      const url = new URL(request.url);
-      const tokenConfig = parseTokenFromUrl(url);
+      tokenConfig = parseTokenFromRequest(request);
       if (!tokenConfig) {
         return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401 });
       }
@@ -434,7 +432,7 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, AgentArgs> {
       };
       executionId = body.executionId as Id<"workflowExecutions">;
 
-      const adapter = await createConvexAdapter(this.env.CONVEX_URL, tokenConfig);
+      adapter = await createConvexAdapter(this.env.CONVEX_URL, tokenConfig);
 
       const workflow = await adapter.query(
         api.workflows.index.getForExecutionExt,
@@ -488,19 +486,21 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, AgentArgs> {
     } catch (error) {
       console.error("executeWorkflow failed", error);
       try {
-        const url = new URL(request.url);
-        const tokenConfig = parseTokenFromUrl(url);
-        if (tokenConfig && executionId) {
-          const adapter = await createConvexAdapter(this.env.CONVEX_URL, tokenConfig);
-          await adapter.mutation(
-            api.workflows.index.updateExecutionStatusExt,
-            {
-              executionId,
-              status: "failed",
-              error: error instanceof Error ? error.message : String(error),
-              completedAt: Date.now(),
-            } as never,
-          );
+        if (executionId) {
+          if (!adapter && tokenConfig) {
+            adapter = await createConvexAdapter(this.env.CONVEX_URL, tokenConfig);
+          }
+          if (adapter) {
+            await adapter.mutation(
+              api.workflows.index.updateExecutionStatusExt,
+              {
+                executionId,
+                status: "failed",
+                error: error instanceof Error ? error.message : String(error),
+                completedAt: Date.now(),
+              } as never,
+            );
+          }
         }
       } catch {
         // Best effort
@@ -613,4 +613,41 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, AgentArgs> {
   override async onChatMessage(onFinish: StreamTextOnFinishCallback<ToolSet>, options?: OnChatMessageOptions): Promise<Response> {
     return await this._onChatMessage(onFinish, options);
   }
+}
+
+function parseTokenFromRequest(request: Request): TokenConfig | null {
+  const url = new URL(request.url);
+  const tokenConfig = parseTokenFromUrl(url);
+  if (tokenConfig) {
+    return tokenConfig;
+  }
+
+  const authorization = request.headers.get("authorization");
+  if (!authorization?.toLowerCase().startsWith("bearer ")) {
+    return null;
+  }
+  const externalToken = authorization.slice(7).trim();
+  if (!externalToken) {
+    return null;
+  }
+
+  const memberId = request.headers.get("x-member-id");
+  const userId = request.headers.get("x-user-id");
+  if (memberId) {
+    return {
+      type: "ext",
+      externalToken,
+      identifier: { type: "memberId", value: memberId },
+    };
+  }
+
+  if (userId) {
+    return {
+      type: "ext",
+      externalToken,
+      identifier: { type: "userId", value: userId },
+    };
+  }
+
+  return null;
 }

@@ -6,12 +6,14 @@ import { v } from "convex/values";
 import { env } from "@just-use-convex/env/backend";
 import { baseIdentity } from "../functions";
 
+const dispatchWorkflowArgs = {
+  workflowId: v.id("workflows"),
+  triggerPayload: v.optional(v.string()),
+  ...baseIdentity.fields,
+};
+
 export const dispatchWorkflow = internalAction({
-  args: {
-    workflowId: v.id("workflows"),
-    triggerPayload: v.optional(v.string()),
-    ...baseIdentity.fields,
-  },
+  args: dispatchWorkflowArgs,
   handler: async (ctx, args) => {
     // 1. Create execution record
     const executionId = await ctx.runMutation(internal.workflows.index.createExecution, {
@@ -32,18 +34,19 @@ export const dispatchWorkflow = internalAction({
     const doInstanceName = `workflow-${executionId}`;
 
     try {
-      const response = await fetch(
-        `${agentUrl}/agents/agent-worker/${doInstanceName}/executeWorkflow?token=${env.EXTERNAL_TOKEN}&tokenType=ext&memberId=${args.memberId}`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            executionId,
-            workflowId: args.workflowId,
-            triggerPayload: args.triggerPayload ?? "{}",
-          }),
-        }
-      );
+      const response = await fetch(`${agentUrl}/agents/agent-worker/${doInstanceName}/executeWorkflow`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${env.EXTERNAL_TOKEN}`,
+          "X-Member-Id": args.memberId,
+        },
+        body: JSON.stringify({
+          executionId,
+          workflowId: args.workflowId,
+          triggerPayload: args.triggerPayload ?? "{}",
+        }),
+      });
 
       if (!response.ok) {
         const errorText = await response.text();
@@ -58,6 +61,17 @@ export const dispatchWorkflow = internalAction({
         executionId,
         error: `Dispatch error: ${message}`,
       });
+    }
+  },
+});
+
+export const dispatchWorkflowBatch = internalAction({
+  args: {
+    dispatches: v.array(v.object(dispatchWorkflowArgs)),
+  },
+  handler: async (ctx, args) => {
+    for (const dispatchArgs of args.dispatches) {
+      await ctx.runAction(internal.workflows.dispatch.dispatchWorkflow, dispatchArgs);
     }
   },
 });

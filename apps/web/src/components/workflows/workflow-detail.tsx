@@ -1,5 +1,6 @@
 import { useNavigate } from "@tanstack/react-router";
 import type { Id } from "@just-use-convex/backend/convex/_generated/dataModel";
+import { env } from "@just-use-convex/env/web";
 import { useWorkflow, useWorkflows } from "@/hooks/use-workflows";
 import { cronToHumanReadable } from "@/store/workflows";
 import { Button } from "@/components/ui/button";
@@ -21,9 +22,9 @@ export function WorkflowDetail({ workflowId }: WorkflowDetailProps) {
 
   if (isLoading) {
     return (
-      <div className="flex h-full min-h-0 flex-col gap-4">
-        <div className="h-8 w-48 shrink-0 bg-muted animate-pulse rounded" />
-        <div className="min-h-0 flex-1 bg-muted animate-pulse rounded-xl" />
+      <div className="flex h-full min-h-0 flex-col gap-4 w-full max-w-4xl mx-auto">
+        <div className="h-8 w-48 shrink-0 bg-muted animate-pulse rounded border-border border" />
+        <div className="min-h-0 flex-1 bg-muted animate-pulse rounded-xl border-border border" />
       </div>
     );
   }
@@ -41,14 +42,19 @@ export function WorkflowDetail({ workflowId }: WorkflowDetailProps) {
 
   const copyWebhookUrl = () => {
     if (trigger.type === "webhook") {
-      const url = `${window.location.origin}/api/webhooks/workflows?id=${workflowId}`;
+      const convexUrl = env.VITE_CONVEX_URL?.replace(/\/$/, "");
+      if (!convexUrl) {
+        toast.error("Convex URL is not configured");
+        return;
+      }
+      const url = `${convexUrl}/webhooks/workflows?id=${workflowId}`;
       navigator.clipboard.writeText(url);
       toast.success("Webhook URL copied");
     }
   };
 
   return (
-    <div className="flex h-full min-h-0 flex-col gap-4">
+    <div className="flex h-full min-h-0 flex-col gap-4 w-full max-w-4xl mx-auto">
       <div className="flex shrink-0 items-center justify-between">
         <div className="flex items-center gap-2">
           <Button variant="ghost" size="icon" onClick={() => navigate({ to: "/workflows" })}>
