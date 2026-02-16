@@ -1,14 +1,9 @@
 import { z } from "zod";
+import type { PlanAgent } from "@voltagent/core";
+import type { Daytona, Sandbox } from "@daytonaio/sdk";
+import type { Doc, Id } from "@just-use-convex/backend/convex/_generated/dataModel";
+import type { ConvexAdapter } from "@just-use-convex/backend/convex/lib/convexAdapter";
 import type { TokenConfig } from "@just-use-convex/backend/convex/lib/convexAdapter";
-import type { Doc } from "@just-use-convex/backend/convex/_generated/dataModel";
-
-export const workflowInitPayloadSchema = z.object({
-  workflowId: z.string(),
-  executionId: z.string(),
-  triggerPayload: z.string(),
-});
-
-export type WorkflowInitPayload = z.infer<typeof workflowInitPayloadSchema>;
 
 export type AgentArgs = {
   model?: string;
@@ -16,18 +11,45 @@ export type AgentArgs = {
   inputModalities?: string[];
   tokenConfig?: TokenConfig;
   modeConfig?: ModeConfig;
-  workflowInit?: WorkflowInitPayload;
 };
 
 export interface ChatModeConfig {
   mode: "chat";
-  chat: Doc<"chats"> & { sandbox?: Doc<"sandboxes"> | null };
+  chat: Id<"chats">;
 }
 
 export interface WorkflowModeConfig {
   mode: "workflow";
-  workflow: Doc<"workflows"> & { sandbox?: Doc<"sandboxes"> | null };
+  workflow: Id<"workflows">;
+  executionId: Id<"workflowExecutions">;
   triggerPayload: string;
 }
 
 export type ModeConfig = ChatModeConfig | WorkflowModeConfig;
+
+export type ChatRuntimeDoc = Doc<"chats"> & { sandbox?: Doc<"sandboxes"> | null };
+export type WorkflowRuntimeDoc = Doc<"workflows"> & { sandbox?: Doc<"sandboxes"> | null };
+
+export const executeWorkflowRequestSchema = z.object({
+  workflow: z.string(),
+  executionId: z.string(),
+  triggerPayload: z.string(),
+});
+
+export type ExecuteWorkflowRequest = z.infer<typeof executeWorkflowRequestSchema>;
+
+export type CallableFunctionInstance = object;
+export type CallableServiceMethodsMap = Record<string, (...args: unknown[]) => unknown>;
+export type CallableServiceMethod = keyof CallableServiceMethodsMap;
+export type WorkerRuntimeSnapshot = {
+  state: AgentArgs | undefined;
+  convexAdapter: ConvexAdapter | null;
+  planAgent: PlanAgent | null;
+  chatDoc: ChatRuntimeDoc | null;
+  workflowDoc: WorkflowRuntimeDoc | null;
+  modeConfig: ModeConfig | null;
+  daytona: Daytona | null;
+  sandbox: Sandbox | null;
+  callableFunctions: CallableFunctionInstance[];
+  didRegisterCallableFunctions: boolean;
+};

@@ -10,46 +10,37 @@ import {
   type ToolSet,
   type UIMessage,
 } from "ai";
-import {
-  Agent,
-  AgentRegistry,
-  PlanAgent,
-  createPlanningToolkit,
-  createVoltAgentObservability,
-  createVoltOpsClient,
-  setWaitUntil,
-  type Toolkit,
-} from "@voltagent/core";
+import { PlanAgent } from "@voltagent/core";
 import type { worker } from "../../alchemy.run";
 import { api } from "@just-use-convex/backend/convex/_generated/api";
 import type { Id } from "@just-use-convex/backend/convex/_generated/dataModel";
 import {
   ConvexAdapter,
   createConvexAdapter,
-  parseTokenFromUrl,
-  type TokenConfig,
 } from "@just-use-convex/backend/convex/lib/convexAdapter";
 import { env as agentDefaults } from "@just-use-convex/env/agent";
 import { createAiClient } from "./client";
-import { CHAT_SYSTEM_PROMPT, WORKFLOW_SYSTEM_PROMPT, TASK_PROMPT } from "./prompt";
-import { createAskUserToolkit } from "../tools/ask-user";
-import { createWebSearchToolkit } from "../tools/websearch";
 import { parseStreamToUI } from "../utils/fullStreamParser";
 import {
   BackgroundTaskStore,
   TruncatedOutputStore,
   patchToolWithBackgroundSupport,
 } from "../tools/utils/wrapper";
-import { createBackgroundTaskToolkit } from "../tools/utils/wrapper/toolkit";
 import { generateTitle } from "./chat-meta";
 import {
   extractMessageText,
   processMessagesForAgent,
 } from "./messages";
 import {
-  workflowInitPayloadSchema,
+  executeWorkflowRequestSchema,
   type AgentArgs,
+  type ChatRuntimeDoc,
+  type CallableFunctionInstance,
+  type CallableServiceMethod,
+  type CallableServiceMethodsMap,
   type ModeConfig,
+  type WorkflowRuntimeDoc,
+  type WorkerRuntimeSnapshot,
 } from "./types";
 import {
   buildRetrievalMessage,
@@ -57,44 +48,33 @@ import {
   indexMessagesInVectorStore,
 } from "./vectorize";
 import {
-  createDaytonaToolkit,
   createSandboxFsFunctions,
   createSandboxPtyFunctions,
 } from "../tools/sandbox";
-import { createWorkflowActionToolkit } from "../tools/workflow-actions";
-import { createWorkflowToolkit } from "../tools/workflows";
 import { Daytona, type Sandbox } from "@daytonaio/sdk";
 import { ensureSandboxStarted, downloadFileUrlsInSandbox } from "../tools/utils/sandbox";
+import {
+  buildInitArgsFromUrl,
+  buildWorkflowExecutionMessages,
+  parseTokenFromRequest,
+  resolveWorkflowExecutionState,
+} from "./worker-helpers";
+import { createWorkerPlanAgent } from "./worker-plan-agent";
 
-type CallableFunctionInstance = object;
-type CallableServiceMethodsMap = Record<string, (...args: unknown[]) => unknown>;
-type CallableServiceMethod = keyof CallableServiceMethodsMap;
 type InitOptions = { persistInitArgs?: boolean };
-type WorkerRuntimeSnapshot = {
-  state: AgentArgs | undefined;
-  convexAdapter: ConvexAdapter | null;
-  planAgent: PlanAgent | null;
-  chatDoc: Extract<ModeConfig, { mode: "chat" }>["chat"] | null;
-  modeConfig: ModeConfig | null;
-  daytona: Daytona | null;
-  sandbox: Sandbox | null;
-  callableFunctions: CallableFunctionInstance[];
-  didRegisterCallableFunctions: boolean;
-  executionId: Id<"workflowExecutions"> | null;
-};
 
 export class AgentWorker extends AIChatAgent<typeof worker.Env, AgentArgs> {
   private convexAdapter: ConvexAdapter | null = null;
   private planAgent: PlanAgent | null = null;
   private backgroundTaskStore = new BackgroundTaskStore(this.ctx.waitUntil.bind(this.ctx));
   private truncatedOutputStore = new TruncatedOutputStore();
-  private chatDoc: Extract<ModeConfig, { mode: "chat" }>["chat"] | null = null;
+  private chatDoc: ChatRuntimeDoc | null = null;
+  private workflowDoc: WorkflowRuntimeDoc | null = null;
   private modeConfig: ModeConfig | null = null;
   private callableFunctions: CallableFunctionInstance[] = [];
   private didRegisterCallableFunctions = false;
   private daytona: Daytona | null = null;
   private sandbox: Sandbox | null = null;
-  private executionId: Id<"workflowExecutions"> | null = null;
 
   private async _init(args?: AgentArgs, options?: InitOptions): Promise<void> {
     if (args && (options?.persistInitArgs ?? true)) {
@@ -115,58 +95,50 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, AgentArgs> {
       throw new Error("Unauthorized: No token provided");
     }
     this.convexAdapter = await createConvexAdapter(this.env.CONVEX_URL, activeTokenConfig);
+    const modeConfig = initArgs.modeConfig
+      ?? currentState.modeConfig
+      ?? { mode: "chat", chat: this.name as Id<"chats"> };
+    this.modeConfig = modeConfig;
+    this.chatDoc = null;
+    this.workflowDoc = null;
 
-    // Resolve workflowInit into a full modeConfig
-    if (initArgs.workflowInit) {
-      const { workflowId, executionId, triggerPayload } = initArgs.workflowInit;
-      this.executionId = executionId as Id<"workflowExecutions">;
-
+    let sandboxId: string | undefined;
+    if (modeConfig.mode === "workflow") {
       const workflow = await this.convexAdapter.query(
         api.workflows.index.getForExecutionExt,
-        { _id: workflowId as Id<"workflows"> },
+        { _id: modeConfig.workflow },
       );
-      if (!workflow) throw new Error("Workflow not found");
+      if (!workflow) {
+        throw new Error("Workflow not found");
+      }
+      this.workflowDoc = workflow;
 
       await this.convexAdapter.mutation(
         api.workflows.index.updateExecutionStatusExt,
-        { executionId: this.executionId, status: "running" },
+        { executionId: modeConfig.executionId, status: "running" },
       );
 
-      this.modeConfig = { mode: "workflow", workflow, triggerPayload };
-      this.setState(resolveWorkflowExecutionState(currentState, workflow));
-    } else if (initArgs.modeConfig) {
-      this.modeConfig = initArgs.modeConfig;
-    }
-
-    // For workflow mode, use the workflow's sandbox; for chat mode, fetch chat doc
-    let sandboxId: string | undefined;
-    if (this.modeConfig?.mode === "workflow") {
-      this.chatDoc = null;
-      if (this.modeConfig.workflow.executionMode === "latestChat") {
-        const getFn = this.convexAdapter.getTokenType() === "ext"
-          ? api.chats.index.getExt
-          : api.chats.index.get;
-        const chat = await this.convexAdapter.query(getFn, {
-          _id: this.name as Id<"chats">,
-        }).catch(() => null);
-        if (chat) {
-          this.chatDoc = chat;
-        }
-      }
-      sandboxId = this.modeConfig.workflow.sandboxId ?? this.chatDoc?.sandboxId;
-    } else {
-      const getFn = this.convexAdapter.getTokenType() === "ext"
-        ? api.chats.index.getExt
-        : api.chats.index.get;
-      const chat = await this.convexAdapter.query(getFn, {
-        _id: this.name as Id<"chats">,
+      this.setState({
+        ...resolveWorkflowExecutionState(currentState, workflow),
+        modeConfig,
       });
+
+      if (workflow.executionMode === "latestChat") {
+        this.chatDoc = await this._getChatById(this.name as Id<"chats">).catch(() => null);
+      }
+
+      sandboxId = workflow.sandboxId ?? this.chatDoc?.sandboxId;
+    } else {
+      const chat = await this._getChatById(modeConfig.chat);
       if (!chat) {
         throw new Error("Unauthorized: No chat found");
       }
       this.chatDoc = chat;
-      this.modeConfig = { mode: "chat", chat: this.chatDoc! };
-      sandboxId = this.chatDoc?.sandboxId;
+      this.setState({
+        ...currentState,
+        modeConfig,
+      });
+      sandboxId = chat.sandboxId;
     }
 
     this.daytona = new Daytona({
@@ -190,119 +162,22 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, AgentArgs> {
   }
 
   private async _prepAgent(): Promise<PlanAgent> {
-    const boundWaitUntil = this.ctx.waitUntil.bind(this.ctx);
-    setWaitUntil(boundWaitUntil);
-    const registry = AgentRegistry.getInstance();
-    if (this.env.VOLTAGENT_PUBLIC_KEY && this.env.VOLTAGENT_SECRET_KEY) {
-      registry.setGlobalVoltOpsClient(
-        createVoltOpsClient({
-          publicKey: this.env.VOLTAGENT_PUBLIC_KEY as string,
-          secretKey: this.env.VOLTAGENT_SECRET_KEY as string,
-        })
-      );
-    }
-
-    if (!this.state.model || !this.modeConfig) {
+    if (!this.state || !this.modeConfig) {
       throw new Error("Agent not initialized: missing model or modeConfig");
     }
-    const model = this.state.model;
-    const modeConfig = this.modeConfig;
-
-    const subagents: Agent[] = [];
-    const toolkitPromises: Promise<Toolkit>[] = [
-      ...(modeConfig.mode === "workflow" && this.convexAdapter
-        ? [createWorkflowToolkit(modeConfig.workflow._id, this.convexAdapter)]
-        : []),
-    ];
-    if (this.sandbox && this.daytona) {
-      toolkitPromises.push(createDaytonaToolkit(this.daytona, this.sandbox));
-    }
-
-    const extraToolkits: Toolkit[] = [];
-    if (modeConfig.mode === "workflow") {
-      extraToolkits.push(
-        createWorkflowActionToolkit(modeConfig.workflow.allowedActions, this.convexAdapter!),
-      );
-    }
-
-    for (const toolkit of [...(await Promise.all(toolkitPromises)), ...extraToolkits]) {
-      subagents.push(
-        new Agent({
-          name: toolkit.name,
-          purpose: toolkit.description,
-          model: createAiClient(model, this.state.reasoningEffort),
-          instructions: toolkit.instructions ?? '',
-          tools: toolkit.tools,
-        })
-      );
-    }
-
-    const systemPrompt = modeConfig.mode === "chat"
-      ? CHAT_SYSTEM_PROMPT(modeConfig.chat)
-      : WORKFLOW_SYSTEM_PROMPT(modeConfig.workflow, modeConfig.triggerPayload);
-
-    const agent = new PlanAgent({
-      name: modeConfig.mode === "chat" ? "Assistant" : "WorkflowExecutor",
-      systemPrompt,
-      model: createAiClient(model, this.state.reasoningEffort),
-      tools: [
-        createWebSearchToolkit(),
-        createAskUserToolkit(),
-        createBackgroundTaskToolkit(this.backgroundTaskStore, this.truncatedOutputStore),
-      ],
-      planning: false,
-      task: {
-        taskDescription: TASK_PROMPT,
-        supervisorConfig: {
-          fullStreamEventForwarding: {
-            types: [
-              "tool-input-start",
-              "tool-input-delta",
-              "tool-input-end",
-              "tool-call",
-              "tool-result",
-              "tool-error",
-              "text-delta",
-              "reasoning-delta",
-              "source",
-              "error",
-              "finish",
-            ],
-          },
-        },
-      },
-      subagents,
-      filesystem: false,
-      maxSteps: modeConfig.mode === "chat" ? 100 : 50,
-      ...(this.env.VOLTAGENT_PUBLIC_KEY && this.env.VOLTAGENT_SECRET_KEY ? {
-        observability: createVoltAgentObservability({
-          serviceName: "just-use-convex-agent",
-          serviceVersion: "1.0.0",
-          voltOpsSync: {
-            sampling: {
-              strategy: "always",
-            },
-            maxQueueSize: 2048,
-            maxExportBatchSize: 512,
-            scheduledDelayMillis: 5000,
-            exportTimeoutMillis: 30000,
-          },
-        }),
-      } : {}),
+    const agent = await createWorkerPlanAgent({
+      env: this.env,
+      state: this.state,
+      modeConfig: this.modeConfig,
+      chatDoc: this.chatDoc,
+      workflowDoc: this.workflowDoc,
+      convexAdapter: this.convexAdapter,
+      daytona: this.daytona,
+      sandbox: this.sandbox,
+      backgroundTaskStore: this.backgroundTaskStore,
+      truncatedOutputStore: this.truncatedOutputStore,
+      waitUntil: this.ctx.waitUntil.bind(this.ctx),
     });
-
-    agent.addTools([
-      createPlanningToolkit(agent, {
-        systemPrompt: [
-          "Use write_todos when a task is multi-step or when a plan improves clarity.",
-          "If the request is simple and direct, you may skip write_todos.",
-          "When you do use write_todos, keep 3-8 concise steps.",
-          "When creating a plan, all steps must start with 'pending' status.",
-          "When all steps are executed, all the todos must end with 'done' status.",
-          "Regularly check and update the status of the todos to ensure they are accurate and up to date.",
-        ].join("\n"),
-      }),
-    ]);
 
     this.planAgent = agent;
     await this._patchAgent();
@@ -388,32 +263,92 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, AgentArgs> {
     this.didRegisterCallableFunctions = true;
   }
 
-  override async onRequest(request: Request): Promise<Response> {
-    const url = new URL(request.url);
-
-    if (url.pathname.endsWith("/executeWorkflow") && request.method === "POST") {
-      return this._handleExecuteWorkflow(request);
+  private async _getChatById(chatId: Id<"chats">): Promise<ChatRuntimeDoc | null> {
+    if (!this.convexAdapter) {
+      throw new Error("Agent not initialized: missing convex adapter");
     }
 
-    const inputModalitiesRaw = url.searchParams.get("inputModalities");
-    await this._init({
-      model: url.searchParams.get("model") ?? undefined,
-      reasoningEffort: url.searchParams.get("reasoningEffort") as "low" | "medium" | "high" | undefined,
-      inputModalities: inputModalitiesRaw ? inputModalitiesRaw.split(",") : undefined,
-      tokenConfig: parseTokenFromUrl(url) ?? undefined,
-    });
-    return await super.onRequest(request);
+    const getFn = this.convexAdapter.getTokenType() === "ext"
+      ? api.chats.index.getExt
+      : api.chats.index.get;
+
+    return await this.convexAdapter.query(getFn, { _id: chatId });
+  }
+
+  private async _markWorkflowExecutionFailed(
+    error: unknown,
+    executionId = this.modeConfig?.mode === "workflow" ? this.modeConfig.executionId : null,
+  ): Promise<void> {
+    if (!executionId || !this.convexAdapter) {
+      return;
+    }
+
+    await this.convexAdapter.mutation(
+      api.workflows.index.updateExecutionStatusExt,
+      {
+        executionId,
+        status: "failed",
+        error: error instanceof Error ? error.message : String(error),
+        completedAt: Date.now(),
+      },
+    ).catch(() => {});
+  }
+
+  override async onRequest(request: Request): Promise<Response> {
+    const url = new URL(request.url);
+    const isExecuteWorkflow = url.pathname.endsWith("/executeWorkflow") && request.method === "POST";
+    const runtimeSnapshot = isExecuteWorkflow ? this._snapshotRuntime() : null;
+    let executionId: Id<"workflowExecutions"> | null = null;
+
+    try {
+      if (isExecuteWorkflow) {
+        const parsedRequestBody = executeWorkflowRequestSchema.safeParse(await request.json());
+        if (!parsedRequestBody.success) {
+          return new Response(JSON.stringify({ error: "Invalid request body" }), { status: 400 });
+        }
+
+        const tokenConfig = parseTokenFromRequest(request);
+        if (!tokenConfig) {
+          return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401 });
+        }
+
+        const workflowRequest = parsedRequestBody.data;
+        executionId = workflowRequest.executionId as Id<"workflowExecutions">;
+        await this._init(
+          buildInitArgsFromUrl(url, {
+            tokenConfig,
+            modeConfig: {
+              mode: "workflow",
+              workflow: workflowRequest.workflow as Id<"workflows">,
+              executionId,
+              triggerPayload: workflowRequest.triggerPayload,
+            },
+          }),
+          { persistInitArgs: false },
+        );
+        this.planAgent = null;
+        return await this._handleExecuteWorkflow();
+      }
+
+      await this._init(buildInitArgsFromUrl(url));
+      return await super.onRequest(request);
+    } catch (error) {
+      await this._markWorkflowExecutionFailed(error, executionId);
+
+      return new Response(
+        JSON.stringify({ error: error instanceof Error ? error.message : "Internal Server Error" }),
+        { status: 500 },
+      );
+    } finally {
+      if (runtimeSnapshot) {
+        this._restoreRuntime(runtimeSnapshot);
+      }
+    }
   }
 
   override async onConnect(connection: Connection, ctx: ConnectionContext): Promise<void> {
     const url = new URL(ctx.request.url);
-    const inputModalitiesRaw = url.searchParams.get("inputModalities");
-    await this._init({
-      model: url.searchParams.get("model") ?? undefined,
-      reasoningEffort: url.searchParams.get("reasoningEffort") as "low" | "medium" | "high" | undefined,
-      inputModalities: inputModalitiesRaw ? inputModalitiesRaw.split(",") : undefined,
-      tokenConfig: parseTokenFromUrl(url) ?? undefined,
-    });
+    await this._init(buildInitArgsFromUrl(url));
     await this._prepAgent();
     return await super.onConnect(connection, ctx);
   }
@@ -461,50 +396,8 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, AgentArgs> {
     await this.persistMessages(messages);
   }
 
-  private async _handleExecuteWorkflow(request: Request): Promise<Response> {
-    const tokenConfig = parseTokenFromRequest(request);
-    if (!tokenConfig) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401 });
-    }
-
-    let executionId: Id<"workflowExecutions"> | null = null;
-    const runtimeSnapshot = this._snapshotRuntime();
-    try {
-      const parsedRequestBody = workflowInitPayloadSchema.safeParse(await request.json());
-      if (!parsedRequestBody.success) {
-        return new Response(JSON.stringify({ error: "Invalid request body" }), { status: 400 });
-      }
-
-      const requestBody = parsedRequestBody.data;
-      executionId = requestBody.executionId as Id<"workflowExecutions">;
-      await this._init({
-        tokenConfig,
-        workflowInit: requestBody,
-      }, { persistInitArgs: false });
-      this.planAgent = null;
-
-      const response = await this._onChatMessage(() => {});
-      return response;
-    } catch (error) {
-      if (executionId && this.convexAdapter) {
-        await this.convexAdapter.mutation(
-          api.workflows.index.updateExecutionStatusExt,
-          {
-            executionId,
-            status: "failed",
-            error: error instanceof Error ? error.message : String(error),
-            completedAt: Date.now(),
-          },
-        ).catch(() => {});
-      }
-
-      return new Response(
-        JSON.stringify({ error: error instanceof Error ? error.message : "Internal Server Error" }),
-        { status: 500 },
-      );
-    } finally {
-      this._restoreRuntime(runtimeSnapshot);
-    }
+  private async _handleExecuteWorkflow(): Promise<Response> {
+    return await this._onChatMessage(() => {});
   }
 
   private async _onChatMessage(
@@ -555,17 +448,17 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, AgentArgs> {
       const agent = this.planAgent || (await this._prepAgent());
 
       // Workflow: non-streaming generateText, update execution status
-      if (isWorkflow && this.executionId && modeConfig) {
+      if (isWorkflow && modeConfig && this.workflowDoc) {
         const modelMessages = buildWorkflowExecutionMessages(
           this.messages,
           this.state.inputModalities,
-          modeConfig.workflow.executionMode,
+          this.workflowDoc.executionMode,
         );
         const result = await agent.generateText(modelMessages);
 
-        if (modeConfig.workflow.executionMode === "latestChat" && this.chatDoc && result.text.trim().length > 0) {
+        if (this.workflowDoc.executionMode === "latestChat" && this.chatDoc && result.text.trim().length > 0) {
           const workflowMessage: UIMessage = {
-            id: `workflow-${this.executionId}-${crypto.randomUUID()}`,
+            id: `workflow-${modeConfig.executionId}-${crypto.randomUUID()}`,
             role: "assistant",
             parts: [{ type: "text", text: result.text }],
           };
@@ -575,7 +468,7 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, AgentArgs> {
         await this.convexAdapter.mutation(
           api.workflows.index.updateExecutionStatusExt,
           {
-            executionId: this.executionId,
+            executionId: modeConfig.executionId,
             status: "completed",
             agentOutput: result.text,
             completedAt: Date.now(),
@@ -637,18 +530,7 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, AgentArgs> {
         }),
       });
     } catch (error) {
-      // Workflow: best-effort status update on failure
-      if (this.executionId && this.convexAdapter) {
-        await this.convexAdapter.mutation(
-          api.workflows.index.updateExecutionStatusExt,
-          {
-            executionId: this.executionId,
-            status: "failed",
-            error: error instanceof Error ? error.message : String(error),
-            completedAt: Date.now(),
-          },
-        ).catch(() => {});
-      }
+      await this._markWorkflowExecutionFailed(error);
       console.error("onChatMessage failed", error);
       return new Response(
         JSON.stringify({ error: error instanceof Error ? error.message : "Internal Server Error" }),
@@ -667,12 +549,12 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, AgentArgs> {
       convexAdapter: this.convexAdapter,
       planAgent: this.planAgent,
       chatDoc: this.chatDoc,
+      workflowDoc: this.workflowDoc,
       modeConfig: this.modeConfig,
       daytona: this.daytona,
       sandbox: this.sandbox,
       callableFunctions: this.callableFunctions,
       didRegisterCallableFunctions: this.didRegisterCallableFunctions,
-      executionId: this.executionId,
     };
   }
 
@@ -683,87 +565,11 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, AgentArgs> {
     this.convexAdapter = snapshot.convexAdapter;
     this.planAgent = snapshot.planAgent;
     this.chatDoc = snapshot.chatDoc;
+    this.workflowDoc = snapshot.workflowDoc;
     this.modeConfig = snapshot.modeConfig;
     this.daytona = snapshot.daytona;
     this.sandbox = snapshot.sandbox;
     this.callableFunctions = snapshot.callableFunctions;
     this.didRegisterCallableFunctions = snapshot.didRegisterCallableFunctions;
-    this.executionId = snapshot.executionId;
   }
-}
-
-function resolveWorkflowExecutionState(
-  currentState: AgentArgs,
-  workflow: Extract<ModeConfig, { mode: "workflow" }>["workflow"],
-): AgentArgs {
-  const fallbackModel = workflow.model ?? agentDefaults.DEFAULT_MODEL;
-  if (workflow.executionMode === "isolated") {
-    return {
-      ...currentState,
-      model: fallbackModel,
-      inputModalities: workflow.inputModalities,
-    };
-  }
-
-  return {
-    ...currentState,
-    model: currentState.model ?? fallbackModel,
-    inputModalities: currentState.inputModalities ?? workflow.inputModalities,
-  };
-}
-
-function buildWorkflowExecutionMessages(
-  messages: UIMessage[],
-  inputModalities: AgentArgs["inputModalities"],
-  executionMode: Extract<ModeConfig, { mode: "workflow" }>["workflow"]["executionMode"],
-) {
-  const executionPrompt: UIMessage = {
-    id: `workflow-exec-${crypto.randomUUID()}`,
-    role: "user",
-    parts: [{ type: "text", text: "Execute this workflow now." }],
-  };
-
-  if (executionMode !== "latestChat") {
-    return [executionPrompt];
-  }
-
-  const { messages: chatMessages } = processMessagesForAgent(messages, inputModalities);
-  return [...chatMessages, executionPrompt];
-}
-
-function parseTokenFromRequest(request: Request): TokenConfig | null {
-  const url = new URL(request.url);
-  const tokenConfig = parseTokenFromUrl(url);
-  if (tokenConfig) {
-    return tokenConfig;
-  }
-
-  const authorization = request.headers.get("authorization");
-  if (!authorization?.toLowerCase().startsWith("bearer ")) {
-    return null;
-  }
-  const externalToken = authorization.slice(7).trim();
-  if (!externalToken) {
-    return null;
-  }
-
-  const memberId = request.headers.get("x-member-id");
-  const userId = request.headers.get("x-user-id");
-  if (memberId) {
-    return {
-      type: "ext",
-      externalToken,
-      identifier: { type: "memberId", value: memberId },
-    };
-  }
-
-  if (userId) {
-    return {
-      type: "ext",
-      externalToken,
-      identifier: { type: "userId", value: userId },
-    };
-  }
-
-  return null;
 }

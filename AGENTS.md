@@ -231,16 +231,6 @@ File-based TanStack Router:
 - whenever working with external libraries always query context7 for their relevant docs
 - workflow execution namespace rule: `isolated` mode uses the workflow namespace (`workflow-${workflowId}`); `latestChat` mode uses the member's most recently updated chat id
 
-### Refactoring Principles
-
-- **everything is a config** — behavior differences between modes (chat vs workflow, streaming vs non-streaming) should be driven by a discriminated union config, not separate code paths
-- **one init, one execution path** — all setup/resolution logic belongs in a single `_init` method; callers pass raw params, init resolves them into state. never duplicate adapter creation, doc fetching, or resource setup across handlers
-- **thin handlers, fat init** — HTTP/WS entry points should only parse the request and delegate. business logic (fetching docs, status updates, resolving IDs into full objects) lives in init or the shared execution method
-- **branch on config, don't fork methods** — when adding a new mode, add a branch in the existing flow (`if (isWorkflow) ...`), don't create a parallel method that duplicates 80% of the logic
-- **no non-serializable state in persisted storage** — class instances with methods (adapters, SDK clients) are kept as in-memory properties only; DO storage and `setState` only get plain data
-- **unify shared infra, extract the delta** — sandbox setup, daytona init, agent prep are shared across modes. only the mode-specific delta (workflow actions toolkit, execution status updates, chat title gen) gets branched
-- **derive types from existing fields** — use `Extract<ModeConfig, { mode: "chat" }>["chat"]` over redeclaring the type; keep the discriminated union as the single source of truth
-
 ## Background & Subagents
 
 - for anything related to implementation or research make use of background subagents
