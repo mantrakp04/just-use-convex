@@ -3,61 +3,28 @@ import {
   parseTokenFromUrl,
   type TokenConfig,
 } from "@just-use-convex/backend/convex/lib/convexAdapter";
-import { env as agentDefaults } from "@just-use-convex/env/agent";
-import { processMessagesForAgent } from "../agent/messages";
-import type { AgentArgs, WorkflowRuntimeDoc } from "../agent/types";
+import type { AgentArgs } from "../agent/types";
 
 export type InitArgsOverrides = Pick<AgentArgs, "tokenConfig" | "modeConfig">;
 
-export function buildInitArgsFromUrl(url: URL, overrides?: InitArgsOverrides): AgentArgs {
+export function buildInitArgsFromUrl(url: URL, overrides: InitArgsOverrides): AgentArgs {
   const inputModalitiesRaw = url.searchParams.get("inputModalities");
 
   return {
     model: url.searchParams.get("model") ?? undefined,
     reasoningEffort: url.searchParams.get("reasoningEffort") as "low" | "medium" | "high" | undefined,
     inputModalities: inputModalitiesRaw ? inputModalitiesRaw.split(",") : undefined,
-    tokenConfig: overrides?.tokenConfig ?? parseTokenFromUrl(url) ?? undefined,
-    modeConfig: overrides?.modeConfig,
+    tokenConfig: overrides.tokenConfig ?? parseTokenFromUrl(url) ?? undefined,
+    modeConfig: overrides.modeConfig,
   };
 }
 
-export function resolveWorkflowExecutionState(
-  currentState: AgentArgs,
-  workflow: WorkflowRuntimeDoc,
-): AgentArgs {
-  const fallbackModel = workflow.model ?? agentDefaults.DEFAULT_MODEL;
-  if (workflow.executionMode === "isolated") {
-    return {
-      ...currentState,
-      model: fallbackModel,
-      inputModalities: workflow.inputModalities,
-    };
-  }
-
-  return {
-    ...currentState,
-    model: currentState.model ?? fallbackModel,
-    inputModalities: currentState.inputModalities ?? workflow.inputModalities,
-  };
-}
-
-export function buildWorkflowExecutionMessages(
-  messages: UIMessage[],
-  inputModalities: AgentArgs["inputModalities"],
-  executionMode: WorkflowRuntimeDoc["executionMode"],
-) {
-  const executionPrompt: UIMessage = {
+export function buildWorkflowExecutionMessages(): UIMessage[] {
+  return [{
     id: `workflow-exec-${crypto.randomUUID()}`,
     role: "user",
     parts: [{ type: "text", text: "Execute this workflow now." }],
-  };
-
-  if (executionMode !== "latestChat") {
-    return [executionPrompt];
-  }
-
-  const { messages: chatMessages } = processMessagesForAgent(messages, inputModalities);
-  return [...chatMessages, executionPrompt];
+  }];
 }
 
 export function parseTokenFromRequest(request: Request): TokenConfig | null {

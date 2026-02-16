@@ -19,6 +19,7 @@
   "scripts": {
     "dev": "turbo dev",
     "build": "turbo build",
+    "check-unused-exports": "ts-unused-exports ./apps/web/tsconfig.json && ts-unused-exports ./packages/env/tsconfig.json && ts-unused-exports ./packages/agent/tsconfig.json && ts-unused-exports ./packages/backend/convex/tsconfig.json",
     "check-types": "turbo check-types",
     "dev:native": "turbo -F native dev",
     "dev:web": "turbo -F web dev",
@@ -32,6 +33,7 @@
   "devDependencies": {
     "@just-use-convex/config": "workspace:*",
     "@just-use-convex/env": "workspace:*",
+    "ts-unused-exports": "^11.0.1",
     "turbo": "^2.8.9",
     "typescript": "catalog:"
   },

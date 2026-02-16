@@ -40,14 +40,12 @@ export const allowedActionSchema = z.enum([
   "notify",
 ]);
 
-export const executionModeSchema = z.enum(["isolated", "latestChat"]);
 export const inputModalitySchema = z.enum(["text", "image", "file"]);
 
 export const workflowsZodSchema = {
   organizationId: z.string(),
   memberId: z.string(),
   name: z.string(),
-  executionMode: executionModeSchema,
   enabled: z.boolean(),
   triggerType: triggerTypeSchema,
   trigger: z.string(), // JSON-serialized triggerSchema

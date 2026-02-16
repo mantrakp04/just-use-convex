@@ -7,7 +7,7 @@ export type AgentArgs = {
   reasoningEffort?: "low" | "medium" | "high";
   inputModalities?: string[];
   tokenConfig?: TokenConfig;
-  modeConfig?: ModeConfig;
+  modeConfig: ModeConfig;
 };
 
 export interface ChatModeConfig {

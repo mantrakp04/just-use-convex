@@ -167,17 +167,6 @@ export function WorkflowDetail({ workflowId }: WorkflowDetailProps) {
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader className="py-3">
-            <CardTitle className="text-sm">Execution</CardTitle>
-          </CardHeader>
-          <CardContent className="py-2 flex flex-col gap-1">
-            <Badge variant="secondary" className="w-fit">
-              {workflow.executionMode === "isolated" ? "Isolated" : "Latest Chat"}
-            </Badge>
-          </CardContent>
-        </Card>
-
         {workflow.sandbox && (
           <Card>
             <CardHeader className="py-3">

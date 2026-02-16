@@ -1,6 +1,5 @@
 import type { z } from "zod";
 import type { zMutationCtx, zQueryCtx } from "../functions";
-import type { Id } from "../_generated/dataModel";
 import * as types from "./types";
 import { withInvalidCursorRetry } from "../shared/pagination";
 import { buildPatchData } from "../shared/patch";
@@ -113,7 +112,6 @@ export async function CreateWorkflow(ctx: zMutationCtx, args: z.infer<typeof typ
 
   const workflow = await ctx.table("workflows").insert({
     name: args.data.name,
-    executionMode: args.data.executionMode,
     triggerType: trigger.type,
     trigger: JSON.stringify(trigger),
     instructions: args.data.instructions,
@@ -294,17 +292,9 @@ export async function CreateExecution(ctx: zMutationCtx, args: z.infer<typeof ty
     startedAt: Date.now(),
   });
 
-  const namespace = await resolveExecutionNamespace(
-    ctx,
-    workflow.executionMode,
-    workflow._id,
-    workflow.organizationId,
-    workflow.memberId,
-  );
-
   return {
     executionId: execution,
-    namespace,
+    namespace: `workflow-${workflow._id}`,
   };
 }
 
@@ -335,55 +325,3 @@ function generateWebhookSecret(): string {
   return Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
-async function resolveExecutionNamespace(
-  ctx: zMutationCtx,
-  executionMode: z.infer<typeof types.Workflow.shape.executionMode>,
-  workflowId: Id<"workflows">,
-  organizationId: string,
-  memberId: string,
-): Promise<string> {
-  if (executionMode === "isolated") {
-    return getWorkflowExecutionNamespace(workflowId);
-  }
-
-  const latestChatId = await getLatestChatId(ctx, organizationId, memberId);
-  return latestChatId ?? getWorkflowExecutionNamespace(workflowId);
-}
-
-async function getLatestChatId(
-  ctx: zMutationCtx,
-  organizationId: string,
-  memberId: string,
-): Promise<Id<"chats"> | null> {
-  const [latestUnpinned, latestPinned] = await Promise.all([
-    ctx.db
-      .query("chats")
-      .withIndex("organizationId_memberId_isPinned", (q) => q
-      .eq("organizationId", organizationId)
-      .eq("memberId", memberId)
-      .eq("isPinned", false)
-    )
-      .order("desc")
-      .first(),
-    ctx.db
-      .query("chats")
-      .withIndex("organizationId_memberId_isPinned", (q) => q
-      .eq("organizationId", organizationId)
-      .eq("memberId", memberId)
-      .eq("isPinned", true)
-    )
-      .order("desc")
-      .first(),
-  ]);
-
-  if (!latestUnpinned && !latestPinned) return null;
-  if (!latestUnpinned) return latestPinned!._id;
-  if (!latestPinned) return latestUnpinned._id;
-  return latestUnpinned.updatedAt >= latestPinned.updatedAt
-    ? latestUnpinned._id
-    : latestPinned._id;
-}
-
-function getWorkflowExecutionNamespace(workflowId: Id<"workflows">): string {
-  return `workflow-${workflowId}`;
-}

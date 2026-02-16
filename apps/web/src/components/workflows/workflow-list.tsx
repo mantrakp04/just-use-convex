@@ -117,9 +117,6 @@ function WorkflowCard({
             <Badge variant="secondary" className="text-xs">
               {workflow.allowedActions.length} action{workflow.allowedActions.length !== 1 ? "s" : ""}
             </Badge>
-            <Badge variant="secondary" className="text-xs">
-              {workflow.executionMode === "isolated" ? "Isolated" : "Latest Chat"}
-            </Badge>
             {workflow.sandbox && (
               <Badge variant="secondary" className="text-xs gap-1">
                 <Box className="size-3" />

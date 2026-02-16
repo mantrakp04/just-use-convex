@@ -38,7 +38,6 @@ import {
   type CallableFunctionInstance,
   type CallableServiceMethod,
   type CallableServiceMethodsMap,
-  type ModeConfig,
   type WorkflowRuntimeDoc,
 } from "../agent/types";
 import {
@@ -56,7 +55,6 @@ import {
   buildInitArgsFromUrl,
   buildWorkflowExecutionMessages,
   parseTokenFromRequest,
-  resolveWorkflowExecutionState,
 } from "./helpers";
 import { createWorkerPlanAgent } from "../agent/agent";
 
@@ -67,7 +65,6 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, AgentArgs> {
   private truncatedOutputStore = new TruncatedOutputStore();
   private chatDoc: ChatRuntimeDoc | null = null;
   private workflowDoc: WorkflowRuntimeDoc | null = null;
-  private modeConfig: ModeConfig | null = null;
   private callableFunctions: CallableFunctionInstance[] = [];
   private didRegisterCallableFunctions = false;
   private daytona: Daytona | null = null;
@@ -75,60 +72,39 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, AgentArgs> {
 
   private async _init(args?: AgentArgs): Promise<void> {
     if (args) {
-      await this.ctx.storage.put("initArgs", args);
-      this.planAgent = null;
+      await this.ctx.storage.put("state", args);
     }
-    const initArgs = (args ?? (await this.ctx.storage.get("initArgs"))) as AgentArgs | null;
-    if (!initArgs) {
-      throw new Error("Agent not initialized: missing initArgs");
+    const stored = await this.ctx.storage.get<AgentArgs>("state");
+    if (!stored || !stored.tokenConfig) {
+      throw new Error("Agent not initialized: missing state");
     }
-    const persistedState = await this.ctx.storage.get<AgentArgs>("chatState");
-    const currentState: AgentArgs = this.state ?? persistedState ?? initArgs ?? {};
-    if (Object.keys(currentState).length) {
-      this.setState(currentState);
-    }
+    this.setState(stored);
 
-    const activeTokenConfig = initArgs.tokenConfig ?? currentState.tokenConfig;
-    if (!activeTokenConfig) {
-      throw new Error("Unauthorized: No token provided");
-    }
-    this.convexAdapter = await createConvexAdapter(this.env.CONVEX_URL, activeTokenConfig);
-    const modeConfig = initArgs.modeConfig ?? getDefaultChatModeConfig(this.name as Id<"chats">);
-    this.modeConfig = modeConfig;
+    this.convexAdapter = await createConvexAdapter(this.env.CONVEX_URL, stored.tokenConfig);
     this.chatDoc = null;
     this.workflowDoc = null;
 
     let sandboxId: string | undefined;
-    if (modeConfig.mode === "workflow") {
+    if (this.state.modeConfig.mode === "workflow") {
       const workflow = await this.convexAdapter.query(
         api.workflows.index.getForExecutionExt,
-        { _id: modeConfig.workflow },
+        { _id: this.state.modeConfig.workflow },
       );
       if (!workflow) {
         throw new Error("Workflow not found");
       }
       this.workflowDoc = workflow;
 
-      this.setState({
-        ...resolveWorkflowExecutionState(currentState, workflow),
-        modeConfig,
-      });
-
-      if (workflow.executionMode === "latestChat") {
-        this.chatDoc = await this._getChatById(this.name as Id<"chats">).catch(() => null);
-      }
-
-      sandboxId = workflow.sandboxId ?? this.chatDoc?.sandboxId;
+      sandboxId = workflow.sandboxId;
     } else {
-      const chat = await this._getChatById(modeConfig.chat);
+      const getChatFn = this.convexAdapter.getTokenType() === "ext"
+        ? api.chats.index.getExt
+        : api.chats.index.get;
+      const chat = await this.convexAdapter.query(getChatFn, { _id: this.state.modeConfig.chat });
       if (!chat) {
         throw new Error("Unauthorized: No chat found");
       }
       this.chatDoc = chat;
-      this.setState({
-        ...currentState,
-        modeConfig,
-      });
       sandboxId = chat.sandboxId;
     }
 
@@ -153,13 +129,10 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, AgentArgs> {
   }
 
   private async _prepAgent(): Promise<PlanAgent> {
-    if (!this.state || !this.modeConfig) {
-      throw new Error("Agent not initialized: missing model or modeConfig");
-    }
     const agent = await createWorkerPlanAgent({
       env: this.env,
       state: this.state,
-      modeConfig: this.modeConfig,
+      modeConfig: this.state.modeConfig,
       chatDoc: this.chatDoc,
       workflowDoc: this.workflowDoc,
       convexAdapter: this.convexAdapter,
@@ -254,18 +227,6 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, AgentArgs> {
     this.didRegisterCallableFunctions = true;
   }
 
-  private async _getChatById(chatId: Id<"chats">): Promise<ChatRuntimeDoc | null> {
-    if (!this.convexAdapter) {
-      throw new Error("Agent not initialized: missing convex adapter");
-    }
-
-    const getFn = this.convexAdapter.getTokenType() === "ext"
-      ? api.chats.index.getExt
-      : api.chats.index.get;
-
-    return await this.convexAdapter.query(getFn, { _id: chatId });
-  }
-
   private async _markWorkflowExecutionFailed(error: unknown, executionId: Id<"workflowExecutions"> | null): Promise<void> {
     if (!executionId || !this.convexAdapter) {
       return;
@@ -323,7 +284,10 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, AgentArgs> {
       }
 
       await this._init(buildInitArgsFromUrl(url, {
-        modeConfig: getDefaultChatModeConfig(this.name as Id<"chats">),
+        modeConfig: {
+          mode: "chat",
+          chat: this.name as Id<"chats">,
+        },
       }));
       return await super.onRequest(request);
     } catch (error) {
@@ -339,14 +303,18 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, AgentArgs> {
   override async onConnect(connection: Connection, ctx: ConnectionContext): Promise<void> {
     const url = new URL(ctx.request.url);
     await this._init(buildInitArgsFromUrl(url, {
-      modeConfig: getDefaultChatModeConfig(this.name as Id<"chats">),
+      modeConfig: { mode: "chat", chat: this.name as Id<"chats"> },
     }));
     await this._prepAgent();
     return await super.onConnect(connection, ctx);
   }
 
   override async onStateUpdate(state: AgentArgs, source: Connection | "server"): Promise<void> {
-    await this.ctx.storage.put("chatState", state);
+    const stored = await this.ctx.storage.get<AgentArgs>("state");
+    await this.ctx.storage.put("state", {
+      ...state,
+      tokenConfig: stored?.tokenConfig ?? state.tokenConfig,
+    });
     await this._patchAgent();
     await super.onStateUpdate(state, source);
   }
@@ -395,7 +363,7 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, AgentArgs> {
     if (!this.state?.model) {
       await this._markWorkflowExecutionFailed(
         new Error("Model not configured."),
-        this.modeConfig?.mode === "workflow" ? this.modeConfig.executionId : null,
+        this.state.modeConfig?.mode === "workflow" ? this.state.modeConfig.executionId : null,
       );
       return new Response("Model not configured.", { status: 400 });
     }
@@ -412,7 +380,7 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, AgentArgs> {
         await ensureSandboxStarted(this.sandbox, false);
       }
 
-      const modeConfig = this.modeConfig;
+      const modeConfig = this.state.modeConfig;
       const isChat = modeConfig?.mode === "chat";
       const isWorkflow = modeConfig?.mode === "workflow";
 
@@ -440,22 +408,9 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, AgentArgs> {
       const agent = this.planAgent || (await this._prepAgent());
 
       // Workflow: non-streaming generateText, update execution status
-      if (isWorkflow && modeConfig && this.workflowDoc) {
-        const modelMessages = buildWorkflowExecutionMessages(
-          this.messages,
-          this.state.inputModalities,
-          this.workflowDoc.executionMode,
-        );
+      if (isWorkflow && this.state.modeConfig && this.workflowDoc) {
+        const modelMessages = buildWorkflowExecutionMessages();
         const result = await agent.generateText(modelMessages);
-
-        if (this.workflowDoc.executionMode === "latestChat" && this.chatDoc && result.text.trim().length > 0) {
-          const workflowMessage: UIMessage = {
-            id: `workflow-${modeConfig.executionId}-${crypto.randomUUID()}`,
-            role: "assistant",
-            parts: [{ type: "text", text: result.text }],
-          };
-          await this.persistMessages([...this.messages, workflowMessage]);
-        }
 
         await this.convexAdapter.mutation(
           api.workflows.index.updateExecutionStatusExt,
@@ -524,7 +479,7 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, AgentArgs> {
     } catch (error) {
       await this._markWorkflowExecutionFailed(
         error,
-        this.modeConfig?.mode === "workflow" ? this.modeConfig.executionId : null,
+        this.state?.modeConfig?.mode === "workflow" ? this.state.modeConfig.executionId : null,
       );
       console.error("onChatMessage failed", error);
       return new Response(
@@ -541,8 +496,4 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, AgentArgs> {
   override async onChatMessage(onFinish: StreamTextOnFinishCallback<ToolSet>, options?: OnChatMessageOptions): Promise<Response> {
     return await this._onChatMessage(onFinish, options);
   }
-}
-
-function getDefaultChatModeConfig(chatId: Id<"chats">): Extract<ModeConfig, { mode: "chat" }> {
-  return { mode: "chat", chat: chatId };
 }

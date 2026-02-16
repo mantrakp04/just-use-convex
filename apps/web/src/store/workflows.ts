@@ -3,11 +3,10 @@ import type { Id } from "@just-use-convex/backend/convex/_generated/dataModel";
 import type {
   AllowedAction,
   EventType,
-  ExecutionMode,
   TriggerType,
 } from "@just-use-convex/backend/convex/workflows/types";
 
-export type { AllowedAction, EventType, ExecutionMode, TriggerType };
+export type { AllowedAction, EventType, TriggerType };
 
 export type ScheduleMode = "every" | "at" | "cron";
 
@@ -143,4 +142,3 @@ export const builderInstructionsAtom = atom("");
 export const builderAllowedActionsAtom = atom<AllowedAction[]>(["notify"]);
 export const builderModelAtom = atom<string | undefined>(undefined);
 export const builderSandboxIdAtom = atom<Id<"sandboxes"> | null>(null);
-export const builderExecutionModeAtom = atom<ExecutionMode>("isolated");

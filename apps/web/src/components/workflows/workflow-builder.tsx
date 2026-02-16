@@ -8,7 +8,6 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ArrowLeft } from "lucide-react";
 import {
   builderNameAtom,
@@ -23,7 +22,6 @@ import {
   builderInstructionsAtom,
   builderAllowedActionsAtom,
   builderSandboxIdAtom,
-  builderExecutionModeAtom,
   ALL_ACTIONS,
   intervalToCron,
   timeToCron,
@@ -32,7 +30,6 @@ import {
   type ScheduleMode,
   type IntervalUnit,
   type AllowedAction,
-  type ExecutionMode,
 } from "@/store/workflows";
 import { SandboxSelector } from "@/components/sandboxes/sandbox-selector";
 import { TriggerConfig } from "./trigger-config";
@@ -67,7 +64,6 @@ export function WorkflowBuilder({
   const [instructions, setInstructions] = useAtom(builderInstructionsAtom);
   const [allowedActions, setAllowedActions] = useAtom(builderAllowedActionsAtom);
   const [sandboxId, setSandboxId] = useAtom(builderSandboxIdAtom);
-  const [executionMode, setExecutionMode] = useAtom(builderExecutionModeAtom);
   const [webhookSecret, setWebhookSecret] = useState("");
 
   const resetForm = useCallback(() => {
@@ -75,7 +71,6 @@ export function WorkflowBuilder({
     setInstructions("");
     setAllowedActions(["notify"]);
     setSandboxId(null);
-    setExecutionMode("isolated");
     setTriggerType("event");
     setScheduleMode("every");
     setIntervalAmount(30);
@@ -85,7 +80,7 @@ export function WorkflowBuilder({
     setCron("0 * * * *");
     setEvent("on_todo_create");
     setWebhookSecret("");
-  }, [setName, setInstructions, setAllowedActions, setSandboxId, setExecutionMode, setTriggerType, setScheduleMode, setIntervalAmount, setIntervalUnit, setIntervalStart, setAtTime, setCron, setEvent]);
+  }, [setName, setInstructions, setAllowedActions, setSandboxId, setTriggerType, setScheduleMode, setIntervalAmount, setIntervalUnit, setIntervalStart, setAtTime, setCron, setEvent]);
 
   useEffect(() => {
     if (!isEditMode || !workflow) {
@@ -98,7 +93,6 @@ export function WorkflowBuilder({
     setInstructions(workflow.instructions);
     setAllowedActions(workflow.allowedActions);
     setSandboxId(workflow.sandboxId ?? null);
-    setExecutionMode(workflow.executionMode);
     setTriggerType(parsed.triggerType);
     setScheduleMode(parsed.scheduleMode);
     setIntervalAmount(parsed.intervalAmount);
@@ -123,7 +117,6 @@ export function WorkflowBuilder({
     setAtTime,
     setCron,
     setEvent,
-    setExecutionMode,
     resetForm,
   ]);
 
@@ -154,16 +147,10 @@ export function WorkflowBuilder({
         (workflow.sandboxId ?? null) === sandboxId
           ? undefined
           : sandboxId;
-      const patchedExecutionMode =
-        workflow.executionMode === executionMode
-          ? undefined
-          : executionMode;
-
       await updateWorkflow({
         _id: workflow._id,
         patch: {
           name: name.trim(),
-          executionMode: patchedExecutionMode,
           trigger,
           instructions: instructions.trim(),
           allowedActions,
@@ -177,7 +164,6 @@ export function WorkflowBuilder({
           trigger,
           instructions: instructions.trim(),
           allowedActions,
-          executionMode,
           inputModalities: ["text"],
           sandboxId: sandboxId ?? undefined,
         },
@@ -209,7 +195,6 @@ export function WorkflowBuilder({
     instructions,
     allowedActions,
     sandboxId,
-    executionMode,
     webhookSecret,
     updateWorkflow,
     createWorkflow,
@@ -276,24 +261,6 @@ export function WorkflowBuilder({
           <div className="flex flex-col gap-2">
             <Label>Sandbox</Label>
             <SandboxSelector value={sandboxId} onChange={setSandboxId} />
-          </div>
-
-          <div className="flex flex-col gap-2">
-            <Label>Execution Mode</Label>
-            <Select value={executionMode} onValueChange={(value) => setExecutionMode(value as ExecutionMode)}>
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="isolated">Isolated</SelectItem>
-                <SelectItem value="latestChat">Latest Chat</SelectItem>
-              </SelectContent>
-            </Select>
-            <p className="text-xs text-muted-foreground">
-              {executionMode === "isolated"
-                ? "Uses a workflow namespace."
-                : "Uses your latest chat namespace."}
-            </p>
           </div>
 
           <TriggerConfig
