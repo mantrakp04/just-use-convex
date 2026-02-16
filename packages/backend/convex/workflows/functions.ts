@@ -337,30 +337,33 @@ async function getLatestChatId(
   organizationId: string,
   memberId: string,
 ): Promise<Id<"chats"> | null> {
-  const paginationOpts = { numItems: 1, cursor: null };
   const [latestUnpinned, latestPinned] = await Promise.all([
-    ctx.table("chats", "organizationId_memberId_isPinned", (q) => q
+    ctx.db
+      .query("chats")
+      .withIndex("organizationId_memberId_isPinned", (q) => q
       .eq("organizationId", organizationId)
       .eq("memberId", memberId)
       .eq("isPinned", false)
     )
       .order("desc")
-      .paginate(paginationOpts),
-    ctx.table("chats", "organizationId_memberId_isPinned", (q) => q
+      .first(),
+    ctx.db
+      .query("chats")
+      .withIndex("organizationId_memberId_isPinned", (q) => q
       .eq("organizationId", organizationId)
       .eq("memberId", memberId)
       .eq("isPinned", true)
     )
       .order("desc")
-      .paginate(paginationOpts),
+      .first(),
   ]);
 
-  const unpinnedDoc = latestUnpinned.page[0]?.doc();
-  const pinnedDoc = latestPinned.page[0]?.doc();
-  if (!unpinnedDoc && !pinnedDoc) return null;
-  if (!unpinnedDoc) return pinnedDoc!._id;
-  if (!pinnedDoc) return unpinnedDoc._id;
-  return unpinnedDoc.updatedAt >= pinnedDoc.updatedAt ? unpinnedDoc._id : pinnedDoc._id;
+  if (!latestUnpinned && !latestPinned) return null;
+  if (!latestUnpinned) return latestPinned!._id;
+  if (!latestPinned) return latestUnpinned._id;
+  return latestUnpinned.updatedAt >= latestPinned.updatedAt
+    ? latestUnpinned._id
+    : latestPinned._id;
 }
 
 function getWorkflowExecutionNamespace(workflowId: Id<"workflows">): string {

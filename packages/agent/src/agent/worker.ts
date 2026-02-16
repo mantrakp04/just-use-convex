@@ -141,7 +141,19 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, AgentArgs> {
     // For workflow mode, use the workflow's sandbox; for chat mode, fetch chat doc
     let sandboxId: string | undefined;
     if (this.modeConfig?.mode === "workflow") {
-      sandboxId = this.modeConfig.workflow.sandboxId;
+      this.chatDoc = null;
+      if (this.modeConfig.workflow.executionMode === "latestChat") {
+        const getFn = this.convexAdapter.getTokenType() === "ext"
+          ? api.chats.index.getExt
+          : api.chats.index.get;
+        const chat = await this.convexAdapter.query(getFn, {
+          _id: this.name as Id<"chats">,
+        }).catch(() => null);
+        if (chat) {
+          this.chatDoc = chat;
+        }
+      }
+      sandboxId = this.modeConfig.workflow.sandboxId ?? this.chatDoc?.sandboxId;
     } else {
       const getFn = this.convexAdapter.getTokenType() === "ext"
         ? api.chats.index.getExt
@@ -471,7 +483,8 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, AgentArgs> {
       }, { persistInitArgs: false });
       this.planAgent = null;
 
-      return this._onChatMessage(() => {});
+      const response = await this._onChatMessage(() => {});
+      return response;
     } catch (error) {
       if (executionId && this.convexAdapter) {
         await this.convexAdapter.mutation(
@@ -514,8 +527,9 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, AgentArgs> {
         await ensureSandboxStarted(this.sandbox, false);
       }
 
-      const isChat = this.modeConfig?.mode === "chat";
-      const isWorkflow = this.modeConfig?.mode === "workflow";
+      const modeConfig = this.modeConfig;
+      const isChat = modeConfig?.mode === "chat";
+      const isWorkflow = modeConfig?.mode === "workflow";
 
       if (isChat && this.chatDoc) {
         const updateFn = this.convexAdapter.getTokenType() === "ext"
@@ -541,12 +555,22 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, AgentArgs> {
       const agent = this.planAgent || (await this._prepAgent());
 
       // Workflow: non-streaming generateText, update execution status
-      if (isWorkflow && this.executionId) {
-        const result = await agent.generateText([{
-          id: crypto.randomUUID(),
-          role: "user" as const,
-          parts: [{ type: "text" as const, text: "Execute this workflow now." }],
-        }]);
+      if (isWorkflow && this.executionId && modeConfig) {
+        const modelMessages = buildWorkflowExecutionMessages(
+          this.messages,
+          this.state.inputModalities,
+          modeConfig.workflow.executionMode,
+        );
+        const result = await agent.generateText(modelMessages);
+
+        if (modeConfig.workflow.executionMode === "latestChat" && this.chatDoc && result.text.trim().length > 0) {
+          const workflowMessage: UIMessage = {
+            id: `workflow-${this.executionId}-${crypto.randomUUID()}`,
+            role: "assistant",
+            parts: [{ type: "text", text: result.text }],
+          };
+          await this.persistMessages([...this.messages, workflowMessage]);
+        }
 
         await this.convexAdapter.mutation(
           api.workflows.index.updateExecutionStatusExt,
@@ -686,6 +710,25 @@ function resolveWorkflowExecutionState(
     model: currentState.model ?? fallbackModel,
     inputModalities: currentState.inputModalities ?? workflow.inputModalities,
   };
+}
+
+function buildWorkflowExecutionMessages(
+  messages: UIMessage[],
+  inputModalities: AgentArgs["inputModalities"],
+  executionMode: Extract<ModeConfig, { mode: "workflow" }>["workflow"]["executionMode"],
+) {
+  const executionPrompt: UIMessage = {
+    id: `workflow-exec-${crypto.randomUUID()}`,
+    role: "user",
+    parts: [{ type: "text", text: "Execute this workflow now." }],
+  };
+
+  if (executionMode !== "latestChat") {
+    return [executionPrompt];
+  }
+
+  const { messages: chatMessages } = processMessagesForAgent(messages, inputModalities);
+  return [...chatMessages, executionPrompt];
 }
 
 function parseTokenFromRequest(request: Request): TokenConfig | null {
