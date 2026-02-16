@@ -91,7 +91,7 @@ export function WorkflowBuilder() {
   );
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-4 w-full max-w-4xl mx-auto">
       <div className="flex items-center gap-2">
         <Button variant="ghost" size="icon" onClick={() => navigate({ to: "/workflows" })}>
           <ArrowLeft className="size-4" />
@@ -99,7 +99,7 @@ export function WorkflowBuilder() {
         <h1 className="text-2xl font-semibold">New Workflow</h1>
       </div>
 
-      <Card>
+      <Card className="border-border border">
         <CardHeader>
           <CardTitle>Configuration</CardTitle>
         </CardHeader>
