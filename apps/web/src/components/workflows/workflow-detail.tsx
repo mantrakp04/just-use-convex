@@ -56,12 +56,12 @@ export function WorkflowDetail({ workflowId }: WorkflowDetailProps) {
 
   const copyWebhookUrl = () => {
     if (trigger.type === "webhook") {
-      const convexUrl = env.VITE_CONVEX_URL?.replace(/\/$/, "");
-      if (!convexUrl) {
-        toast.error("Convex URL is not configured");
+      const convexSiteUrl = env.VITE_CONVEX_SITE_URL?.replace(/\/$/, "");
+      if (!convexSiteUrl) {
+        toast.error("Convex site URL is not configured");
         return;
       }
-      const url = `${convexUrl}/webhooks/workflows?id=${workflowId}`;
+      const url = `${convexSiteUrl}/webhooks/workflows?id=${workflowId}`;
       navigator.clipboard.writeText(url);
       toast.success("Webhook URL copied");
     }
