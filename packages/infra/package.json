@@ -1,0 +1,28 @@
+{
+  "name": "@just-use-convex/infra",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./web/alchemy.run": "./web/alchemy.run.ts"
+  },
+  "scripts": {
+    "dev": "bun run dev:web",
+    "deploy": "bun run deploy:web",
+    "destroy": "bun run destroy:web",
+    "dev:web": "bunx alchemy dev web/alchemy.run.ts",
+    "deploy:web": "bunx alchemy deploy web/alchemy.run.ts",
+    "destroy:web": "bunx alchemy destroy web/alchemy.run.ts",
+    "check-types": "tsc --noEmit"
+  },
+  "dependencies": {
+    "alchemy": "^0.83.3"
+  },
+  "devDependencies": {
+    "@just-use-convex/env": "workspace:*",
+    "@just-use-convex/config": "workspace:*",
+    "@cloudflare/workers-types": "^4.20260214.0",
+    "@types/node": "^24.10.13",
+    "typescript": "catalog:"
+  }
+}

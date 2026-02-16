@@ -10,7 +10,9 @@
     "NODE_ENV": "production",
     "DAYTONA_TARGET": "us",
     "DEFAULT_MODEL": "openai/gpt-5.2-chat",
-    "MAX_BACKGROUND_DURATION_MS": "3600000"
+    "MAX_BACKGROUND_DURATION_MS": "3600000",
+    "SANDBOX_INACTIVITY_TIMEOUT_MINUTES": "2",
+    "SANDBOX_VOLUME_MOUNT_PATH": "/home/daytona"
   },
   "durable_objects": {
     "bindings": [

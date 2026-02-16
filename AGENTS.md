@@ -228,6 +228,8 @@ File-based TanStack Router:
 - always use convex ents for convex related stuff
 - whenever implementing something for convex, analyze adjecent and relevant files for similar pattern implementation
 - whenever working with external libraries always query context7 for their relevant docs
+- keep env schemas consolidated: extend `packages/env/src/web.ts` for web+infra needs instead of adding `packages/env/src/infra.ts`
+- keep `dev`/`deploy`/`destroy` scripts with the owning package (`packages/agent` owns agent commands)
 
 ## Background & Subagents
 
