@@ -393,6 +393,10 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, AgentArgs> {
     options?: OnChatMessageOptions
   ): Promise<Response> {
     if (!this.state?.model) {
+      await this._markWorkflowExecutionFailed(
+        new Error("Model not configured."),
+        this.modeConfig?.mode === "workflow" ? this.modeConfig.executionId : null,
+      );
       return new Response("Model not configured.", { status: 400 });
     }
 

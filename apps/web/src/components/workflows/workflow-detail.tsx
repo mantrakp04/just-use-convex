@@ -67,6 +67,15 @@ export function WorkflowDetail({ workflowId }: WorkflowDetailProps) {
     }
   };
 
+  const copyWebhookSecret = () => {
+    if (trigger.type === "webhook" && trigger.secret) {
+      navigator.clipboard.writeText(trigger.secret);
+      toast.success("Webhook secret copied");
+      return;
+    }
+    toast.error("Webhook secret unavailable");
+  };
+
   return (
     <div className="flex h-full min-h-0 flex-col gap-4 w-full max-w-4xl mx-auto">
       <div className="flex shrink-0 items-center justify-between">
@@ -121,10 +130,26 @@ export function WorkflowDetail({ workflowId }: WorkflowDetailProps) {
               </span>
             )}
             {trigger.type === "webhook" && (
-              <Button variant="outline" size="sm" onClick={copyWebhookUrl} className="w-fit gap-1">
-                <Copy className="size-3" />
-                Copy URL
-              </Button>
+              <div className="flex flex-col gap-1">
+                <div className="flex flex-wrap gap-1">
+                  <Button variant="outline" size="sm" onClick={copyWebhookUrl} className="w-fit gap-1">
+                    <Copy className="size-3" />
+                    Copy URL
+                  </Button>
+                  {trigger.secret && (
+                    <Button variant="outline" size="sm" onClick={copyWebhookSecret} className="w-fit gap-1">
+                      <Copy className="size-3" />
+                      Copy Secret
+                    </Button>
+                  )}
+                </div>
+                {trigger.secret && (
+                  <div className="flex flex-col gap-0.5 text-xs text-muted-foreground">
+                    <span>Secret: {maskSecret(trigger.secret)}</span>
+                    <span>x-webhook-signature: sha256=HMAC_SHA256(secret, raw_body)</span>
+                  </div>
+                )}
+              </div>
             )}
           </CardContent>
         </Card>
@@ -193,4 +218,9 @@ function parseTrigger(triggerJson: string): { type: string; event?: string; cron
   } catch {
     return { type: "unknown" };
   }
+}
+
+function maskSecret(secret: string): string {
+  if (secret.length <= 10) return secret;
+  return `${secret.slice(0, 6)}...${secret.slice(-4)}`;
 }

@@ -66,7 +66,15 @@ const handleWorkflowWebhook = httpAction(async (ctx, request) => {
     });
   }
 
-  // Validate signature header
+  // Read body once (needed for signature verification + payload forwarding).
+  let body = "";
+  try {
+    body = await request.text();
+  } catch {
+    // empty body is fine
+  }
+
+  // Validate signature header as HMAC-SHA256(secret, raw body).
   const signature = request.headers.get("x-webhook-signature");
   if (!trigger.secret) {
     return new Response(JSON.stringify({ error: "Webhook secret is not configured" }), {
@@ -74,25 +82,20 @@ const handleWorkflowWebhook = httpAction(async (ctx, request) => {
       headers: { "Content-Type": "application/json", ...buildCorsHeaders(request) },
     });
   }
-  if (!signature || !timingSafeEqual(signature, trigger.secret)) {
+  const validSignature = signature
+    ? await verifyWebhookSignature(signature, trigger.secret, body)
+    : false;
+  if (!validSignature) {
     return new Response(JSON.stringify({ error: "Invalid signature" }), {
       status: 401,
       headers: { "Content-Type": "application/json", ...buildCorsHeaders(request) },
     });
   }
 
-  // Parse body
-  let body = "{}";
-  try {
-    body = await request.text();
-  } catch {
-    // empty body is fine
-  }
-
   const parsedBody = parseJsonSafely(body);
   const triggerPayload = JSON.stringify({
     type: "webhook",
-    body: body.length === 0 ? {} : (parsedBody ?? body),
+    body: body.length === 0 ? {} : (parsedBody.ok ? parsedBody.value : body),
     headers: extractHeaders(request.headers, SENSITIVE_WEBHOOK_HEADERS),
     timestamp: Date.now(),
   });
@@ -182,12 +185,55 @@ function extractHeaders(
   return result;
 }
 
-function parseJsonSafely(value: string): unknown | null {
+function parseJsonSafely(value: string): { ok: true; value: unknown } | { ok: false } {
   try {
-    return JSON.parse(value);
+    return { ok: true, value: JSON.parse(value) };
   } catch {
+    return { ok: false };
+  }
+}
+
+async function verifyWebhookSignature(
+  signatureHeader: string,
+  secret: string,
+  rawBody: string,
+): Promise<boolean> {
+  const normalizedSignature = normalizeWebhookSignature(signatureHeader);
+  if (!normalizedSignature) {
+    return false;
+  }
+
+  const expectedSignature = await hmacSha256Hex(secret, rawBody);
+  return timingSafeEqual(normalizedSignature, expectedSignature);
+}
+
+function normalizeWebhookSignature(signature: string): string | null {
+  const trimmed = signature.trim();
+  const withoutPrefix = trimmed.toLowerCase().startsWith("sha256=")
+    ? trimmed.slice("sha256=".length)
+    : trimmed;
+
+  if (!/^[a-f0-9]{64}$/i.test(withoutPrefix)) {
     return null;
   }
+
+  return withoutPrefix.toLowerCase();
+}
+
+async function hmacSha256Hex(secret: string, payload: string): Promise<string> {
+  const key = await crypto.subtle.importKey(
+    "raw",
+    new TextEncoder().encode(secret),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"],
+  );
+  const signature = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(payload));
+  return bytesToHex(new Uint8Array(signature));
+}
+
+function bytesToHex(bytes: Uint8Array): string {
+  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
 function timingSafeEqual(a: string, b: string): boolean {

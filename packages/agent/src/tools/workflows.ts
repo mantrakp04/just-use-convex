@@ -3,42 +3,7 @@ import { z } from "zod";
 import { api } from "@just-use-convex/backend/convex/_generated/api";
 import type { Id } from "@just-use-convex/backend/convex/_generated/dataModel";
 import type { ConvexAdapter } from "@just-use-convex/backend/convex/lib/convexAdapter";
-
-const triggerSchema = z.discriminatedUnion("type", [
-  z.object({
-    type: z.literal("webhook"),
-    secret: z.string(),
-  }),
-  z.object({
-    type: z.literal("schedule"),
-    cron: z.string(),
-  }),
-  z.object({
-    type: z.literal("event"),
-    event: z.enum([
-      "on_chat_create",
-      "on_chat_delete",
-      "on_sandbox_provision",
-      "on_sandbox_delete",
-      "on_todo_create",
-      "on_todo_complete",
-    ]),
-  }),
-]);
-
-const workflowPatchSchema = z
-  .object({
-    name: z.string().optional(),
-    executionMode: z.enum(["isolated", "latestChat"]).optional(),
-    trigger: triggerSchema.optional(),
-    instructions: z.string().optional(),
-    allowedActions: z.array(z.enum(["send_message", "http_request", "notify"])).optional(),
-    model: z.string().optional(),
-    inputModalities: z.array(z.enum(["text", "image", "file"])).optional(),
-    sandboxId: z.string().nullable().optional(),
-    enabled: z.boolean().optional(),
-  })
-  .refine((patch) => Object.keys(patch).length > 0, "At least one patch field is required.");
+import { UpdateArgs } from "@just-use-convex/backend/convex/workflows/types";
 
 export async function createWorkflowToolkit(
   workflowId: Id<"workflows">,
@@ -83,7 +48,7 @@ export async function createWorkflowToolkit(
     return convexAdapter.query(api.workflows.index.getExecution, { _id });
   };
 
-  const updateWorkflow = async (_id: Id<"workflows">, patch: z.infer<typeof workflowPatchSchema>) => {
+  const updateWorkflow = async (_id: Id<"workflows">, patch: z.infer<typeof UpdateArgs.shape.patch>) => {
     if (isExternal) {
       return convexAdapter.mutation(api.workflows.index.updateExt, { _id, patch });
     }
@@ -187,7 +152,7 @@ export async function createWorkflowToolkit(
     description: "Update workflow fields by ID. Defaults to the currently executing workflow when omitted.",
     parameters: z.object({
       workflowId: z.string().optional().describe("Workflow ID. Omit to use the current workflow in this execution."),
-      patch: workflowPatchSchema.describe("Patch object for workflow updates."),
+      patch: UpdateArgs.shape.patch.describe("Patch object for workflow updates."),
     }),
     execute: async ({ workflowId: workflowIdArg, patch }) => {
       const targetWorkflowId = resolveWorkflowId(workflowIdArg, workflowId);

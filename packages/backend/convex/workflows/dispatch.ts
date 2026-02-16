@@ -33,8 +33,9 @@ export const dispatchWorkflow = internalAction({
     const agentUrl = env.AGENT_URL;
     const doInstanceName = namespace;
 
+    let response: Response;
     try {
-      const response = await fetch(`${agentUrl}/agents/agent-worker/${doInstanceName}/executeWorkflow`, {
+      response = await fetch(`${agentUrl}/agents/agent-worker/${doInstanceName}/executeWorkflow`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -47,20 +48,23 @@ export const dispatchWorkflow = internalAction({
           triggerPayload: args.triggerPayload ?? "{}",
         }),
       });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        await ctx.runMutation(internal.workflows.internalMutations.failExecution, {
-          executionId,
-          error: `Dispatch failed: ${response.status} ${errorText}`,
-        });
-      }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       await ctx.runMutation(internal.workflows.internalMutations.failExecution, {
         executionId,
         error: `Dispatch error: ${message}`,
       });
+      throw error;
+    }
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      const message = `Dispatch failed: ${response.status} ${errorText}`;
+      await ctx.runMutation(internal.workflows.internalMutations.failExecution, {
+        executionId,
+        error: message,
+      });
+      throw new Error(message);
     }
   },
 });

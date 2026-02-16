@@ -56,13 +56,14 @@ export function ExecutionLog({ workflowId }: ExecutionLogProps) {
 function ExecutionItem({ execution }: { execution: WorkflowExecution }) {
   const [expanded, setExpanded] = useState(false);
 
-  const statusColor: Record<string, string> = {
+  const statusColor: Record<string, "default" | "secondary" | "destructive" | undefined> = {
     pending: "secondary",
     running: "default",
     completed: "default",
     failed: "destructive",
     cancelled: "secondary",
   };
+  const badgeVariant = statusColor[execution.status] ?? "secondary";
 
   return (
     <div
@@ -71,7 +72,7 @@ function ExecutionItem({ execution }: { execution: WorkflowExecution }) {
     >
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <Badge variant={statusColor[execution.status] as "default" | "secondary" | "destructive"}>
+          <Badge variant={badgeVariant}>
             {execution.status}
           </Badge>
           <span className="text-xs text-muted-foreground">

@@ -14,11 +14,15 @@ export function buildPatchData(
 
   for (const [key, value] of Object.entries(patch)) {
     if (value === undefined) continue;
+    if (value === null) {
+      patchData[key] = undefined;
+      continue;
+    }
 
     if (transforms?.[key]) {
       Object.assign(patchData, transforms[key](value));
     } else {
-      patchData[key] = value === null ? undefined : value;
+      patchData[key] = value;
     }
   }
 

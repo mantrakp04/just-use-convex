@@ -166,7 +166,6 @@ export async function UpdateWorkflow(ctx: zMutationCtx, args: z.infer<typeof typ
 
   await workflow.patch({
     ...patchData,
-    updatedAt: Date.now(),
   });
   return workflow;
 }
@@ -255,10 +254,25 @@ export async function ListExecutions(ctx: zQueryCtx, args: z.infer<typeof types.
 }
 
 export async function GetExecution(ctx: zQueryCtx, args: z.infer<typeof types.GetExecutionArgs>) {
+  assertPermission(
+    ctx.identity.organizationRole,
+    { workflow: ["read"] },
+    "You are not authorized to view this execution"
+  );
+
   const execution = await ctx.table("workflowExecutions").getX(args._id);
   assertOrganizationAccess(
     execution.organizationId,
     ctx.identity.activeOrganizationId,
+    "You are not authorized to view this execution"
+  );
+  assertScopedPermission(
+    ctx.identity.organizationRole,
+    ctx.identity.memberId,
+    execution.memberId,
+    { workflow: ["read"] },
+    { workflow: ["readAny"] },
+    "You are not authorized to view this execution",
     "You are not authorized to view this execution"
   );
   return execution.doc();

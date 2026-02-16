@@ -107,7 +107,10 @@ export function augmentParametersSchema(
   shape: ZodRawShape,
   config: ToolCallConfig,
 ): ZodObject<ZodRawShape> {
-  const nextShape: ZodRawShape = { ...shape };
+  type MutableZodRawShape = {
+    -readonly [K in keyof ZodRawShape]: ZodRawShape[K];
+  };
+  const nextShape: MutableZodRawShape = { ...shape };
 
   if (config.allowAgentSetDuration && !("timeout" in nextShape)) {
     nextShape.timeout = z
