@@ -98,7 +98,6 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, AgentArgs> {
     }
     this.convexAdapter = await createConvexAdapter(this.env.CONVEX_URL, activeTokenConfig);
 
-    // Store modeConfig if provided via args (workflow mode passes it directly)
     if (initArgs.modeConfig) {
       this.modeConfig = initArgs.modeConfig;
     }
@@ -175,7 +174,7 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, AgentArgs> {
     const extraToolkits: Toolkit[] = [];
     if (modeConfig.mode === "workflow") {
       extraToolkits.push(
-        createWorkflowActionToolkit(modeConfig.workflow.allowedActions, modeConfig.convexAdapter),
+        createWorkflowActionToolkit(modeConfig.workflow.allowedActions, this.convexAdapter!),
       );
     }
 
@@ -460,7 +459,6 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, AgentArgs> {
           mode: "workflow",
           workflow,
           triggerPayload: body.triggerPayload,
-          convexAdapter: adapter,
         },
       });
 

@@ -1,4 +1,4 @@
-import type { TokenConfig, ConvexAdapter } from "@just-use-convex/backend/convex/lib/convexAdapter";
+import type { TokenConfig } from "@just-use-convex/backend/convex/lib/convexAdapter";
 import type { Doc } from "@just-use-convex/backend/convex/_generated/dataModel";
 
 export type AgentArgs = {
@@ -18,7 +18,6 @@ export interface WorkflowModeConfig {
   mode: "workflow";
   workflow: Doc<"workflows"> & { sandbox?: Doc<"sandboxes"> | null };
   triggerPayload: string;
-  convexAdapter: ConvexAdapter;
 }
 
 export type ModeConfig = ChatModeConfig | WorkflowModeConfig;
