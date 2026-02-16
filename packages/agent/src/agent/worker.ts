@@ -10,40 +10,6 @@ import {
   type ToolSet,
   type UIMessage,
 } from "ai";
-import type { worker } from "../../alchemy.run";
-import { api } from "@just-use-convex/backend/convex/_generated/api";
-import type { Id } from "@just-use-convex/backend/convex/_generated/dataModel";
-import {
-  type ConvexAdapter,
-  createConvexAdapter,
-  parseTokenFromUrl,
-} from "@just-use-convex/backend/convex/lib/convexAdapter";
-import { env as agentDefaults } from "@just-use-convex/env/agent";
-import type { FunctionReturnType } from "convex/server";
-import { parseStreamToUI } from "../utils/fullStreamParser";
-import {
-  BackgroundTaskStore,
-  TruncatedOutputStore,
-  patchToolWithBackgroundSupport,
-  createBackgroundTaskToolkit,
-} from "../tools/utils/wrapper";
-import { generateTitle } from "./chat-meta";
-import {
-  extractMessageText,
-  processMessagesForAgent,
-} from "./messages";
-import type { AgentArgs, AgentDeps, AgentEnv, ModeConfig } from "./types";
-import {
-  buildRetrievalMessage,
-  deleteMessageVectors,
-  indexMessagesInVectorStore,
-} from "./vectorize";
-import {
-  createSandboxFsFunctions,
-  createSandboxPtyFunctions,
-} from "../tools/sandbox";
-import { Daytona, type Sandbox } from "@daytonaio/sdk";
-import { ensureSandboxStarted, downloadFileUrlsInSandbox } from "../tools/utils/sandbox";
 import {
   Agent,
   AgentRegistry,
@@ -54,192 +20,47 @@ import {
   setWaitUntil,
   type Toolkit,
 } from "@voltagent/core";
+import type { worker } from "../../alchemy.run";
+import { api } from "@just-use-convex/backend/convex/_generated/api";
+import type { Id } from "@just-use-convex/backend/convex/_generated/dataModel";
+import {
+  ConvexAdapter,
+  createConvexAdapter,
+  parseTokenFromUrl,
+} from "@just-use-convex/backend/convex/lib/convexAdapter";
+import { env as agentDefaults } from "@just-use-convex/env/agent";
+import type { FunctionReturnType } from "convex/server";
 import { createAiClient } from "./client";
 import { CHAT_SYSTEM_PROMPT, WORKFLOW_SYSTEM_PROMPT, TASK_PROMPT } from "./prompt";
 import { createAskUserToolkit } from "../tools/ask-user";
 import { createWebSearchToolkit } from "../tools/websearch";
-import { createDaytonaToolkit } from "../tools/sandbox";
+import { parseStreamToUI } from "../utils/fullStreamParser";
+import {
+  BackgroundTaskStore,
+  TruncatedOutputStore,
+  patchToolWithBackgroundSupport,
+} from "../tools/utils/wrapper";
+import { createBackgroundTaskToolkit } from "../tools/utils/wrapper/toolkit";
+import { generateTitle } from "./chat-meta";
+import {
+  extractMessageText,
+  processMessagesForAgent,
+} from "./messages";
+import type { AgentArgs } from "./types";
+import {
+  buildRetrievalMessage,
+  deleteMessageVectors,
+  indexMessagesInVectorStore,
+} from "./vectorize";
+import {
+  createDaytonaToolkit,
+  createSandboxFsFunctions,
+  createSandboxPtyFunctions,
+} from "../tools/sandbox";
 import { createWorkflowActionToolkit } from "../tools/workflow-actions";
-
-// ─── Config helpers ──────────────────────────────────────────────
-
-const FORWARDED_STREAM_EVENTS = [
-  "tool-input-start",
-  "tool-input-delta",
-  "tool-input-end",
-  "tool-call",
-  "tool-result",
-  "tool-error",
-  "text-delta",
-  "reasoning-delta",
-  "source",
-  "error",
-  "finish",
-] as const;
-
-const PLANNING_INSTRUCTIONS = [
-  "Use write_todos when a task is multi-step or when a plan improves clarity.",
-  "If the request is simple and direct, you may skip write_todos.",
-  "When you do use write_todos, keep 3-8 concise steps.",
-  "When creating a plan, all steps must start with 'pending' status.",
-  "When all steps are executed, all the todos must end with 'done' status.",
-  "Regularly check and update the status of the todos to ensure they are accurate and up to date.",
-].join("\n");
-
-function initVoltAgentRegistry(
-  env: AgentEnv,
-  waitUntil: (promise: Promise<unknown>) => void,
-): void {
-  setWaitUntil(waitUntil);
-  const registry = AgentRegistry.getInstance();
-  if (env.VOLTAGENT_PUBLIC_KEY && env.VOLTAGENT_SECRET_KEY) {
-    registry.setGlobalVoltOpsClient(
-      createVoltOpsClient({
-        publicKey: env.VOLTAGENT_PUBLIC_KEY as string,
-        secretKey: env.VOLTAGENT_SECRET_KEY as string,
-      })
-    );
-  }
-}
-
-async function buildPlanAgent(
-  deps: AgentDeps,
-  config: ModeConfig,
-): Promise<PlanAgent> {
-  const { env, model, reasoningEffort, daytona, sandbox, backgroundTaskStore, truncatedOutputStore } = deps;
-
-  const subagents = await buildSubagents(model, reasoningEffort, daytona, sandbox);
-
-  const toolkits: Toolkit[] = [
-    createWebSearchToolkit(),
-    createAskUserToolkit(),
-  ];
-
-  if (config.mode === "workflow") {
-    toolkits.push(
-      createWorkflowActionToolkit(config.workflow.allowedActions, config.convexAdapter),
-    );
-  }
-
-  const systemPrompt = config.mode === "chat"
-    ? CHAT_SYSTEM_PROMPT(config.chat)
-    : WORKFLOW_SYSTEM_PROMPT(config.workflow, config.triggerPayload);
-
-  const agent = new PlanAgent({
-    name: config.mode === "chat" ? "Assistant" : "WorkflowExecutor",
-    systemPrompt,
-    model: createAiClient(model, reasoningEffort),
-    tools: [...toolkits, createBackgroundTaskToolkit(backgroundTaskStore, truncatedOutputStore)],
-    planning: false,
-    task: {
-      taskDescription: TASK_PROMPT,
-      supervisorConfig: {
-        fullStreamEventForwarding: {
-          types: [...FORWARDED_STREAM_EVENTS],
-        },
-      },
-    },
-    subagents,
-    filesystem: false,
-    maxSteps: config.mode === "chat" ? 100 : 50,
-    ...buildObservability(env),
-  });
-
-  agent.addTools([
-    createPlanningToolkit(agent, {
-      systemPrompt: PLANNING_INSTRUCTIONS,
-    }),
-  ]);
-
-  for (const sub of subagents) {
-    agent.addSubAgent(sub);
-  }
-
-  return agent;
-}
-
-function patchAgentModel(
-  agent: PlanAgent,
-  model: string,
-  reasoningEffort?: "low" | "medium" | "high",
-): void {
-  const aiModel = createAiClient(model, reasoningEffort);
-
-  for (const subagent of agent.getSubAgents()) {
-    if (subagent && typeof subagent === "object" && "model" in subagent) {
-      Object.defineProperty(subagent, "model", {
-        value: createAiClient(model, reasoningEffort),
-        writable: true,
-        configurable: true,
-      });
-    }
-  }
-
-  Object.defineProperty(agent, "model", {
-    value: aiModel,
-    writable: true,
-    configurable: true,
-  });
-}
-
-function patchBackgroundTasks(
-  agent: PlanAgent,
-  backgroundTaskStore: BackgroundTaskStore,
-  truncatedOutputStore: TruncatedOutputStore,
-  env: AgentEnv,
-): void {
-  const tasks = agent.getTools().find((t) => t.name === "task");
-  if (tasks) {
-    const maxBackgroundDuration = Number(
-      env.MAX_BACKGROUND_DURATION_MS ?? agentDefaults.MAX_BACKGROUND_DURATION_MS,
-    );
-    patchToolWithBackgroundSupport(tasks, backgroundTaskStore, truncatedOutputStore, {
-      maxDuration: 30 * 60 * 1000,
-      maxBackgroundDuration: maxBackgroundDuration > 0 ? maxBackgroundDuration : undefined,
-      allowAgentSetDuration: true,
-      allowBackground: true,
-    });
-  }
-}
-
-async function buildSubagents(
-  model: string,
-  reasoningEffort: "low" | "medium" | "high" | undefined,
-  daytona: Daytona | null,
-  sandbox: Sandbox | null,
-): Promise<Agent[]> {
-  if (!sandbox || !daytona) return [];
-
-  const toolkit = await createDaytonaToolkit(daytona, sandbox);
-  return [
-    new Agent({
-      name: toolkit.name,
-      purpose: toolkit.description,
-      model: createAiClient(model, reasoningEffort),
-      instructions: toolkit.instructions ?? "",
-      tools: toolkit.tools,
-    }),
-  ];
-}
-
-function buildObservability(env: AgentEnv) {
-  if (!env.VOLTAGENT_PUBLIC_KEY || !env.VOLTAGENT_SECRET_KEY) return {};
-  return {
-    observability: createVoltAgentObservability({
-      serviceName: "just-use-convex-agent",
-      serviceVersion: "1.0.0",
-      voltOpsSync: {
-        sampling: { strategy: "always" as const },
-        maxQueueSize: 2048,
-        maxExportBatchSize: 512,
-        scheduledDelayMillis: 5000,
-        exportTimeoutMillis: 30000,
-      },
-    }),
-  };
-}
-
-// ─── AgentWorker ────────────────────────────────────────────────
+import { Daytona, type Sandbox } from "@daytonaio/sdk";
+import { ensureSandboxStarted, downloadFileUrlsInSandbox } from "../tools/utils/sandbox";
+import type { ModeConfig } from "./types";
 
 type CallableFunctionInstance = object;
 type CallableServiceMethodsMap = Record<string, (...args: unknown[]) => unknown>;
@@ -251,12 +72,11 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, AgentArgs> {
   private backgroundTaskStore = new BackgroundTaskStore(this.ctx.waitUntil.bind(this.ctx));
   private truncatedOutputStore = new TruncatedOutputStore();
   private chatDoc: FunctionReturnType<typeof api.chats.index.get> | null = null;
+  private modeConfig: ModeConfig | null = null;
   private callableFunctions: CallableFunctionInstance[] = [];
   private didRegisterCallableFunctions = false;
   private daytona: Daytona | null = null;
   private sandbox: Sandbox | null = null;
-
-  // ─── Initialization ───────────────────────────────────────────
 
   private async _init(args?: AgentArgs): Promise<void> {
     if (args) {
@@ -278,25 +98,47 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, AgentArgs> {
     }
     this.convexAdapter = await createConvexAdapter(this.env.CONVEX_URL, activeTokenConfig);
 
-    const getFn = this.convexAdapter.getTokenType() === "ext"
-      ? api.chats.index.getExt
-      : api.chats.index.get;
-    const chat = await this.convexAdapter.query(getFn, {
-      _id: this.name as Id<"chats">,
-    });
-    if (!chat) {
-      throw new Error("Unauthorized: No chat found");
+    // Store modeConfig if provided via args (workflow mode passes it directly)
+    if (initArgs.modeConfig) {
+      this.modeConfig = initArgs.modeConfig;
     }
-    this.chatDoc = chat;
 
-    this.daytona = new Daytona({
-      apiKey: this.env.DAYTONA_API_KEY ?? agentDefaults.DAYTONA_API_KEY,
-      apiUrl: this.env.DAYTONA_API_URL ?? agentDefaults.DAYTONA_API_URL,
-      target: this.env.DAYTONA_TARGET ?? agentDefaults.DAYTONA_TARGET,
-    });
-    if (!this.sandbox && this.chatDoc?.sandboxId) {
-      this.sandbox = await this.daytona.get(this.chatDoc?.sandboxId);
-      await ensureSandboxStarted(this.sandbox);
+    // For workflow mode, use the workflow's sandbox; for chat mode, fetch chat doc
+    if (this.modeConfig?.mode === "workflow") {
+      const sandboxId = this.modeConfig.workflow.sandboxId;
+      if (sandboxId) {
+        this.daytona = new Daytona({
+          apiKey: this.env.DAYTONA_API_KEY ?? agentDefaults.DAYTONA_API_KEY,
+          apiUrl: this.env.DAYTONA_API_URL ?? agentDefaults.DAYTONA_API_URL,
+          target: this.env.DAYTONA_TARGET ?? agentDefaults.DAYTONA_TARGET,
+        });
+        if (!this.sandbox) {
+          this.sandbox = await this.daytona.get(sandboxId);
+          await ensureSandboxStarted(this.sandbox);
+        }
+      }
+    } else {
+      const getFn = this.convexAdapter.getTokenType() === "ext"
+        ? api.chats.index.getExt
+        : api.chats.index.get;
+      const chat = await this.convexAdapter.query(getFn, {
+        _id: this.name as Id<"chats">,
+      });
+      if (!chat) {
+        throw new Error("Unauthorized: No chat found");
+      }
+      this.chatDoc = chat;
+      this.modeConfig = { mode: "chat", chat: this.chatDoc! };
+
+      this.daytona = new Daytona({
+        apiKey: this.env.DAYTONA_API_KEY ?? agentDefaults.DAYTONA_API_KEY,
+        apiUrl: this.env.DAYTONA_API_URL ?? agentDefaults.DAYTONA_API_URL,
+        target: this.env.DAYTONA_TARGET ?? agentDefaults.DAYTONA_TARGET,
+      });
+      if (!this.sandbox && this.chatDoc?.sandboxId) {
+        this.sandbox = await this.daytona.get(this.chatDoc.sandboxId);
+        await ensureSandboxStarted(this.sandbox);
+      }
     }
 
     this.callableFunctions = [
@@ -305,42 +147,162 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, AgentArgs> {
     await this._registerCallableFunctions();
   }
 
-  // ─── Agent Preparation ────────────────────────────────────────
-
   private async _prepAgent(): Promise<PlanAgent> {
-    initVoltAgentRegistry(this.env, this.ctx.waitUntil.bind(this.ctx));
-
-    if (!this.state.model) {
-      throw new Error("Agent not initialized: missing model");
+    const boundWaitUntil = this.ctx.waitUntil.bind(this.ctx);
+    setWaitUntil(boundWaitUntil);
+    const registry = AgentRegistry.getInstance();
+    if (this.env.VOLTAGENT_PUBLIC_KEY && this.env.VOLTAGENT_SECRET_KEY) {
+      registry.setGlobalVoltOpsClient(
+        createVoltOpsClient({
+          publicKey: this.env.VOLTAGENT_PUBLIC_KEY as string,
+          secretKey: this.env.VOLTAGENT_SECRET_KEY as string,
+        })
+      );
     }
 
-    const agent = await buildPlanAgent(
-      {
-        env: this.env,
-        model: this.state.model,
-        reasoningEffort: this.state.reasoningEffort,
-        daytona: this.daytona,
-        sandbox: this.sandbox,
-        backgroundTaskStore: this.backgroundTaskStore,
-        truncatedOutputStore: this.truncatedOutputStore,
-      },
-      {
-        mode: "chat",
-        chat: this.chatDoc!,
-      },
-    );
+    if (!this.state.model || !this.modeConfig) {
+      throw new Error("Agent not initialized: missing model or modeConfig");
+    }
+    const model = this.state.model;
+    const modeConfig = this.modeConfig;
 
-    patchBackgroundTasks(agent, this.backgroundTaskStore, this.truncatedOutputStore, this.env);
+    const subagents: Agent[] = [];
+    const toolkitPromises: Promise<Toolkit>[] = [];
+    if (this.sandbox && this.daytona) {
+      toolkitPromises.push(createDaytonaToolkit(this.daytona, this.sandbox));
+    }
+
+    const extraToolkits: Toolkit[] = [];
+    if (modeConfig.mode === "workflow") {
+      extraToolkits.push(
+        createWorkflowActionToolkit(modeConfig.workflow.allowedActions, modeConfig.convexAdapter),
+      );
+    }
+
+    for (const toolkit of [...(await Promise.all(toolkitPromises)), ...extraToolkits]) {
+      subagents.push(
+        new Agent({
+          name: toolkit.name,
+          purpose: toolkit.description,
+          model: createAiClient(model, this.state.reasoningEffort),
+          instructions: toolkit.instructions ?? '',
+          tools: toolkit.tools,
+        })
+      );
+    }
+
+    const systemPrompt = modeConfig.mode === "chat"
+      ? CHAT_SYSTEM_PROMPT(modeConfig.chat)
+      : WORKFLOW_SYSTEM_PROMPT(modeConfig.workflow, modeConfig.triggerPayload);
+
+    const agent = new PlanAgent({
+      name: modeConfig.mode === "chat" ? "Assistant" : "WorkflowExecutor",
+      systemPrompt,
+      model: createAiClient(model, this.state.reasoningEffort),
+      tools: [
+        createWebSearchToolkit(),
+        createAskUserToolkit(),
+        createBackgroundTaskToolkit(this.backgroundTaskStore, this.truncatedOutputStore),
+      ],
+      planning: false,
+      task: {
+        taskDescription: TASK_PROMPT,
+        supervisorConfig: {
+          fullStreamEventForwarding: {
+            types: [
+              "tool-input-start",
+              "tool-input-delta",
+              "tool-input-end",
+              "tool-call",
+              "tool-result",
+              "tool-error",
+              "text-delta",
+              "reasoning-delta",
+              "source",
+              "error",
+              "finish",
+            ],
+          },
+        },
+      },
+      subagents,
+      filesystem: false,
+      maxSteps: modeConfig.mode === "chat" ? 100 : 50,
+      ...(this.env.VOLTAGENT_PUBLIC_KEY && this.env.VOLTAGENT_SECRET_KEY ? {
+        observability: createVoltAgentObservability({
+          serviceName: "just-use-convex-agent",
+          serviceVersion: "1.0.0",
+          voltOpsSync: {
+            sampling: {
+              strategy: "always",
+            },
+            maxQueueSize: 2048,
+            maxExportBatchSize: 512,
+            scheduledDelayMillis: 5000,
+            exportTimeoutMillis: 30000,
+          },
+        }),
+      } : {}),
+    });
+
+    agent.addTools([
+      createPlanningToolkit(agent, {
+        systemPrompt: [
+          "Use write_todos when a task is multi-step or when a plan improves clarity.",
+          "If the request is simple and direct, you may skip write_todos.",
+          "When you do use write_todos, keep 3-8 concise steps.",
+          "When creating a plan, all steps must start with 'pending' status.",
+          "When all steps are executed, all the todos must end with 'done' status.",
+          "Regularly check and update the status of the todos to ensure they are accurate and up to date.",
+        ].join("\n"),
+      }),
+    ]);
+
+    for (const subagent of subagents) {
+      agent.addSubAgent(subagent);
+    }
+
     this.planAgent = agent;
+    await this._patchAgent();
+
     return agent;
   }
 
   private async _patchAgent(): Promise<void> {
-    if (!this.planAgent || !this.state.model) return;
-    patchAgentModel(this.planAgent, this.state.model, this.state.reasoningEffort);
-  }
+    const agent = this.planAgent;
+    if (!agent) return;
 
-  // ─── Callable Functions ───────────────────────────────────────
+    const tasks = agent.getTools().find((t) => t.name === "task");
+    if (tasks) {
+      const maxBackgroundDuration = Number(this.env.MAX_BACKGROUND_DURATION_MS ?? agentDefaults.MAX_BACKGROUND_DURATION_MS);
+      patchToolWithBackgroundSupport(tasks, this.backgroundTaskStore, this.truncatedOutputStore, {
+        maxDuration: 30 * 60 * 1000,
+        maxBackgroundDuration: maxBackgroundDuration > 0 ? maxBackgroundDuration : undefined,
+        allowAgentSetDuration: true,
+        allowBackground: true,
+      });
+    }
+
+    const subagents = agent.getSubAgents();
+    for (const subagent of subagents) {
+      if (subagent && typeof subagent === "object" && "model" in subagent) {
+        Object.defineProperty(subagent, "model", {
+          value: createAiClient(this.state.model!, this.state.reasoningEffort),
+          writable: true,
+          configurable: true,
+        });
+      }
+    }
+
+    const model = this.state.model;
+    const reasoningEffort = this.state.reasoningEffort;
+
+    Object.defineProperty(agent, "model", {
+      value: createAiClient(model!, reasoningEffort),
+      writable: true,
+      configurable: true,
+    });
+  }
 
   private async _registerCallableFunctions() {
     if (this.didRegisterCallableFunctions || !this.callableFunctions.length) {
@@ -383,8 +345,6 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, AgentArgs> {
 
     this.didRegisterCallableFunctions = true;
   }
-
-  // ─── Lifecycle ────────────────────────────────────────────────
 
   override async onRequest(request: Request): Promise<Response> {
     const url = new URL(request.url);
@@ -459,8 +419,6 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, AgentArgs> {
     await this.persistMessages(messages);
   }
 
-  // ─── Workflow Execution ───────────────────────────────────────
-
   private async _handleExecuteWorkflow(request: Request): Promise<Response> {
     let executionId: Id<"workflowExecutions"> | null = null;
     try {
@@ -494,39 +452,21 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, AgentArgs> {
 
       const model = workflow.model ?? agentDefaults.DEFAULT_MODEL;
 
-      // Initialize Daytona + sandbox if workflow has one attached
-      let daytona: Daytona | null = null;
-      let sandbox: Sandbox | null = null;
-
-      if (workflow.sandboxId) {
-        daytona = new Daytona({
-          apiKey: this.env.DAYTONA_API_KEY ?? agentDefaults.DAYTONA_API_KEY,
-          apiUrl: this.env.DAYTONA_API_URL ?? agentDefaults.DAYTONA_API_URL,
-          target: this.env.DAYTONA_TARGET ?? agentDefaults.DAYTONA_TARGET,
-        });
-        sandbox = await daytona.get(workflow.sandboxId);
-        await ensureSandboxStarted(sandbox);
-      }
-
-      initVoltAgentRegistry(this.env, this.ctx.waitUntil.bind(this.ctx));
-
-      const agent = await buildPlanAgent(
-        {
-          env: this.env,
-          model,
-          daytona,
-          sandbox,
-          backgroundTaskStore: this.backgroundTaskStore,
-          truncatedOutputStore: this.truncatedOutputStore,
-        },
-        {
+      // Init with workflow modeConfig — _init handles sandbox setup via modeConfig
+      await this._init({
+        model,
+        tokenConfig,
+        modeConfig: {
           mode: "workflow",
           workflow,
           triggerPayload: body.triggerPayload,
           convexAdapter: adapter,
         },
-      );
+      });
 
+      await this._prepAgent();
+
+      const agent = this.planAgent!;
       const result = await agent.generateText([{
         id: crypto.randomUUID(),
         role: "user" as const,
@@ -574,9 +514,7 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, AgentArgs> {
     }
   }
 
-  // ─── Chat Message Handling ────────────────────────────────────
-
-  override async onChatMessage(
+  private async _onChatMessage(
     _onFinish: StreamTextOnFinishCallback<ToolSet>,
     options?: OnChatMessageOptions
   ): Promise<Response> {
@@ -596,22 +534,27 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, AgentArgs> {
         await ensureSandboxStarted(this.sandbox, false);
       }
 
-      const updateFn = this.convexAdapter.getTokenType() === "ext"
-        ? api.chats.index.updateExt
-        : api.chats.index.update;
-      void this.convexAdapter.mutation(updateFn, {
-        _id: this.chatDoc?._id,
-        patch: {},
-      }).catch(() => {});
+      const isChat = this.modeConfig?.mode === "chat";
 
-      if (this.messages.length === 1 && this.messages[0]) {
-        const textContent = extractMessageText(this.messages[0]);
-        if (textContent) {
-          void generateTitle({
-            convexAdapter: this.convexAdapter,
-            chatId: this.chatDoc?._id,
-            userMessage: textContent,
-          }).catch(() => {});
+      // Chat-specific: touch updatedAt + generate title
+      if (isChat && this.chatDoc) {
+        const updateFn = this.convexAdapter.getTokenType() === "ext"
+          ? api.chats.index.updateExt
+          : api.chats.index.update;
+        void this.convexAdapter.mutation(updateFn, {
+          _id: this.chatDoc._id,
+          patch: {},
+        }).catch(() => {});
+
+        if (this.messages.length === 1 && this.messages[0]) {
+          const textContent = extractMessageText(this.messages[0]);
+          if (textContent) {
+            void generateTitle({
+              convexAdapter: this.convexAdapter,
+              chatId: this.chatDoc._id,
+              userMessage: textContent,
+            }).catch(() => {});
+          }
         }
       }
 
@@ -619,7 +562,7 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, AgentArgs> {
         processMessagesForAgent(this.messages, this.state.inputModalities);
 
       const [retrievalMessage, downloadedPaths] = await Promise.all([
-        lastUserIdx !== -1 && lastUserQueryText
+        isChat && lastUserIdx !== -1 && lastUserQueryText
           ? buildRetrievalMessage({
               env: this.env,
               memberId: this.chatDoc?.memberId,
@@ -667,5 +610,9 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, AgentArgs> {
       console.error("onChatMessage failed", error);
       return new Response("Internal Server Error", { status: 500 });
     }
+  }
+
+  override async onChatMessage(onFinish: StreamTextOnFinishCallback<ToolSet>, options?: OnChatMessageOptions): Promise<Response> {
+    return await this._onChatMessage(onFinish, options);
   }
 }
