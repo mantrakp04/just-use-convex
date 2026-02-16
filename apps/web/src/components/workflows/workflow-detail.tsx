@@ -1,6 +1,7 @@
 import { useNavigate } from "@tanstack/react-router";
 import type { Id } from "@just-use-convex/backend/convex/_generated/dataModel";
 import { useWorkflow, useWorkflows } from "@/hooks/use-workflows";
+import { cronToHumanReadable } from "@/store/workflows";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -20,9 +21,9 @@ export function WorkflowDetail({ workflowId }: WorkflowDetailProps) {
 
   if (isLoading) {
     return (
-      <div className="flex flex-col gap-4">
-        <div className="h-8 w-48 bg-muted animate-pulse rounded" />
-        <div className="h-40 bg-muted animate-pulse rounded-xl" />
+      <div className="flex h-full min-h-0 flex-col gap-4">
+        <div className="h-8 w-48 shrink-0 bg-muted animate-pulse rounded" />
+        <div className="min-h-0 flex-1 bg-muted animate-pulse rounded-xl" />
       </div>
     );
   }
@@ -47,8 +48,8 @@ export function WorkflowDetail({ workflowId }: WorkflowDetailProps) {
   };
 
   return (
-    <div className="flex flex-col gap-4">
-      <div className="flex items-center justify-between">
+    <div className="flex h-full min-h-0 flex-col gap-4">
+      <div className="flex shrink-0 items-center justify-between">
         <div className="flex items-center gap-2">
           <Button variant="ghost" size="icon" onClick={() => navigate({ to: "/workflows" })}>
             <ArrowLeft className="size-4" />
@@ -76,10 +77,10 @@ export function WorkflowDetail({ workflowId }: WorkflowDetailProps) {
       </div>
 
       {workflow.description && (
-        <p className="text-muted-foreground text-sm">{workflow.description}</p>
+        <p className="shrink-0 text-muted-foreground text-sm">{workflow.description}</p>
       )}
 
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid shrink-0 grid-cols-2 gap-4">
         <Card>
           <CardHeader className="py-3">
             <CardTitle className="text-sm">Trigger</CardTitle>
@@ -90,7 +91,9 @@ export function WorkflowDetail({ workflowId }: WorkflowDetailProps) {
               <span className="text-sm text-muted-foreground">{trigger.event}</span>
             )}
             {trigger.type === "schedule" && trigger.cron && (
-              <code className="text-sm font-mono">{trigger.cron}</code>
+              <span className="text-sm" title={trigger.cron}>
+                {cronToHumanReadable(trigger.cron)}
+              </span>
             )}
 {trigger.type === "webhook" && (
               <Button variant="outline" size="sm" onClick={copyWebhookUrl} className="w-fit gap-1">
@@ -132,16 +135,18 @@ export function WorkflowDetail({ workflowId }: WorkflowDetailProps) {
         )}
       </div>
 
-      <Card>
-        <CardHeader className="py-3">
-          <CardTitle className="text-sm">Instructions</CardTitle>
-        </CardHeader>
-        <CardContent className="py-2">
-          <pre className="text-sm whitespace-pre-wrap font-sans">{workflow.instructions}</pre>
-        </CardContent>
-      </Card>
+      <div className="grid min-h-0 flex-1 grid-rows-[1fr_2fr] gap-4">
+        <Card className="flex min-h-0 flex-col overflow-hidden">
+          <CardHeader className="shrink-0 py-3">
+            <CardTitle className="text-sm">Instructions</CardTitle>
+          </CardHeader>
+          <CardContent className="min-h-0 shrink overflow-y-auto py-2">
+            <pre className="text-sm whitespace-pre-wrap font-sans">{workflow.instructions}</pre>
+          </CardContent>
+        </Card>
 
-      <ExecutionLog workflowId={workflowId} />
+        <ExecutionLog workflowId={workflowId} />
+      </div>
     </div>
   );
 }

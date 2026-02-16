@@ -45,6 +45,72 @@ export function intervalToCron(amount: number, unit: IntervalUnit, startFrom?: s
 }
 
 /**
+ * Converts cron expression to human-readable string.
+ * Handles patterns from intervalToCron/timeToCron; falls back to raw for custom cron.
+ */
+export function cronToHumanReadable(cron: string): string {
+  const parts = cron.trim().split(/\s+/);
+  if (parts.length < 5) return cron;
+
+  const [min, hour, dom, month, dow] = parts;
+
+  // 0 * * * * — every hour (at minute 0)
+  if (min === "0" && hour === "*" && dom === "*" && month === "*" && dow === "*") {
+    return "Every hour";
+  }
+
+  // */N * * * * — every N minutes
+  const minMatch = min.match(/^\*\/(\d+)$/);
+  if (minMatch && hour === "*") {
+    const n = Number(minMatch[1]);
+    return n === 1 ? "Every minute" : `Every ${n} min`;
+  }
+
+  // 0 */N * * * — every N hours
+  const hourMatch = hour.match(/^\*\/(\d+)$/);
+  if (min === "0" && hourMatch) {
+    const n = Number(hourMatch[1]);
+    return n === 1 ? "Every hour" : `Every ${n} hr`;
+  }
+
+  // 0 0 */N * * — every N days
+  const domMatch = dom.match(/^\*\/(\d+)$/);
+  if (min === "0" && hour === "0" && domMatch) {
+    const n = Number(domMatch[1]);
+    return n === 1 ? "Daily" : `Every ${n} days`;
+  }
+
+  // M-H/N H * * * — every N minutes starting at H:M
+  const minRangeMatch = min.match(/^(\d+)-59\/(\d+)$/);
+  if (minRangeMatch && hour !== "*") {
+    const startMin = minRangeMatch[1];
+    const n = minRangeMatch[2];
+    const h = hour.padStart(2, "0");
+    return `Every ${n} min from ${h}:${startMin}`;
+  }
+
+  // M H-N * * * — every N hours starting at H:M
+  const hourRangeMatch = hour.match(/^(\d+)-23\/(\d+)$/);
+  if (min !== "*" && hourRangeMatch) {
+    const m = min.padStart(2, "0");
+    const startH = hourRangeMatch[1];
+    const n = hourRangeMatch[2];
+    return `Every ${n} hr from ${startH}:${m}`;
+  }
+
+  // MM HH * * * — daily at HH:MM (dom/month/dow are *)
+  if (dom === "*" && month === "*" && dow === "*" && min !== "*" && hour !== "*" && !min.includes("/") && !hour.includes("/")) {
+    const m = min.padStart(2, "0");
+    const hh = Number(hour);
+    const ampm = hh >= 12 ? "PM" : "AM";
+    const h12 = hh === 0 ? 12 : hh > 12 ? hh - 12 : hh;
+    return `Daily at ${h12}:${m} ${ampm}`;
+  }
+
+  return cron;
+}
+
+/**
  * Converts "At HH:MM" to a daily cron expression: MM HH * * *
  */
 export function timeToCron(time: string): string {

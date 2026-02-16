@@ -1,5 +1,6 @@
 import { useNavigate } from "@tanstack/react-router";
 import { useWorkflows, useWorkflowsList, type Workflow } from "@/hooks/use-workflows";
+import { cronToHumanReadable } from "@/store/workflows";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
@@ -24,8 +25,8 @@ export function WorkflowList() {
   );
 
   return (
-    <div className="flex flex-col gap-4">
-      <div className="flex items-center justify-between">
+    <div className="flex h-full min-h-0 flex-col gap-4">
+      <div className="flex shrink-0 items-center justify-between">
         <div>
           <h1 className="text-2xl font-semibold">Workflows</h1>
           <p className="text-muted-foreground text-sm">
@@ -39,7 +40,7 @@ export function WorkflowList() {
       </div>
 
       {isLoading && (
-        <div className="flex flex-col gap-2">
+        <div className="flex shrink-0 flex-col gap-2">
           {Array.from({ length: 3 }).map((_, i) => (
             <div key={i} className="h-20 bg-muted animate-pulse rounded-xl" />
           ))}
@@ -47,30 +48,31 @@ export function WorkflowList() {
       )}
 
       {!isLoading && workflows.length === 0 && (
-        <div className="text-center py-12 text-muted-foreground">
+        <div className="shrink-0 py-12 text-center text-muted-foreground">
           <p>No workflows yet.</p>
-          <p className="text-sm mt-1">Create your first workflow to automate tasks.</p>
+          <p className="mt-1 text-sm">Create your first workflow to automate tasks.</p>
         </div>
       )}
 
-      <div className="flex flex-col gap-2">
-        {workflows.map((workflow) => (
-          <WorkflowCard
-            key={workflow._id}
-            workflow={workflow}
-            onClick={() => handleClick(workflow._id)}
-            onToggle={(enabled) => toggleEnabled(workflow._id, enabled)}
-            onDelete={() => deleteWorkflow({ _id: workflow._id })}
-            isDeleting={isDeleting}
-          />
-        ))}
+      <div className="min-h-0 flex-1 overflow-y-auto">
+        <div className="flex flex-col gap-2">
+          {workflows.map((workflow) => (
+            <WorkflowCard
+              key={workflow._id}
+              workflow={workflow}
+              onClick={() => handleClick(workflow._id)}
+              onToggle={(enabled) => toggleEnabled(workflow._id, enabled)}
+              onDelete={() => deleteWorkflow({ _id: workflow._id })}
+              isDeleting={isDeleting}
+            />
+          ))}
+        </div>
+        {status === "CanLoadMore" && (
+          <Button variant="outline" onClick={() => loadMore(20)} className="mx-auto mt-4">
+            Load more
+          </Button>
+        )}
       </div>
-
-      {status === "CanLoadMore" && (
-        <Button variant="outline" onClick={() => loadMore(20)} className="mx-auto">
-          Load more
-        </Button>
-      )}
     </div>
   );
 }
@@ -113,8 +115,8 @@ function WorkflowCard({
               </Badge>
             )}
             {trigger.type === "schedule" && trigger.cron && (
-              <Badge variant="secondary" className="text-xs font-mono">
-                {trigger.cron}
+              <Badge variant="secondary" className="text-xs" title={trigger.cron}>
+                {cronToHumanReadable(trigger.cron)}
               </Badge>
             )}
             <Badge variant="secondary" className="text-xs">

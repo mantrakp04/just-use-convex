@@ -13,11 +13,11 @@ export function ExecutionLog({ workflowId }: ExecutionLogProps) {
   const { results: executions, status, loadMore, isLoading } = useWorkflowExecutions(workflowId);
 
   return (
-    <Card>
-      <CardHeader className="py-3">
+    <Card className="flex min-h-0 flex-col overflow-hidden">
+      <CardHeader className="shrink-0 py-3">
         <CardTitle className="text-sm">Execution History</CardTitle>
       </CardHeader>
-      <CardContent className="py-2">
+      <CardContent className="flex min-h-0 flex-col gap-2 overflow-hidden py-2">
         {isLoading && (
           <div className="flex flex-col gap-2">
             {Array.from({ length: 3 }).map((_, i) => (
@@ -27,21 +27,26 @@ export function ExecutionLog({ workflowId }: ExecutionLogProps) {
         )}
 
         {!isLoading && executions.length === 0 && (
-          <p className="text-sm text-muted-foreground py-4 text-center">
+          <p className="py-4 text-center text-sm text-muted-foreground">
             No executions yet.
           </p>
         )}
 
-        <div className="flex flex-col gap-2">
-          {executions.map((execution) => (
-            <ExecutionItem key={execution._id} execution={execution} />
-          ))}
-        </div>
-
-        {status === "CanLoadMore" && (
-          <Button variant="outline" size="sm" onClick={() => loadMore(20)} className="mt-2 w-full">
-            Load more
-          </Button>
+        {!isLoading && executions.length > 0 && (
+          <>
+            <div className="min-h-0 flex-1 overflow-y-auto">
+              <div className="flex flex-col gap-2">
+                {executions.map((execution) => (
+                  <ExecutionItem key={execution._id} execution={execution} />
+                ))}
+              </div>
+            </div>
+            {status === "CanLoadMore" && (
+              <Button variant="outline" size="sm" onClick={() => loadMore(20)} className="w-full shrink-0">
+                Load more
+              </Button>
+            )}
+          </>
         )}
       </CardContent>
     </Card>
