@@ -112,7 +112,6 @@ export async function CreateWorkflow(ctx: zMutationCtx, args: z.infer<typeof typ
 
   const workflow = await ctx.table("workflows").insert({
     name: args.data.name,
-    description: args.data.description,
     triggerType: trigger.type,
     trigger: JSON.stringify(trigger),
     instructions: args.data.instructions,

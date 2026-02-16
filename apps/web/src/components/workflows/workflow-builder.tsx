@@ -1,7 +1,7 @@
-import { useCallback } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { useAtom } from "jotai";
-import { useWorkflows } from "@/hooks/use-workflows";
+import { useWorkflows, type Workflow } from "@/hooks/use-workflows";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -11,7 +11,6 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { ArrowLeft } from "lucide-react";
 import {
   builderNameAtom,
-  builderDescriptionAtom,
   builderTriggerTypeAtom,
   builderCronAtom,
   builderScheduleModeAtom,
@@ -35,12 +34,25 @@ import {
 import { SandboxSelector } from "@/components/sandboxes/sandbox-selector";
 import { TriggerConfig } from "./trigger-config";
 
-export function WorkflowBuilder() {
+interface WorkflowBuilderProps {
+  mode?: "create" | "edit";
+  workflow?: Workflow;
+  onCancel?: () => void;
+  onSuccess?: () => void;
+}
+
+export function WorkflowBuilder({
+  mode = "create",
+  workflow,
+  onCancel,
+  onSuccess,
+}: WorkflowBuilderProps) {
   const navigate = useNavigate();
-  const { createWorkflow, isCreating } = useWorkflows();
+  const { createWorkflow, updateWorkflow, isCreating, isUpdating } = useWorkflows();
+  const isEditMode = mode === "edit" && !!workflow;
+  const isSubmitting = isEditMode ? isUpdating : isCreating;
 
   const [name, setName] = useAtom(builderNameAtom);
-  const [description, setDescription] = useAtom(builderDescriptionAtom);
   const [triggerType, setTriggerType] = useAtom(builderTriggerTypeAtom);
   const [cron, setCron] = useAtom(builderCronAtom);
   const [scheduleMode, setScheduleMode] = useAtom(builderScheduleModeAtom);
@@ -52,32 +64,138 @@ export function WorkflowBuilder() {
   const [instructions, setInstructions] = useAtom(builderInstructionsAtom);
   const [allowedActions, setAllowedActions] = useAtom(builderAllowedActionsAtom);
   const [sandboxId, setSandboxId] = useAtom(builderSandboxIdAtom);
+  const [webhookSecret, setWebhookSecret] = useState("");
+
+  const resetForm = useCallback(() => {
+    setName("");
+    setInstructions("");
+    setAllowedActions(["notify"]);
+    setSandboxId(null);
+    setTriggerType("event");
+    setScheduleMode("every");
+    setIntervalAmount(30);
+    setIntervalUnit("minutes");
+    setIntervalStart(undefined);
+    setAtTime("09:00");
+    setCron("0 * * * *");
+    setEvent("on_todo_create");
+    setWebhookSecret("");
+  }, [setName, setInstructions, setAllowedActions, setSandboxId, setTriggerType, setScheduleMode, setIntervalAmount, setIntervalUnit, setIntervalStart, setAtTime, setCron, setEvent]);
+
+  useEffect(() => {
+    if (!isEditMode || !workflow) {
+      resetForm();
+      return;
+    }
+
+    const parsed = parseWorkflowTrigger(workflow.trigger);
+    setName(workflow.name);
+    setInstructions(workflow.instructions);
+    setAllowedActions(workflow.allowedActions);
+    setSandboxId(workflow.sandboxId ?? null);
+    setTriggerType(parsed.triggerType);
+    setScheduleMode(parsed.scheduleMode);
+    setIntervalAmount(parsed.intervalAmount);
+    setIntervalUnit(parsed.intervalUnit);
+    setIntervalStart(parsed.intervalStart);
+    setAtTime(parsed.atTime);
+    setCron(parsed.cron);
+    setEvent(parsed.event);
+    setWebhookSecret(parsed.webhookSecret);
+  }, [
+    isEditMode,
+    workflow,
+    setName,
+    setInstructions,
+    setAllowedActions,
+    setSandboxId,
+    setTriggerType,
+    setScheduleMode,
+    setIntervalAmount,
+    setIntervalUnit,
+    setIntervalStart,
+    setAtTime,
+    setCron,
+    setEvent,
+    resetForm,
+  ]);
+
+  useEffect(() => {
+    if (triggerType === "webhook" && !webhookSecret) {
+      setWebhookSecret(generateWebhookSecret());
+    }
+  }, [triggerType, webhookSecret]);
 
   const handleSubmit = useCallback(async () => {
     if (!name.trim() || !instructions.trim()) return;
 
-    const trigger = buildTrigger(triggerType, scheduleMode, intervalAmount, intervalUnit, intervalStart, atTime, cron, event);
+    const trigger = buildTrigger(
+      triggerType,
+      scheduleMode,
+      intervalAmount,
+      intervalUnit,
+      intervalStart,
+      atTime,
+      cron,
+      event,
+      webhookSecret
+    );
 
-    await createWorkflow({
-      data: {
-        name: name.trim(),
-        description: description.trim() || undefined,
-        trigger,
-        instructions: instructions.trim(),
-        allowedActions,
-        sandboxId: sandboxId ?? undefined,
-      },
-    });
+    if (isEditMode && workflow) {
+      await updateWorkflow({
+        _id: workflow._id,
+        patch: {
+          name: name.trim(),
+          trigger,
+          instructions: instructions.trim(),
+          allowedActions,
+          sandboxId: sandboxId ?? undefined,
+        },
+      });
+    } else {
+      await createWorkflow({
+        data: {
+          name: name.trim(),
+          trigger,
+          instructions: instructions.trim(),
+          allowedActions,
+          sandboxId: sandboxId ?? undefined,
+        },
+      });
+    }
 
-    // Reset form
-    setName("");
-    setDescription("");
-    setInstructions("");
-    setAllowedActions(["notify"]);
-    setSandboxId(null);
+    if (isEditMode) {
+      onSuccess?.();
+    } else {
+      resetForm();
+      navigate({ to: "/workflows" });
+    }
 
-    navigate({ to: "/workflows" });
-  }, [name, description, triggerType, scheduleMode, intervalAmount, intervalUnit, intervalStart, atTime, cron, event, instructions, allowedActions, sandboxId, createWorkflow, navigate, setName, setDescription, setInstructions, setAllowedActions, setSandboxId]);
+    if (!isEditMode && onSuccess) {
+      onSuccess();
+    }
+  }, [
+    isEditMode,
+    workflow,
+    name,
+    triggerType,
+    scheduleMode,
+    intervalAmount,
+    intervalUnit,
+    intervalStart,
+    atTime,
+    cron,
+    event,
+    instructions,
+    allowedActions,
+    sandboxId,
+    webhookSecret,
+    updateWorkflow,
+    createWorkflow,
+    navigate,
+    onSuccess,
+    resetForm,
+  ]);
 
   const toggleAction = useCallback(
     (action: AllowedAction) => {
@@ -90,13 +208,33 @@ export function WorkflowBuilder() {
     [setAllowedActions]
   );
 
+  const handleTriggerTypeChange = useCallback((type: TriggerType) => {
+    setTriggerType(type);
+    if (type === "webhook" && !webhookSecret) {
+      setWebhookSecret(generateWebhookSecret());
+    }
+  }, [setTriggerType, webhookSecret]);
+
+  const submitLabel = isEditMode ? "Save Workflow" : "Create Workflow";
+
+  const handleBack = useCallback(() => {
+    if (isEditMode && onCancel) {
+      onCancel();
+      return;
+    }
+    navigate({ to: "/workflows" });
+  }, [isEditMode, navigate, onCancel]);
+  const submittingLabel = isSubmitting
+    ? isEditMode ? "Saving..." : "Creating..."
+    : submitLabel;
+
   return (
     <div className="flex flex-col gap-4 w-full max-w-4xl mx-auto">
       <div className="flex items-center gap-2">
-        <Button variant="ghost" size="icon" onClick={() => navigate({ to: "/workflows" })}>
+        <Button variant="ghost" size="icon" onClick={handleBack}>
           <ArrowLeft className="size-4" />
         </Button>
-        <h1 className="text-2xl font-semibold">New Workflow</h1>
+        <h1 className="text-2xl font-semibold">{isEditMode ? "Edit Workflow" : "New Workflow"}</h1>
       </div>
 
       <Card className="border-border border">
@@ -115,23 +253,13 @@ export function WorkflowBuilder() {
           </div>
 
           <div className="flex flex-col gap-2">
-            <Label htmlFor="description">Description</Label>
-            <Input
-              id="description"
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              placeholder="Optional description"
-            />
-          </div>
-
-          <div className="flex flex-col gap-2">
             <Label>Sandbox</Label>
             <SandboxSelector value={sandboxId} onChange={setSandboxId} />
           </div>
 
           <TriggerConfig
             triggerType={triggerType}
-            onTriggerTypeChange={setTriggerType}
+            onTriggerTypeChange={handleTriggerTypeChange}
             event={event}
             onEventChange={setEvent}
             scheduleMode={scheduleMode}
@@ -180,15 +308,21 @@ export function WorkflowBuilder() {
             </div>
           </div>
         </CardContent>
-      </Card>
+        </Card>
 
-      <Button
-        onClick={handleSubmit}
-        disabled={isCreating || !name.trim() || !instructions.trim()}
-        className="self-end"
-      >
-        {isCreating ? "Creating..." : "Create Workflow"}
-      </Button>
+      <div className="flex items-center justify-end gap-2 self-end">
+        {isEditMode && onCancel && (
+          <Button variant="outline" onClick={onCancel}>
+            Cancel
+          </Button>
+        )}
+        <Button
+          onClick={handleSubmit}
+          disabled={isSubmitting || !name.trim() || !instructions.trim()}
+        >
+          {submittingLabel}
+        </Button>
+      </div>
     </div>
   );
 }
@@ -202,10 +336,11 @@ function buildTrigger(
   atTime: string,
   cron: string,
   event: EventType,
+  webhookSecret?: string,
 ) {
   switch (type) {
     case "webhook":
-      return { type: "webhook" as const, secret: "" };
+      return { type: "webhook" as const, secret: webhookSecret ?? "" };
     case "schedule": {
       let resolvedCron: string;
       switch (scheduleMode) {
@@ -218,4 +353,232 @@ function buildTrigger(
     case "event":
       return { type: "event" as const, event };
   }
+}
+
+type WorkflowTriggerBuilderState = {
+  triggerType: TriggerType;
+  event: EventType;
+  scheduleMode: ScheduleMode;
+  intervalAmount: number;
+  intervalUnit: IntervalUnit;
+  intervalStart: string | undefined;
+  atTime: string;
+  cron: string;
+  webhookSecret: string;
+};
+
+type WorkflowCronBuilderState = Pick<
+  WorkflowTriggerBuilderState,
+  "scheduleMode" | "intervalAmount" | "intervalUnit" | "intervalStart" | "atTime" | "cron"
+>;
+
+function parseWorkflowTrigger(triggerJson: string): WorkflowTriggerBuilderState {
+  const defaults: WorkflowTriggerBuilderState = {
+    triggerType: "event" as TriggerType,
+    event: "on_todo_create" as EventType,
+    scheduleMode: "every" as ScheduleMode,
+    intervalAmount: 30,
+    intervalUnit: "minutes" as IntervalUnit,
+    intervalStart: undefined as string | undefined,
+    atTime: "09:00",
+    cron: "0 * * * *",
+    webhookSecret: "",
+  };
+
+  try {
+    const parsed = JSON.parse(triggerJson) as { type: string; secret?: string; cron?: string; event?: string };
+
+    if (parsed.type === "webhook") {
+      return {
+        ...defaults,
+        triggerType: "webhook",
+        webhookSecret: typeof parsed.secret === "string" ? parsed.secret : "",
+      };
+    }
+
+    if (parsed.type === "event" && typeof parsed.event === "string") {
+      return {
+        ...defaults,
+        triggerType: "event",
+        event: parsed.event as EventType,
+      };
+    }
+
+    if (parsed.type === "schedule" && typeof parsed.cron === "string") {
+      const schedule = parseCronForBuilder(parsed.cron);
+      return { ...defaults, triggerType: "schedule", ...schedule };
+    }
+  } catch {
+    return defaults;
+  }
+
+  return defaults;
+}
+
+function parseCronForBuilder(cron: string): WorkflowCronBuilderState {
+  const normalized = cron.trim();
+  const parts = normalized.split(/\s+/);
+  if (parts.length < 5) {
+    return {
+      scheduleMode: "cron",
+      intervalAmount: 30,
+      intervalUnit: "minutes",
+      intervalStart: undefined,
+      atTime: "09:00",
+      cron: normalized || "0 * * * *",
+    };
+  }
+
+  const [minute, hour, dayOfMonth, month, dayOfWeek] = parts;
+
+  // Every hour at minute patterns, eg `0 */6 * * *`
+  const intervalEveryMinutes = minute.match(/^(\d{1,2})-59\/(\d+)$/);
+  if (
+    intervalEveryMinutes &&
+    hour === "*" &&
+    dayOfMonth === "*" &&
+    month === "*" &&
+    dayOfWeek === "*"
+  ) {
+    return {
+      scheduleMode: "every",
+      intervalAmount: Math.max(1, Number(intervalEveryMinutes[2] ?? 1)),
+      intervalUnit: "minutes",
+      intervalStart: `00:${padCronTime(intervalEveryMinutes[1] ?? "0")}`,
+      atTime: "09:00",
+      cron: normalized,
+    };
+  }
+
+  const everyMinutes = minute.match(/^\*\/(\d+)$/);
+  if (
+    everyMinutes &&
+    hour === "*" &&
+    dayOfMonth === "*" &&
+    month === "*" &&
+    dayOfWeek === "*"
+  ) {
+    return {
+      scheduleMode: "every",
+      intervalAmount: Math.max(1, Number(everyMinutes[1] ?? 1)),
+      intervalUnit: "minutes",
+      intervalStart: undefined,
+      atTime: "09:00",
+      cron: normalized,
+    };
+  }
+
+  const everyHoursRange = hour.match(/^(\d{1,2})-23\/(\d+)$/);
+  if (
+    everyHoursRange &&
+    minute !== "*" &&
+    dayOfMonth === "*" &&
+    month === "*" &&
+    dayOfWeek === "*"
+  ) {
+    return {
+      scheduleMode: "every",
+      intervalAmount: Math.max(1, Number(everyHoursRange[2] ?? 1)),
+      intervalUnit: "hours",
+      intervalStart: `${padCronTime(everyHoursRange[1] ?? "0")}:${padCronTime(minute ?? "0")}`,
+      atTime: "09:00",
+      cron: normalized,
+    };
+  }
+
+  const everyHours = hour.match(/^\*\/(\d+)$/);
+  if (
+    everyHours &&
+    minute === "0" &&
+    dayOfMonth === "*" &&
+    month === "*" &&
+    dayOfWeek === "*"
+  ) {
+    return {
+      scheduleMode: "every",
+      intervalAmount: Math.max(1, Number(everyHours[1] ?? 1)),
+      intervalUnit: "hours",
+      intervalStart: undefined,
+      atTime: "09:00",
+      cron: normalized,
+    };
+  }
+
+  const everyDays = dayOfMonth.match(/^\*\/(\d+)$/);
+  if (
+    everyDays &&
+    minute.match(/^\d{1,2}$/) &&
+    hour.match(/^\d{1,2}$/) &&
+    month === "*" &&
+    dayOfWeek === "*"
+  ) {
+    return {
+      scheduleMode: "every",
+      intervalAmount: Math.max(1, Number(everyDays[1] ?? 1)),
+      intervalUnit: "days",
+      intervalStart: `${padCronTime(hour ?? "0")}:${padCronTime(minute ?? "0")}`,
+      atTime: "09:00",
+      cron: normalized,
+    };
+  }
+
+  if (
+    everyDays &&
+    minute === "0" &&
+    hour === "0" &&
+    month === "*" &&
+    dayOfWeek === "*"
+  ) {
+    return {
+      scheduleMode: "every",
+      intervalAmount: Math.max(1, Number(everyDays[1] ?? 1)),
+      intervalUnit: "days",
+      intervalStart: undefined,
+      atTime: "09:00",
+      cron: normalized,
+    };
+  }
+
+  const dailyAt = minute.match(/^\d{1,2}$/);
+  if (
+    dailyAt &&
+    hour.match(/^\d{1,2}$/) &&
+    dayOfMonth === "*" &&
+    month === "*" &&
+    dayOfWeek === "*" &&
+    !minute.includes("-") &&
+    !minute.includes("/") &&
+    !hour.includes("-") &&
+    !hour.includes("/")
+  ) {
+    return {
+      scheduleMode: "at",
+      intervalAmount: 30,
+      intervalUnit: "minutes",
+      intervalStart: undefined,
+      atTime: `${padCronTime(hour ?? "00")}:${padCronTime(minute ?? "00")}`,
+      cron: normalized,
+    };
+  }
+
+  return {
+    scheduleMode: "cron",
+    intervalAmount: 30,
+    intervalUnit: "minutes",
+    intervalStart: undefined,
+    atTime: "09:00",
+    cron: normalized,
+  };
+}
+
+function padCronTime(value: string) {
+  const num = Number.parseInt(value, 10);
+  if (Number.isNaN(num)) return "00";
+  return `${num}`.padStart(2, "0");
+}
+
+function generateWebhookSecret() {
+  const bytes = new Uint8Array(32);
+  crypto.getRandomValues(bytes);
+  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
 }

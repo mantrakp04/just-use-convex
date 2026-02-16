@@ -126,7 +126,6 @@ export function timeToCron(time: string): string {
 
 // Builder form state atoms
 export const builderNameAtom = atom("");
-export const builderDescriptionAtom = atom("");
 export const builderTriggerTypeAtom = atom<TriggerType>("event");
 export const builderScheduleModeAtom = atom<ScheduleMode>("every");
 export const builderIntervalAmountAtom = atom(30);

@@ -7,6 +7,11 @@ export type AgentArgs = {
   inputModalities?: string[];
   tokenConfig?: TokenConfig;
   modeConfig?: ModeConfig;
+  workflowInit?: {
+    workflowId: string;
+    executionId: string;
+    triggerPayload: string;
+  };
 };
 
 export interface ChatModeConfig {

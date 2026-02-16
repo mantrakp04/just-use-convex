@@ -30,7 +30,6 @@ import {
   type TokenConfig,
 } from "@just-use-convex/backend/convex/lib/convexAdapter";
 import { env as agentDefaults } from "@just-use-convex/env/agent";
-import type { FunctionReturnType } from "convex/server";
 import { createAiClient } from "./client";
 import { CHAT_SYSTEM_PROMPT, WORKFLOW_SYSTEM_PROMPT, TASK_PROMPT } from "./prompt";
 import { createAskUserToolkit } from "../tools/ask-user";
@@ -72,12 +71,13 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, AgentArgs> {
   private planAgent: PlanAgent | null = null;
   private backgroundTaskStore = new BackgroundTaskStore(this.ctx.waitUntil.bind(this.ctx));
   private truncatedOutputStore = new TruncatedOutputStore();
-  private chatDoc: FunctionReturnType<typeof api.chats.index.get> | null = null;
+  private chatDoc: Extract<ModeConfig, { mode: "chat" }>["chat"] | null = null;
   private modeConfig: ModeConfig | null = null;
   private callableFunctions: CallableFunctionInstance[] = [];
   private didRegisterCallableFunctions = false;
   private daytona: Daytona | null = null;
   private sandbox: Sandbox | null = null;
+  private executionId: Id<"workflowExecutions"> | null = null;
 
   private async _init(args?: AgentArgs): Promise<void> {
     if (args) {
@@ -99,24 +99,34 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, AgentArgs> {
     }
     this.convexAdapter = await createConvexAdapter(this.env.CONVEX_URL, activeTokenConfig);
 
-    if (initArgs.modeConfig) {
+    // Resolve workflowInit into a full modeConfig
+    if (initArgs.workflowInit) {
+      const { workflowId, executionId, triggerPayload } = initArgs.workflowInit;
+      this.executionId = executionId as Id<"workflowExecutions">;
+
+      const workflow = await this.convexAdapter.query(
+        api.workflows.index.getForExecutionExt,
+        { _id: workflowId as Id<"workflows"> },
+      );
+      if (!workflow) throw new Error("Workflow not found");
+
+      await this.convexAdapter.mutation(
+        api.workflows.index.updateExecutionStatusExt,
+        { executionId: this.executionId, status: "running" },
+      );
+
+      this.modeConfig = { mode: "workflow", workflow, triggerPayload };
+      if (!currentState.model) {
+        this.setState({ ...currentState, model: workflow.model ?? agentDefaults.DEFAULT_MODEL } as AgentArgs);
+      }
+    } else if (initArgs.modeConfig) {
       this.modeConfig = initArgs.modeConfig;
     }
 
     // For workflow mode, use the workflow's sandbox; for chat mode, fetch chat doc
+    let sandboxId: string | undefined;
     if (this.modeConfig?.mode === "workflow") {
-      const sandboxId = this.modeConfig.workflow.sandboxId;
-      if (sandboxId) {
-        this.daytona = new Daytona({
-          apiKey: this.env.DAYTONA_API_KEY ?? agentDefaults.DAYTONA_API_KEY,
-          apiUrl: this.env.DAYTONA_API_URL ?? agentDefaults.DAYTONA_API_URL,
-          target: this.env.DAYTONA_TARGET ?? agentDefaults.DAYTONA_TARGET,
-        });
-        if (!this.sandbox) {
-          this.sandbox = await this.daytona.get(sandboxId);
-          await ensureSandboxStarted(this.sandbox);
-        }
-      }
+      sandboxId = this.modeConfig.workflow.sandboxId;
     } else {
       const getFn = this.convexAdapter.getTokenType() === "ext"
         ? api.chats.index.getExt
@@ -129,16 +139,17 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, AgentArgs> {
       }
       this.chatDoc = chat;
       this.modeConfig = { mode: "chat", chat: this.chatDoc! };
+      sandboxId = this.chatDoc?.sandboxId;
+    }
 
-      this.daytona = new Daytona({
-        apiKey: this.env.DAYTONA_API_KEY ?? agentDefaults.DAYTONA_API_KEY,
-        apiUrl: this.env.DAYTONA_API_URL ?? agentDefaults.DAYTONA_API_URL,
-        target: this.env.DAYTONA_TARGET ?? agentDefaults.DAYTONA_TARGET,
-      });
-      if (!this.sandbox && this.chatDoc?.sandboxId) {
-        this.sandbox = await this.daytona.get(this.chatDoc.sandboxId);
-        await ensureSandboxStarted(this.sandbox);
-      }
+    this.daytona = new Daytona({
+      apiKey: this.env.DAYTONA_API_KEY ?? agentDefaults.DAYTONA_API_KEY,
+      apiUrl: this.env.DAYTONA_API_URL ?? agentDefaults.DAYTONA_API_URL,
+      target: this.env.DAYTONA_TARGET ?? agentDefaults.DAYTONA_TARGET,
+    });
+    if (sandboxId && !this.sandbox) {
+      this.sandbox = await this.daytona.get(sandboxId);
+      await ensureSandboxStarted(this.sandbox);
     }
 
     this.callableFunctions = [
@@ -416,100 +427,23 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, AgentArgs> {
   }
 
   private async _handleExecuteWorkflow(request: Request): Promise<Response> {
-    let executionId: Id<"workflowExecutions"> | null = null;
-    let adapter: ConvexAdapter | null = null;
-    let tokenConfig: TokenConfig | null = null;
-    try {
-      tokenConfig = parseTokenFromRequest(request);
-      if (!tokenConfig) {
-        return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401 });
-      }
-
-      const body = await request.json() as {
-        executionId: string;
-        workflowId: string;
-        triggerPayload: string;
-      };
-      executionId = body.executionId as Id<"workflowExecutions">;
-
-      adapter = await createConvexAdapter(this.env.CONVEX_URL, tokenConfig);
-
-      const workflow = await adapter.query(
-        api.workflows.index.getForExecutionExt,
-        { _id: body.workflowId as Id<"workflows"> },
-      );
-      if (!workflow) {
-        return new Response(JSON.stringify({ error: "Workflow not found" }), { status: 404 });
-      }
-
-      await adapter.mutation(
-        api.workflows.index.updateExecutionStatusExt,
-        { executionId, status: "running" },
-      );
-
-      const model = workflow.model ?? agentDefaults.DEFAULT_MODEL;
-
-      // Init with workflow modeConfig — _init handles sandbox setup via modeConfig
-      await this._init({
-        model,
-        tokenConfig,
-        modeConfig: {
-          mode: "workflow",
-          workflow,
-          triggerPayload: body.triggerPayload,
-        },
-      });
-
-      await this._prepAgent();
-
-      const agent = this.planAgent!;
-      const result = await agent.generateText([{
-        id: crypto.randomUUID(),
-        role: "user" as const,
-        parts: [{ type: "text" as const, text: "Execute this workflow now." }],
-      }]);
-
-      await adapter.mutation(
-        api.workflows.index.updateExecutionStatusExt,
-        {
-          executionId,
-          status: "completed",
-          agentOutput: result.text,
-          completedAt: Date.now(),
-        } as never,
-      );
-
-      return new Response(JSON.stringify({ status: "completed" }), {
-        status: 200,
-        headers: { "Content-Type": "application/json" },
-      });
-    } catch (error) {
-      console.error("executeWorkflow failed", error);
-      try {
-        if (executionId) {
-          if (!adapter && tokenConfig) {
-            adapter = await createConvexAdapter(this.env.CONVEX_URL, tokenConfig);
-          }
-          if (adapter) {
-            await adapter.mutation(
-              api.workflows.index.updateExecutionStatusExt,
-              {
-                executionId,
-                status: "failed",
-                error: error instanceof Error ? error.message : String(error),
-                completedAt: Date.now(),
-              } as never,
-            );
-          }
-        }
-      } catch {
-        // Best effort
-      }
-
-      return new Response(JSON.stringify({
-        error: error instanceof Error ? error.message : "Workflow execution failed",
-      }), { status: 500 });
+    const tokenConfig = parseTokenFromRequest(request);
+    if (!tokenConfig) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401 });
     }
+
+    const { executionId, workflowId, triggerPayload } = await request.json() as {
+      executionId: string;
+      workflowId: string;
+      triggerPayload: string;
+    };
+
+    await this._init({
+      tokenConfig,
+      workflowInit: { workflowId, executionId, triggerPayload },
+    });
+
+    return this._onChatMessage(() => {});
   }
 
   private async _onChatMessage(
@@ -517,7 +451,7 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, AgentArgs> {
     options?: OnChatMessageOptions
   ): Promise<Response> {
     if (!this.state?.model) {
-      return new Response("Model not configured. Use the model selector in the chat header or pass 'model' as a query parameter when connecting.", { status: 400 });
+      return new Response("Model not configured.", { status: 400 });
     }
 
     try {
@@ -533,8 +467,8 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, AgentArgs> {
       }
 
       const isChat = this.modeConfig?.mode === "chat";
+      const isWorkflow = this.modeConfig?.mode === "workflow";
 
-      // Chat-specific: touch updatedAt + generate title
       if (isChat && this.chatDoc) {
         const updateFn = this.convexAdapter.getTokenType() === "ext"
           ? api.chats.index.updateExt
@@ -556,11 +490,38 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, AgentArgs> {
         }
       }
 
+      const agent = this.planAgent || (await this._prepAgent());
+
+      // Workflow: non-streaming generateText, update execution status
+      if (isWorkflow && this.executionId) {
+        const result = await agent.generateText([{
+          id: crypto.randomUUID(),
+          role: "user" as const,
+          parts: [{ type: "text" as const, text: "Execute this workflow now." }],
+        }]);
+
+        await this.convexAdapter.mutation(
+          api.workflows.index.updateExecutionStatusExt,
+          {
+            executionId: this.executionId,
+            status: "completed",
+            agentOutput: result.text,
+            completedAt: Date.now(),
+          } as never,
+        );
+
+        return new Response(JSON.stringify({ status: "completed" }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+
+      // Chat: streaming with retrieval + file downloads
       const { messages: messagesForAgent, lastUserIdx, lastUserQueryText, lastUserFilePartUrls } =
         processMessagesForAgent(this.messages, this.state.inputModalities);
 
       const [retrievalMessage, downloadedPaths] = await Promise.all([
-        isChat && lastUserIdx !== -1 && lastUserQueryText
+        lastUserIdx !== -1 && lastUserQueryText
           ? buildRetrievalMessage({
               env: this.env,
               memberId: this.chatDoc?.memberId,
@@ -594,7 +555,6 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, AgentArgs> {
         );
       }
 
-      const agent = this.planAgent || (await this._prepAgent());
       const stream = await agent.streamText(modelMessages, {
         abortSignal: options?.abortSignal,
       });
@@ -605,8 +565,23 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, AgentArgs> {
         }),
       });
     } catch (error) {
+      // Workflow: best-effort status update on failure
+      if (this.executionId && this.convexAdapter) {
+        await this.convexAdapter.mutation(
+          api.workflows.index.updateExecutionStatusExt,
+          {
+            executionId: this.executionId,
+            status: "failed",
+            error: error instanceof Error ? error.message : String(error),
+            completedAt: Date.now(),
+          } as never,
+        ).catch(() => {});
+      }
       console.error("onChatMessage failed", error);
-      return new Response("Internal Server Error", { status: 500 });
+      return new Response(
+        JSON.stringify({ error: error instanceof Error ? error.message : "Internal Server Error" }),
+        { status: 500 },
+      );
     }
   }
 

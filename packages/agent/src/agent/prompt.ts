@@ -75,7 +75,6 @@ function buildWorkflowSystemPrompt(workflow: Doc<"workflows">, triggerPayload: s
   return `You are executing a workflow automation.
 
 ## Workflow: ${workflow.name}
-${workflow.description ?? ""}
 
 ## Instructions
 ${workflow.instructions}

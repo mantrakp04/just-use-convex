@@ -236,10 +236,10 @@ File-based TanStack Router:
 
 ## Review Flow
 
-- fetch all PR comments from `greptile`, `cubic`, and `codex`
+- fetch **unresolved** PR comments from `greptile`, `cubic`, and `codex` only
 - normalize comments into a single actionable list with file + line context
 - spawn a background subagent to validate each comment (real issue vs noise/outdated)
-- fix every validated comment in code, following existing project patterns
+- fix every validated comment in code, following existing project patterns, then mark it as resolved
 - run required checks after fixes (`bun check-types` minimum)
 - post a concise end summary with:
   - validated + fixed comments

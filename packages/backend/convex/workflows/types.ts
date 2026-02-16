@@ -37,7 +37,6 @@ export const GetArgs = WorkflowWithSystemFields.pick({ _id: true });
 export const CreateArgs = z.object({
   data: z.object({
     name: z.string(),
-    description: z.string().optional(),
     trigger: triggerSchema,
     instructions: z.string(),
     allowedActions: z.array(allowedActionSchema),
@@ -49,7 +48,6 @@ export const CreateArgs = z.object({
 export const UpdateArgs = WorkflowWithSystemFields.pick({ _id: true }).extend({
   patch: z.object({
     name: z.string(),
-    description: z.string().optional(),
     trigger: triggerSchema,
     instructions: z.string(),
     allowedActions: z.array(allowedActionSchema),

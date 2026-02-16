@@ -7,9 +7,11 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
-import { ArrowLeft, Trash2, Copy, Box } from "lucide-react";
+import { ArrowLeft, Trash2, Copy, Box, Pencil } from "lucide-react";
 import { toast } from "sonner";
 import { ExecutionLog } from "./execution-log";
+import { useState } from "react";
+import { WorkflowBuilder } from "./workflow-builder";
 
 interface WorkflowDetailProps {
   workflowId: Id<"workflows">;
@@ -17,6 +19,7 @@ interface WorkflowDetailProps {
 
 export function WorkflowDetail({ workflowId }: WorkflowDetailProps) {
   const navigate = useNavigate();
+  const [isEditing, setIsEditing] = useState(false);
   const { data: workflow, isLoading } = useWorkflow(workflowId);
   const { deleteWorkflow, toggleEnabled, isDeleting } = useWorkflows();
 
@@ -31,6 +34,17 @@ export function WorkflowDetail({ workflowId }: WorkflowDetailProps) {
 
   if (!workflow) {
     return <p className="text-muted-foreground">Workflow not found.</p>;
+  }
+
+  if (isEditing) {
+    return (
+      <WorkflowBuilder
+        mode="edit"
+        workflow={workflow}
+        onCancel={() => setIsEditing(false)}
+        onSuccess={() => setIsEditing(false)}
+      />
+    );
   }
 
   const trigger = parseTrigger(workflow.trigger);
@@ -66,6 +80,13 @@ export function WorkflowDetail({ workflowId }: WorkflowDetailProps) {
           </Badge>
         </div>
         <div className="flex items-center gap-2">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => setIsEditing(true)}
+          >
+            <Pencil className="size-4" />
+          </Button>
           <Switch
             checked={workflow.enabled}
             onCheckedChange={(enabled) => toggleEnabled(workflowId, enabled)}
