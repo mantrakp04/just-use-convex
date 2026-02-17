@@ -3,7 +3,7 @@ import { agentArgsSchema, type AgentArgs } from "../agent/types";
 import { env } from "@just-use-convex/env/agent";
 
 export function buildInitArgsFromUrl(url: URL): AgentArgs {
-  const args = agentArgsSchema.parse(url.searchParams);
+  const args = agentArgsSchema.parse(Object.fromEntries(url.searchParams.entries()));
   if (args.tokenConfig.type === "ext" && args.tokenConfig.externalToken !== env.EXTERNAL_TOKEN) {
     throw new Error("Unauthorized");
   }

@@ -122,10 +122,11 @@ function AgentInstanceInner({
     onStateUpdate: handleStateUpdate,
     onMessage: handleMessage,
     query: {
-      token: token ?? null,
       model: defaultSettings.model,
       reasoningEffort: defaultSettings.reasoningEffort ?? null,
       inputModalities: defaultSettings.inputModalities?.join(",") ?? null,
+      tokenConfig: JSON.stringify({ type: "jwt", token }),
+      modeConfig: JSON.stringify({ mode: "chat", chat: chatId }),
     },
   });
 

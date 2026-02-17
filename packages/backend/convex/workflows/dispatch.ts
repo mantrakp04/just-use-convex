@@ -27,27 +27,32 @@ export const dispatchWorkflow = internalAction({
     });
 
     // 2. POST to CF Worker to execute workflow
-    // URL format: /agents/{agentNamespace}/{instanceName}/path
+    // URL format: /agents/{agentNamespace}/{instanceName}/path?params
     // agentNamespace = kebab-cased DO binding name ("agent-worker")
     // instanceName = workflow namespace (isolated workflow namespace or latest chat id)
     const agentUrl = env.AGENT_URL;
     const doInstanceName = namespace;
 
+    const searchParams = new URLSearchParams({
+      tokenConfig: JSON.stringify({
+        type: "ext",
+        externalToken: env.EXTERNAL_TOKEN,
+        identifier: { type: "memberId", value: args.memberId },
+      }),
+      modeConfig: JSON.stringify({
+        mode: "workflow",
+        workflow: args.workflowId,
+        executionId,
+        triggerPayload: args.triggerPayload ?? "{}",
+      }),
+    });
+
     let response: Response;
     try {
-      response = await fetch(`${agentUrl}/agents/agent-worker/${doInstanceName}/executeWorkflow`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${env.EXTERNAL_TOKEN}`,
-          "X-Member-Id": args.memberId,
-        },
-        body: JSON.stringify({
-          executionId,
-          workflow: args.workflowId,
-          triggerPayload: args.triggerPayload ?? "{}",
-        }),
-      });
+      response = await fetch(
+        `${agentUrl}/agents/agent-worker/${doInstanceName}/executeWorkflow?${searchParams}`,
+        { method: "POST" },
+      );
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       await ctx.runMutation(internal.workflows.internalMutations.failExecution, {
