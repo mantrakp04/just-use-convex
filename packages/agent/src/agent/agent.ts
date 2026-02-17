@@ -57,9 +57,6 @@ export async function createWorkerPlanAgent({
   truncatedOutputStore,
   waitUntil,
 }: CreateWorkerPlanAgentArgs): Promise<PlanAgent> {
-  if (!state.model) {
-    throw new Error("Agent not initialized: missing model");
-  }
   if (modeConfig.mode === "chat" && !chatDoc) {
     throw new Error("Agent not initialized: missing chat context");
   }
@@ -70,9 +67,8 @@ export async function createWorkerPlanAgent({
   setWaitUntil(waitUntil);
   configureVoltOpsClient(env);
 
-  const model = state.model;
   const subagents = await createSubagents({
-    model,
+    model: state.model,
     reasoningEffort: state.reasoningEffort,
     modeConfig,
     workflowDoc: modeConfig.mode === "workflow" ? workflowDoc : null,
@@ -85,11 +81,10 @@ export async function createWorkerPlanAgent({
   const agent = new PlanAgent({
     name: modeConfig.mode === "chat" ? "Assistant" : "WorkflowExecutor",
     systemPrompt,
-    model: createAiClient(model, state.reasoningEffort),
+    model: createAiClient(state.model, state.reasoningEffort),
     tools: [
-      createWebSearchToolkit(),
-      createAskUserToolkit(),
       createBackgroundTaskToolkit(backgroundTaskStore, truncatedOutputStore),
+      ...(modeConfig.mode === "chat" ? [createAskUserToolkit()] : []),
     ],
     planning: false,
     task: {
@@ -195,18 +190,22 @@ async function createSubagents({
   reasoningEffort: AgentArgs["reasoningEffort"];
 }): Promise<Agent[]> {
   const toolkitPromises: Promise<Toolkit>[] = [];
-  if (modeConfig.mode === "workflow" && convexAdapter) {
-    toolkitPromises.push(createWorkflowToolkit(modeConfig.workflow, convexAdapter));
-  }
   if (sandbox && daytona) {
     toolkitPromises.push(createDaytonaToolkit(daytona, sandbox));
   }
+  toolkitPromises.push(createWebSearchToolkit());
+  if (convexAdapter) {
+    toolkitPromises.push(createWorkflowToolkit(convexAdapter));
+  }
 
-  const extraToolkits: Toolkit[] = modeConfig.mode === "workflow" && convexAdapter && workflowDoc
-    ? [createWorkflowActionToolkit(workflowDoc.allowedActions, convexAdapter)]
-    : [];
+  if (modeConfig.mode === "workflow" && workflowDoc) {
+    if (!convexAdapter) {
+      throw new Error("No convex adapter");
+    }
+    toolkitPromises.push(createWorkflowActionToolkit(workflowDoc.allowedActions, convexAdapter));
+  }
 
-  const toolkits = [...(await Promise.all(toolkitPromises)), ...extraToolkits];
+  const toolkits = await Promise.all(toolkitPromises);
   return toolkits.map((toolkit) => new Agent({
     name: toolkit.name,
     purpose: toolkit.description,

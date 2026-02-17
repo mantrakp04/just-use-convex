@@ -2,10 +2,10 @@ import { createTool, createToolkit, type Toolkit } from "@voltagent/core";
 import { z } from "zod";
 import type { ConvexAdapter } from "@just-use-convex/backend/convex/lib/convexAdapter";
 
-export function createWorkflowActionToolkit(
+export async function createWorkflowActionToolkit(
   allowedActions: string[],
   _convexAdapter: ConvexAdapter,
-): Toolkit {
+): Promise<Toolkit> {
   const sendMessage = createTool({
     name: "send_message",
     description: "Send a workflow message as part of execution output.",

@@ -6,7 +6,6 @@ import type { ConvexAdapter } from "@just-use-convex/backend/convex/lib/convexAd
 import { UpdateArgs } from "@just-use-convex/backend/convex/workflows/types";
 
 export async function createWorkflowToolkit(
-  workflowId: Id<"workflows">,
   convexAdapter: ConvexAdapter,
 ): Promise<Toolkit> {
   const isExternal = convexAdapter.getTokenType() === "ext";
@@ -85,7 +84,7 @@ export async function createWorkflowToolkit(
       workflowId: z.string().optional().describe("Workflow ID. Omit to use the current workflow in this execution."),
     }),
     execute: async ({ workflowId: workflowIdArg }) => {
-      const targetWorkflowId = resolveWorkflowId(workflowIdArg, workflowId);
+      const targetWorkflowId = workflowIdArg as Id<"workflows">;
       const workflow = await getWorkflow(targetWorkflowId);
       return {
         ...workflow,
@@ -111,7 +110,7 @@ export async function createWorkflowToolkit(
       includeOutputPreview = false,
       outputPreviewChars = 500,
     }) => {
-      const targetWorkflowId = resolveWorkflowId(workflowIdArg, workflowId);
+      const targetWorkflowId = workflowIdArg as Id<"workflows">;
       const page = await listWorkflowRuns(targetWorkflowId, { cursor, numItems });
       return {
         ...page,
@@ -155,7 +154,7 @@ export async function createWorkflowToolkit(
       patch: UpdateArgs.shape.patch.describe("Patch object for workflow updates."),
     }),
     execute: async ({ workflowId: workflowIdArg, patch }) => {
-      const targetWorkflowId = resolveWorkflowId(workflowIdArg, workflowId);
+      const targetWorkflowId = workflowIdArg as Id<"workflows">;
       await updateWorkflow(targetWorkflowId, patch);
       const workflow = await getWorkflow(targetWorkflowId);
       return {
@@ -172,7 +171,7 @@ export async function createWorkflowToolkit(
       workflowId: z.string().optional().describe("Workflow ID. Omit to use the current workflow in this execution."),
     }),
     execute: async ({ workflowId: workflowIdArg }) => {
-      const targetWorkflowId = resolveWorkflowId(workflowIdArg, workflowId);
+      const targetWorkflowId = workflowIdArg as Id<"workflows">;
       await deleteWorkflow(targetWorkflowId);
       return {
         deleted: true,
@@ -186,13 +185,6 @@ export async function createWorkflowToolkit(
     description: "Workflow management tools: list/get/getRuns/update/delete plus paginated run output access.",
     tools: [listTool, getTool, getRunsTool, getRunOutputPageTool, updateTool, deleteTool],
   });
-}
-
-function resolveWorkflowId(
-  workflowId: string | undefined,
-  defaultWorkflowId: Id<"workflows">,
-): Id<"workflows"> {
-  return (workflowId ?? defaultWorkflowId) as Id<"workflows">;
 }
 
 function minifyWorkflow(workflow: {
