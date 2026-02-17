@@ -70,7 +70,7 @@ export const workflowsWithSystemFields = {
 };
 
 const workflowsTable = Workflows.table
-  .index("organizationId_memberId", ["organizationId", "memberId", "updatedAt"])
+  .index("organizationId_memberId", ["organizationId", "memberId"])
   .index("organizationId_enabled", ["organizationId", "enabled"])
   .index("organizationId_enabled_triggerType", ["organizationId", "enabled", "triggerType"])
   .index("enabled", ["enabled"])

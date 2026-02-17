@@ -239,27 +239,29 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, AgentArgs> {
 
   override async onRequest(request: Request): Promise<Response> {
     const url = new URL(request.url);
-    const args = buildInitArgsFromUrl(url);
     const isExecuteWorkflow = url.pathname.endsWith("/executeWorkflow") && request.method === "POST";
-    const executionId = args.modeConfig.mode === "workflow" ? args.modeConfig.executionId : null;
+    let executionId: Id<"workflowExecutions"> | null = null;
 
     try {
       if (isExecuteWorkflow) {
+        const args = buildInitArgsFromUrl(url);
         if (args.modeConfig.mode !== "workflow") {
           return new Response(JSON.stringify({ error: "Invalid mode for workflow execution" }), { status: 400 });
         }
+        executionId = args.modeConfig.executionId;
         await this._init(args);
         if (!this.convexAdapter) {
           throw new Error("No convex adapter");
         }
         await this.convexAdapter.mutation(api.workflows.index.updateExecutionStatusExt, {
-          executionId: args.modeConfig.executionId,
+          executionId,
           status: "running",
         });
         return await this._handleExecuteWorkflow();
       }
 
-      await this._init(args);
+      // Chat HTTP requests (get-messages, etc.) — use stored state from onConnect
+      await this._init();
       return await super.onRequest(request);
     } catch (error) {
       await this._markWorkflowExecutionFailed(error, executionId);
@@ -273,7 +275,7 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, AgentArgs> {
 
   override async onConnect(connection: Connection, ctx: ConnectionContext): Promise<void> {
     const url = new URL(ctx.request.url);
-    await this._init(buildInitArgsFromUrl(url));
+    await this._init(buildInitArgsFromUrl(url, this.name as Id<"chats">));
     await this._prepAgent();
     return await super.onConnect(connection, ctx);
   }

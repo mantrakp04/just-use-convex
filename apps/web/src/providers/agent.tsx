@@ -122,6 +122,7 @@ function AgentInstanceInner({
     onStateUpdate: handleStateUpdate,
     onMessage: handleMessage,
     query: {
+      token: token ?? null,
       model: defaultSettings.model,
       reasoningEffort: defaultSettings.reasoningEffort ?? null,
       inputModalities: defaultSettings.inputModalities?.join(",") ?? null,
