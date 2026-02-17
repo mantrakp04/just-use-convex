@@ -4,6 +4,7 @@ import * as types from "./types";
 import { withInvalidCursorRetry } from "../shared/pagination";
 import {
   assertOrganizationAccess,
+  hasPermission,
   assertPermission,
   assertScopedPermission,
 } from "../shared/auth";
@@ -57,14 +58,28 @@ export async function ListTodos(ctx: zQueryCtx, args: z.infer<typeof types.ListA
     { todo: ["read"] },
     "You are not authorized to view todos"
   );
-  if (args.filters.memberId !== undefined && args.filters.memberId !== ctx.identity.memberId) {
+  const canReadAny = hasPermission(ctx.identity.organizationRole, { todo: ["readAny"] });
+  const normalizedArgs: z.infer<typeof types.ListArgs> = {
+    ...args,
+    filters: {
+      ...args.filters,
+      memberId: !canReadAny && args.filters.memberId === undefined
+        ? ctx.identity.memberId
+        : args.filters.memberId,
+    },
+  };
+
+  if (normalizedArgs.filters.memberId !== undefined && normalizedArgs.filters.memberId !== ctx.identity.memberId) {
     assertPermission(
       ctx.identity.organizationRole,
       { todo: ["readAny"] },
       "You are not authorized to view other members' todos"
     );
   }
-  if (args.filters.assignedMemberId !== undefined && args.filters.assignedMemberId !== ctx.identity.memberId) {
+  if (
+    normalizedArgs.filters.assignedMemberId !== undefined
+    && normalizedArgs.filters.assignedMemberId !== ctx.identity.memberId
+  ) {
     assertPermission(
       ctx.identity.organizationRole,
       { todo: ["readAny"] },
@@ -74,16 +89,16 @@ export async function ListTodos(ctx: zQueryCtx, args: z.infer<typeof types.ListA
 
   // If filtering by assigned member, get the set of todo IDs first
   let assignedTodoIds: Set<string> | null = null;
-  if (args.filters.assignedMemberId !== undefined) {
+  if (normalizedArgs.filters.assignedMemberId !== undefined) {
     const assignments = await ctx.table("todoAssignedMembers", "memberId", (q) =>
-      q.eq("memberId", args.filters.assignedMemberId!)
+      q.eq("memberId", normalizedArgs.filters.assignedMemberId!)
     );
     assignedTodoIds = new Set(assignments.map((a) => a.todoId));
   }
 
   let todos;
   todos = await withInvalidCursorRetry(
-    args,
+    normalizedArgs,
     (nextArgs) => runTodosQuery(ctx, nextArgs),
     (nextArgs) => ({ ...nextArgs, paginationOpts: { ...nextArgs.paginationOpts, cursor: null } })
   );

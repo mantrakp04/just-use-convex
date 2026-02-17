@@ -10,7 +10,7 @@ export const agentArgsSchema = z.object({
   reasoningEffort: z.enum(["low", "medium", "high"]).optional(),
   inputModalities: z.preprocess(
     (v) => (typeof v === "string" ? v.split(",") : v),
-    z.array(z.string()),
+    z.array(z.enum(["text", "file", "image"])),
   ),
   tokenConfig: jsonPreprocess(z.custom<TokenConfig>()),
   modeConfig: jsonPreprocess(z.custom<ModeConfig>()),

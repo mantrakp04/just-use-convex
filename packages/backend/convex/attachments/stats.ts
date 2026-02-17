@@ -1,6 +1,7 @@
 import { orgMemberAttachmentsByOrg, orgMemberAttachmentsByMember } from "./aggregates";
 import type { zQueryCtx } from "../functions";
 import { exactBounds } from "../shared/aggregates";
+import { assertPermission } from "../shared/auth";
 
 export async function GetMemberAttachmentStats(ctx: zQueryCtx) {
   const orgId = ctx.identity.activeOrganizationId;
@@ -15,6 +16,12 @@ export async function GetMemberAttachmentStats(ctx: zQueryCtx) {
 }
 
 export async function GetOrgAttachmentStats(ctx: zQueryCtx) {
+  assertPermission(
+    ctx.identity.organizationRole,
+    { attachment: ["readAny"] },
+    "You are not authorized to view organization attachment stats"
+  );
+
   const orgId = ctx.identity.activeOrganizationId;
 
   const total = await orgMemberAttachmentsByOrg.count(ctx, exactBounds(orgId));

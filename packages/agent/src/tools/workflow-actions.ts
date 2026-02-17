@@ -2,6 +2,12 @@ import { createTool, createToolkit, type Toolkit } from "@voltagent/core";
 import { z } from "zod";
 import type { ConvexAdapter } from "@just-use-convex/backend/convex/lib/convexAdapter";
 
+const MAX_REDIRECTS = 5;
+const BLOCKED_HOST_EXACT = new Set(["localhost", "metadata.google.internal"]);
+const BLOCKED_HOST_SUFFIXES = [".localhost", ".local"];
+const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308]);
+const URL_SAFE_METHODS = new Set(["GET", "HEAD"]);
+
 export async function createWorkflowActionToolkit(
   allowedActions: string[],
   _convexAdapter: ConvexAdapter,
@@ -85,18 +91,17 @@ function assertSafeHttpUrl(rawUrl: string): void {
 
   const hostname = url.hostname.toLowerCase();
 
-  if (
-    hostname === "localhost" ||
-    hostname.endsWith(".localhost") ||
-    hostname.endsWith(".local") ||
-    hostname === "metadata.google.internal"
-  ) {
+  if (isBlockedHost(hostname)) {
     throw new Error(`Blocked host: ${hostname}`);
   }
 
   if (isPrivateIpv4(hostname) || isPrivateIpv6(hostname)) {
     throw new Error(`Blocked private address: ${hostname}`);
   }
+}
+
+function isBlockedHost(hostname: string): boolean {
+  return BLOCKED_HOST_EXACT.has(hostname) || BLOCKED_HOST_SUFFIXES.some((suffix) => hostname.endsWith(suffix));
 }
 
 async function fetchWithSafeRedirects(
@@ -108,7 +113,7 @@ async function fetchWithSafeRedirects(
   let body = init.body;
   let headers = init.headers;
 
-  for (let redirectCount = 0; redirectCount <= 5; redirectCount++) {
+  for (let redirectCount = 0; redirectCount <= MAX_REDIRECTS; redirectCount++) {
     assertSafeHttpUrl(currentUrl.toString());
 
     const response = await fetch(currentUrl.toString(), {
@@ -123,7 +128,7 @@ async function fetchWithSafeRedirects(
       return response;
     }
 
-    if (redirectCount === 5) {
+    if (redirectCount === MAX_REDIRECTS) {
       throw new Error("Too many redirects.");
     }
 
@@ -140,7 +145,7 @@ async function fetchWithSafeRedirects(
 
     currentUrl = nextUrl;
 
-    if (response.status === 303 || ((response.status === 301 || response.status === 302) && method !== "GET" && method !== "HEAD")) {
+    if (shouldResetMethod(response.status, method)) {
       method = "GET";
       body = undefined;
     }
@@ -150,7 +155,7 @@ async function fetchWithSafeRedirects(
 }
 
 function isRedirectStatus(status: number): boolean {
-  return status === 301 || status === 302 || status === 303 || status === 307 || status === 308;
+  return REDIRECT_STATUSES.has(status);
 }
 
 function stripSensitiveHeaders(headersInit: HeadersInit | undefined): Headers {
@@ -159,6 +164,10 @@ function stripSensitiveHeaders(headersInit: HeadersInit | undefined): Headers {
   headers.delete("proxy-authorization");
   headers.delete("cookie");
   return headers;
+}
+
+function shouldResetMethod(status: number, method: string): boolean {
+  return status === 303 || ((status === 301 || status === 302) && !URL_SAFE_METHODS.has(method));
 }
 
 function isPrivateIpv4(hostname: string): boolean {
@@ -181,7 +190,10 @@ function isPrivateIpv4(hostname: string): boolean {
 }
 
 function isPrivateIpv6(hostname: string): boolean {
-  const normalized = normalizeIpv6Hostname(hostname);
+  const normalized = hostname[0] === "[" && hostname.at(-1) === "]"
+    ? hostname.slice(1, -1)
+    : hostname;
+
   if (!normalized.includes(":")) return false;
   if (normalized === "::1") return true;
 
@@ -199,13 +211,6 @@ function isPrivateIpv6(hostname: string): boolean {
     normalized.startsWith("fd") ||
     normalized.startsWith("fe80:")
   );
-}
-
-function normalizeIpv6Hostname(hostname: string): string {
-  if (hostname.startsWith("[") && hostname.endsWith("]")) {
-    return hostname.slice(1, -1);
-  }
-  return hostname;
 }
 
 function parseIpv4FromMappedIpv6(hostname: string): string | null {

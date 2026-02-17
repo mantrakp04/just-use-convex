@@ -20,8 +20,10 @@ import { allAttachmentAggregates } from "./attachments/aggregates";
 import { sandboxDaytonaTrigger } from "./tables/sandboxes";
 import { workflowEventTrigger } from "./workflows/triggers";
 import { env } from "@just-use-convex/env/backend";
+import type { UserIdentity } from "convex/server";
 
 const EXTERNAL_TOKEN = env.EXTERNAL_TOKEN;
+const UNAUTHORIZED_IDENTITY_ERROR = "Unauthorized: User must be authenticated with an active organization";
 
 const triggers = new Triggers<DataModel>();
 
@@ -70,20 +72,28 @@ export const externalFields = v.object({
   ...baseIdentity.fields,
 });
 
+function parseAuthIdentity(
+  identity: UserIdentity | null
+): Infer<typeof baseIdentity> {
+  if (!identity?.subject || !identity?.activeOrganizationId) {
+    throw new Error("Unauthorized: User must be authenticated with an active organization");
+  }
+  const parsedIdentity: Infer<typeof baseIdentity> = {
+    userId: identity.subject,
+    activeOrganizationId: identity.activeOrganizationId as string,
+    activeTeamId: identity.activeTeamId as string | undefined,
+    organizationRole: identity.organizationRole as string,
+    memberId: identity.memberId as string,
+  };
+
+  return parsedIdentity;
+}
+
 export const zQuery = zCustomQuery(baseQuery, {
   args: {},
   input: async (ctx) => {
     const identity = await ctx.auth.getUserIdentity();
-    if (!identity?.subject || !identity?.activeOrganizationId) {
-      throw new Error("Unauthorized: User must be authenticated with an active organization");
-    }
-    const parsedIdentity: Infer<typeof baseIdentity> = {
-      userId: identity.subject,
-      activeOrganizationId: identity.activeOrganizationId as string,
-      activeTeamId: identity.activeTeamId as string | undefined,
-      organizationRole: identity.organizationRole as string,
-      memberId: identity.memberId as string,
-    };
+    const parsedIdentity = parseAuthIdentity(identity);
     return {
       ctx: { ...ctx, table: entsTableFactory(ctx, entDefinitions), identity: parsedIdentity },
       args: {},
@@ -114,16 +124,7 @@ export const zMutation = zCustomMutation(baseMutation, {
   args: {},
   input: async (ctx) => {
     const identity = await ctx.auth.getUserIdentity();
-    if (!identity?.subject || !identity?.activeOrganizationId) {
-      throw new Error("Unauthorized: User must be authenticated with an active organization");
-    }
-    const parsedIdentity: Infer<typeof baseIdentity> = {
-      userId: identity.subject,
-      activeOrganizationId: identity.activeOrganizationId as string,
-      activeTeamId: identity.activeTeamId as string | undefined,
-      organizationRole: identity.organizationRole as string,
-      memberId: identity.memberId as string,
-    };
+    const parsedIdentity = parseAuthIdentity(identity);
     return {
       ctx: { ...ctx, table: entsTableFactory(ctx, entDefinitions), identity: parsedIdentity },
       args: {},
@@ -156,16 +157,7 @@ export const zAction = zCustomAction(baseAction, {
   args: {},
   input: async (ctx) => {
     const identity = await ctx.auth.getUserIdentity();
-    if (!identity?.subject || !identity?.activeOrganizationId) {
-      throw new Error("Unauthorized: User must be authenticated with an active organization");
-    }
-    const parsedIdentity: Infer<typeof baseIdentity> = {
-      userId: identity.subject,
-      activeOrganizationId: identity.activeOrganizationId as string,
-      activeTeamId: identity.activeTeamId as string | undefined,
-      organizationRole: identity.organizationRole as string,
-      memberId: identity.memberId as string,
-    };
+    const parsedIdentity = parseAuthIdentity(identity);
     return {
       ctx: { ...ctx, identity: parsedIdentity },
       args: {},
