@@ -235,6 +235,7 @@ function UserSettingsPage() {
         <CardContent>
           <form
             onSubmit={async (e) => {
+              e.preventDefault();
               e.stopPropagation();
               await passwordForm.handleSubmit();
             }}
