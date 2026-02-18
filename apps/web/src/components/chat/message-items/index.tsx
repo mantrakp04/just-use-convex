@@ -1,5 +1,6 @@
 
 import { memo, useMemo, useEffect } from "react";
+import type { ReactElement } from "react";
 import type { UIMessage } from "@ai-sdk/react";
 import type { ChatAddToolApproveResponseFunction, FileUIPart } from "ai";
 import { Check, X, PaperclipIcon } from "lucide-react";
@@ -93,65 +94,16 @@ export const MessageItem = memo(function MessageItem({
     handleConfirmEdit,
     handleKeyDown,
   } = useMessageEditing(message, onEditMessage);
-
-  const renderParts = () => {
-    const elements: React.ReactNode[] = [];
-    let chainGroup: { part: UIMessage["parts"][number]; index: number }[] = [];
-
-    const flushChainGroup = () => {
-      if (chainGroup.length > 0) {
-        elements.push(
-          <ChainOfThoughtPart
-            key={`${message.id}-chain-${chainGroup[0].index}`}
-            isStreaming={isStreaming}
-            chainGroup={chainGroup}
-            toolApprovalResponse={toolApprovalResponse}
-          />
-        );
-        chainGroup = [];
-      }
-    };
-
-    message.parts.forEach((part, i) => {
-      // Skip step-start and hidden tools (rendered elsewhere)
-      if (part.type === "step-start" || isHiddenTool(part)) {
-        return;
-      }
-
-      // Inline tools (like ask_user) - render directly, not in chain
-      if (isInlineTool(part) && isToolPart(part)) {
-        flushChainGroup();
-        elements.push(
-          <ToolPart
-            key={`${message.id}-tool-${i}`}
-            part={part as ToolPartType}
-            partKey={i}
-            toolApprovalResponse={toolApprovalResponse}
-          />
-        );
-        return;
-      }
-
-      // Chain of thought parts (reasoning, tool calls, etc.)
-      if (isChainOfThoughtPart(part)) {
-        chainGroup.push({ part, index: i });
-      } else {
-        flushChainGroup();
-
-        if (part.type === "text") {
-          elements.push(
-            <TextPart key={`${message.id}-text-${i}`} part={part} role={message.role} partKey={i} sources={sources} />
-          );
-        } else if (part.type === "file") {
-          elements.push(<FilePart key={`${message.id}-file-${i}`} part={part} partKey={i} />);
-        }
-      }
-    });
-
-    flushChainGroup();
-
-    return elements;
-  };
+  const renderedParts = useMemo(
+    () =>
+      buildRenderedParts({
+        isStreaming,
+        message,
+        sources,
+        toolApprovalResponse,
+      }),
+    [isStreaming, message, sources, toolApprovalResponse]
+  );
 
   // Extract todos in an effect, not during render
   useEffect(() => {
@@ -261,7 +213,7 @@ export const MessageItem = memo(function MessageItem({
     <Message from={message.role} className={containerClassName}>
       <div className="group/message">
         <MessageContent className="group-[.is-user]:max-w-[70%]">
-          {renderParts()}
+          {renderedParts}
         </MessageContent>
         {isAssistant && sources.length > 0 && (
           <SourcesList sources={sources} className="mt-4" />
@@ -291,3 +243,70 @@ export const MessageItem = memo(function MessageItem({
   // Streaming message needs updates
   return false;
 });
+
+function buildRenderedParts({
+  message,
+  isStreaming,
+  sources,
+  toolApprovalResponse,
+}: Pick<MessageItemProps, "message" | "isStreaming" | "toolApprovalResponse"> & {
+  sources: ReturnType<typeof extractSourcesFromMessage>;
+}) {
+  const elements: ReactElement[] = [];
+  let chainGroup: { part: UIMessage["parts"][number]; index: number }[] = [];
+
+  const flushChainGroup = () => {
+    if (chainGroup.length === 0) {
+      return;
+    }
+
+    elements.push(
+      <ChainOfThoughtPart
+        key={`${message.id}-chain-${chainGroup[0].index}`}
+        isStreaming={isStreaming}
+        chainGroup={chainGroup}
+        toolApprovalResponse={toolApprovalResponse}
+      />
+    );
+    chainGroup = [];
+  };
+
+  message.parts.forEach((part, i) => {
+    if (part.type === "step-start" || isHiddenTool(part)) {
+      return;
+    }
+
+    if (isInlineTool(part) && isToolPart(part)) {
+      flushChainGroup();
+      elements.push(
+        <ToolPart
+          key={`${message.id}-tool-${i}`}
+          part={part as ToolPartType}
+          partKey={i}
+          toolApprovalResponse={toolApprovalResponse}
+        />
+      );
+      return;
+    }
+
+    if (isChainOfThoughtPart(part)) {
+      chainGroup.push({ part, index: i });
+      return;
+    }
+
+    flushChainGroup();
+    if (part.type === "text") {
+      elements.push(
+        <TextPart key={`${message.id}-text-${i}`} part={part} role={message.role} partKey={i} sources={sources} />
+      );
+      return;
+    }
+
+    if (part.type === "file") {
+      elements.push(<FilePart key={`${message.id}-file-${i}`} part={part} partKey={i} />);
+    }
+  });
+
+  flushChainGroup();
+  return elements;
+}

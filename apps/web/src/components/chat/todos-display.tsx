@@ -48,7 +48,7 @@ export const TodosDisplay = memo(function TodosDisplay({ todos, approval, state,
                     completed={todo.status === "done"}
                     className={
                       todo.status === "in_progress"
-                        ? "animate-pulse bg-blue-500"
+                        ? "animate-pulse bg-primary"
                         : ""
                     }
                   />

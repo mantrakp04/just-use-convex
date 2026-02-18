@@ -217,12 +217,12 @@ function FavoriteButton({ isFavorite, onToggle }: FavoriteButtonProps) {
         isFavorite ? "opacity-100" : "opacity-0 group-hover:opacity-100"
       )}
     >
-      <Star
-        className={cn(
-          "size-3.5",
-          isFavorite
-            ? "fill-amber-400 text-amber-400"
-            : "text-muted-foreground hover:text-amber-400"
+        <Star
+          className={cn(
+            "size-3.5",
+            isFavorite
+            ? "fill-primary text-primary"
+            : "text-muted-foreground hover:text-primary"
         )}
       />
     </button>

@@ -70,7 +70,9 @@ export function TodoMemberSelect({
             members.map((member) => {
               const isSelected = selectedMemberIds.includes(member.id);
               return (
-                <div
+                <Button
+                  variant="ghost"
+                  size="sm"
                   key={member.id}
                   className="flex items-center gap-2 rounded-md px-2 py-1.5 cursor-pointer hover:bg-accent"
                   onClick={() => handleToggleMember(member.id)}
@@ -83,7 +85,7 @@ export function TodoMemberSelect({
                   <span className="flex-1 truncate text-sm">
                     {member.user.name || member.user.email}
                   </span>
-                </div>
+                </Button>
               );
             })
           )}

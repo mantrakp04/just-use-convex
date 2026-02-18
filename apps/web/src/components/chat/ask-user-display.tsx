@@ -27,7 +27,7 @@ export interface AskUserDisplayProps {
 interface QuestionFormProps {
   question: AskUserQuestion;
   answer: AskUserAnswer;
-  onAnswerChange: (answer: AskUserAnswer) => void;
+  onAnswerChange: (questionId: string, answer: AskUserAnswer) => void;
 }
 
 const QuestionForm = memo(function QuestionForm({
@@ -44,26 +44,26 @@ const QuestionForm = memo(function QuestionForm({
         const newSelected = checked
           ? [...answer.selectedIds, optionId]
           : answer.selectedIds.filter((id) => id !== optionId);
-        onAnswerChange({ ...answer, selectedIds: newSelected });
+        onAnswerChange(question.id, { ...answer, selectedIds: newSelected });
       } else {
         // Single select: replace
         if (optionId === "__other__") {
           setShowOther(true);
-          onAnswerChange({ selectedIds: [], customText: answer.customText || "" });
+          onAnswerChange(question.id, { selectedIds: [], customText: answer.customText || "" });
         } else {
           setShowOther(false);
-          onAnswerChange({ selectedIds: [optionId], customText: undefined });
+          onAnswerChange(question.id, { selectedIds: [optionId], customText: undefined });
         }
       }
     },
-    [question.multiSelect, answer, onAnswerChange]
+    [question.id, question.multiSelect, answer, onAnswerChange]
   );
 
   const handleOtherText = useCallback(
     (text: string) => {
-      onAnswerChange({ ...answer, customText: text });
+      onAnswerChange(question.id, { ...answer, customText: text });
     },
-    [answer, onAnswerChange]
+    [question.id, answer, onAnswerChange]
   );
 
   const isSelected = (optionId: string) => answer.selectedIds.includes(optionId);
@@ -106,7 +106,7 @@ const QuestionForm = memo(function QuestionForm({
           ))}
           {/* Other option */}
           <div className="flex flex-col gap-2">
-            <label
+            <div
               className={cn(
                 "flex items-start gap-3 rounded-md px-3 py-2.5 cursor-pointer transition-colors",
                 "hover:bg-muted/60",
@@ -117,22 +117,21 @@ const QuestionForm = memo(function QuestionForm({
                 checked={answer.customText !== undefined}
                 onCheckedChange={(checked) => {
                   if (checked) {
-                    onAnswerChange({ ...answer, customText: "" });
+                    onAnswerChange(question.id, { ...answer, customText: "" });
                   } else {
-                    onAnswerChange({ ...answer, customText: undefined });
+                    onAnswerChange(question.id, { ...answer, customText: undefined });
                   }
                 }}
                 className="mt-0.5"
               />
               <span className="text-sm font-medium italic">Other...</span>
-            </label>
+            </div>
             {answer.customText !== undefined && (
               <Input
                 value={answer.customText}
                 onChange={(e) => handleOtherText(e.target.value)}
                 placeholder="Type your answer..."
                 className="ml-7"
-                autoFocus
               />
             )}
           </div>
@@ -177,7 +176,7 @@ const QuestionForm = memo(function QuestionForm({
         ))}
         {/* Other option */}
         <div className="flex flex-col gap-2">
-          <label
+          <div
             className={cn(
               "flex items-start gap-3 rounded-md px-3 py-2.5 cursor-pointer transition-colors",
               "hover:bg-muted/60",
@@ -186,14 +185,13 @@ const QuestionForm = memo(function QuestionForm({
           >
             <RadioGroupItem value="__other__" className="mt-0.5" />
             <span className="text-sm font-medium italic">Other...</span>
-          </label>
+          </div>
           {showOther && (
             <Input
               value={answer.customText || ""}
               onChange={(e) => handleOtherText(e.target.value)}
               placeholder="Type your answer..."
               className="ml-7"
-              autoFocus
             />
           )}
         </div>
@@ -337,7 +335,7 @@ export const AskUserDisplay = memo(function AskUserDisplay({
               key={question.id}
               question={question}
               answer={answers[question.id] || { selectedIds: [] }}
-              onAnswerChange={(answer) => handleAnswerChange(question.id, answer)}
+              onAnswerChange={handleAnswerChange}
             />
           ))}
 
@@ -368,7 +366,7 @@ export const AskUserDisplay = memo(function AskUserDisplay({
       {/* Status for responded state */}
       {isAccepted && (
         <div className="flex items-center gap-2 text-sm text-muted-foreground mt-2 pt-2 border-t">
-          <CheckIcon className="size-4 text-green-500" />
+          <CheckIcon className="size-4 text-primary" />
           <span>Answered</span>
         </div>
       )}

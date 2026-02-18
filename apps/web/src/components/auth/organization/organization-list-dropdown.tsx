@@ -80,10 +80,9 @@ function CreateOrganizationDialog({
           <DialogDescription>Create a new organization to manage your team</DialogDescription>
         </DialogHeader>
         <form
-          onSubmit={(e) => {
-            e.preventDefault();
+          onSubmit={async (e) => {
             e.stopPropagation();
-            form.handleSubmit();
+            await form.handleSubmit();
           }}
           className="flex flex-col gap-4"
         >
@@ -204,7 +203,7 @@ export default function OrganizationListDropdown() {
                           e.stopPropagation();
                           acceptInvitation(invitation.id);
                         }}
-                        className="text-green-600 hover:text-green-700 hover:bg-green-50"
+                        className="text-primary hover:text-primary hover:bg-primary/10"
                       >
                         <CheckIcon className="size-3" />
                       </Button>

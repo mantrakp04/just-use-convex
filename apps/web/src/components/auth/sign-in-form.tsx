@@ -51,10 +51,9 @@ export default function SignInForm({ onSwitchToSignUp }: { onSwitchToSignUp: () 
       <h1 className="text-center text-3xl font-bold">Welcome Back</h1>
 
       <form
-        onSubmit={(e) => {
-          e.preventDefault();
+        onSubmit={async (e) => {
           e.stopPropagation();
-          form.handleSubmit();
+          await form.handleSubmit();
         }}
         className="flex flex-col gap-2"
       >
@@ -72,7 +71,7 @@ export default function SignInForm({ onSwitchToSignUp }: { onSwitchToSignUp: () 
                   onChange={(e) => field.handleChange(e.target.value)}
                 />
                 {field.state.meta.errors.map((error) => (
-                  <p key={error?.message} className="text-red-500">
+                  <p key={error?.message} className="text-destructive">
                     {error?.message}
                   </p>
                 ))}
@@ -95,7 +94,7 @@ export default function SignInForm({ onSwitchToSignUp }: { onSwitchToSignUp: () 
                   onChange={(e) => field.handleChange(e.target.value)}
                 />
                 {field.state.meta.errors.map((error) => (
-                  <p key={error?.message} className="text-red-500">
+                  <p key={error?.message} className="text-destructive">
                     {error?.message}
                   </p>
                 ))}

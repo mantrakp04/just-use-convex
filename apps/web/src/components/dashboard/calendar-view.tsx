@@ -252,7 +252,11 @@ function MonthView({
             const isCurrentMonth = isSameMonth(day, currentDate);
 
             return (
-              <div
+              <Button
+                nativeButton={false}
+                render={<div />}
+                variant="ghost"
+                size="sm"
                 key={dateKey}
                 className={cn(
                   "border-b border-r p-1 min-h-24 cursor-pointer hover:bg-muted/50 transition-colors",
@@ -289,7 +293,7 @@ function MonthView({
                     />
                   ))}
                 </div>
-              </div>
+              </Button>
             );
           })}
         </div>
@@ -337,7 +341,11 @@ function WeekView({
       <div className="grid grid-cols-[60px_repeat(7,1fr)] border-b shrink-0">
         <div className="py-2" />
         {days.map((day) => (
-          <div
+          <Button
+            nativeButton={false}
+            render={<div />}
+            variant="ghost"
+            size="sm"
             key={format(day, "yyyy-MM-dd")}
             className={cn(
               "py-2 text-center border-l cursor-pointer hover:bg-muted/50 transition-colors",
@@ -356,7 +364,7 @@ function WeekView({
             >
               {format(day, "d")}
             </div>
-          </div>
+          </Button>
         ))}
       </div>
 
@@ -547,14 +555,17 @@ function CalendarTodoItem({
   const StatusIcon = statusIcons[status];
 
   const priorityBgColors = {
-    high: "bg-red-500/10 border-red-500/30 hover:bg-red-500/20",
-    medium: "bg-yellow-500/10 border-yellow-500/30 hover:bg-yellow-500/20",
-    low: "bg-blue-500/10 border-blue-500/30 hover:bg-blue-500/20",
+    high: "bg-destructive/10 border-destructive/30 hover:bg-destructive/20",
+    medium: "bg-muted border-border hover:bg-muted/80",
+    low: "bg-primary/10 border-primary/30 hover:bg-primary/20",
   };
 
   if (compact) {
     return (
-      <button
+      <Button
+        type="button"
+        variant="ghost"
+        size="sm"
         onClick={onClick}
         className={cn(
           "w-full text-left text-xs px-1.5 py-0.5 rounded border truncate transition-colors",
@@ -563,12 +574,15 @@ function CalendarTodoItem({
         )}
       >
         {todo.title}
-      </button>
+      </Button>
     );
   }
 
   return (
-    <div
+    <Button
+      nativeButton={false}
+      render={<div />}
+      variant="ghost"
       onClick={onClick}
       className={cn(
         "flex items-center gap-2 p-2 rounded-md border cursor-pointer transition-colors",
@@ -576,7 +590,10 @@ function CalendarTodoItem({
       )}
     >
       {onStatusChange && (
-        <button
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-xs"
           onClick={(e) => {
             e.stopPropagation();
             const nextStatus =
@@ -592,11 +609,11 @@ function CalendarTodoItem({
           <StatusIcon
             className={cn(
               "size-4",
-              status === "done" && "text-green-500",
-              status === "in_progress" && "text-blue-500"
+              status === "done" && "text-primary",
+              status === "in_progress" && "text-[var(--color-chart-2)]"
             )}
           />
-        </button>
+        </Button>
       )}
       <div className="flex-1 min-w-0">
         <p
@@ -621,6 +638,6 @@ function CalendarTodoItem({
       <Badge variant={priorityColors[priority]} className="text-[10px] shrink-0">
         {priority}
       </Badge>
-    </div>
+    </Button>
   );
 }

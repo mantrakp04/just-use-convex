@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { format } from "date-fns";
 import { DownloadIcon, Trash2Icon } from "lucide-react";
-import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
+import { useMemo, useRef, useState, type ChangeEvent } from "react";
 
 import { useAttachments, useAttachmentsList, type AttachmentItem } from "@/hooks/use-attachments";
 import { useActiveMember, useMembers, ROLE_HIERARCHY } from "@/hooks/auth/organization";
@@ -101,13 +101,8 @@ function AttachmentsSettings() {
   const { members, isPending: membersPending } = useMembers();
   const { currentUserRole } = useActiveMember();
   const [memberId, setMemberId] = useState<string>("me");
-  const [isHydrated, setIsHydrated] = useState(false);
   const { uploadAttachment, deleteAttachment, isUploading, isDeleting } = useAttachments();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
-
-  useEffect(() => {
-    setIsHydrated(true);
-  }, []);
 
   const isAdmin = useMemo(() => {
     if (!currentUserRole) return false;
@@ -155,8 +150,8 @@ function AttachmentsSettings() {
             <CardTitle>Attachments</CardTitle>
             <CardDescription>Review and delete stored attachments for your organization.</CardDescription>
           </div>
-          <div className="flex items-center gap-2">
-            {isHydrated && isAdmin && (
+          <div className="flex items-center gap-2" suppressHydrationWarning>
+            {isAdmin && (
               <Select
                 value={memberId}
                 onValueChange={(value) => value && setMemberId(value)}

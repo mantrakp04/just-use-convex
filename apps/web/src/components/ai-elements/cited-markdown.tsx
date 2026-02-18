@@ -4,13 +4,12 @@ import { cjk } from "@streamdown/cjk";
 import { code } from "@streamdown/code";
 import { math } from "@streamdown/math";
 import { mermaid } from "@streamdown/mermaid";
-import type { ComponentProps } from "react";
 import { useMemo } from "react";
-import { Streamdown } from "streamdown";
 import { parseCitations, type SourceReference } from "@/lib/citations";
 import { CitationBadge } from "./citation-badge";
+import { LazyStreamdown, type LazyStreamdownProps } from "./lazy-streamdown";
 
-export interface CitedMarkdownProps extends Omit<ComponentProps<typeof Streamdown>, "children"> {
+export interface CitedMarkdownProps extends Omit<LazyStreamdownProps, "children"> {
   children: string;
   sources: SourceReference[];
 }
@@ -32,7 +31,7 @@ export const CitedMarkdown = ({
   const hasCitations = segments.some((s) => s.type === "citation");
   if (!hasCitations) {
     return (
-      <Streamdown
+      <LazyStreamdown
         className={cn(
           "size-full [&>*:first-child]:mt-0 [&>*:last-child]:mb-0",
           className
@@ -42,7 +41,7 @@ export const CitedMarkdown = ({
         {...props}
       >
         {children}
-      </Streamdown>
+      </LazyStreamdown>
     );
   }
 
@@ -72,7 +71,7 @@ export const CitedMarkdown = ({
         // For text segments, use Streamdown
         // Wrap in span to keep inline flow
         return (
-          <Streamdown
+          <LazyStreamdown
             key={index}
             className="inline [&>p]:inline [&>*:first-child]:mt-0 [&>*:last-child]:mb-0"
             plugins={{ code, mermaid, math, cjk }}
@@ -80,7 +79,7 @@ export const CitedMarkdown = ({
             {...props}
           >
             {segment.content}
-          </Streamdown>
+          </LazyStreamdown>
         );
       })}
     </div>

@@ -24,7 +24,7 @@ export function ReasoningEffortSelector({
         <DropdownMenuItem
           onClick={() => onSelect(undefined)}
           className={cn(
-            !currentEffort && "bg-amber-500/10 text-amber-600 dark:text-amber-400"
+            !currentEffort && "bg-accent text-accent-foreground"
           )}
         >
           <span className="text-sm">None</span>
@@ -34,7 +34,7 @@ export function ReasoningEffortSelector({
             key={effort}
             onClick={() => onSelect(effort as ChatSettings["reasoningEffort"])}
             className={cn(
-              currentEffort === effort && "bg-amber-500/10 text-amber-600 dark:text-amber-400"
+              currentEffort === effort && "bg-accent text-accent-foreground"
             )}
           >
             {effort ? effort.charAt(0).toUpperCase() + effort.slice(1) : "None"}

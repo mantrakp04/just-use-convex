@@ -1,6 +1,6 @@
 
 import * as React from "react"
-import { motion } from "motion/react"
+import { LazyMotion, domAnimation, m } from "motion/react"
 import { cva, type VariantProps } from "class-variance-authority"
 
 import { cn } from "@/lib/utils"
@@ -77,21 +77,23 @@ function Tabs({
   )
 
   return (
-    <TabsContext.Provider value={ctx}>
-      <div
-        data-slot="tabs"
-        data-orientation={orientation}
-        {...(orientation === "horizontal"
-          ? { "data-horizontal": "" }
-          : { "data-vertical": "" })}
-        className={cn(
-          "gap-2 group/tabs flex data-[orientation=horizontal]:flex-col",
-          className
-        )}
-      >
-        {children}
-      </div>
-    </TabsContext.Provider>
+    <LazyMotion features={domAnimation}>
+      <TabsContext.Provider value={ctx}>
+        <div
+          data-slot="tabs"
+          data-orientation={orientation}
+          {...(orientation === "horizontal"
+            ? { "data-horizontal": "" }
+            : { "data-vertical": "" })}
+          className={cn(
+            "gap-2 group/tabs flex data-[orientation=horizontal]:flex-col",
+            className
+          )}
+        >
+          {children}
+        </div>
+      </TabsContext.Provider>
+    </LazyMotion>
   )
 }
 
@@ -174,7 +176,7 @@ function TabsTrigger({
       {...props}
     >
       {isActive && variant !== "line" && (
-        <motion.span
+        <m.span
           layout
           layoutId={`${layoutId}-bg`}
           className="absolute inset-0 -z-10 rounded-md border border-transparent bg-background dark:border-input dark:bg-input/30"
@@ -183,7 +185,7 @@ function TabsTrigger({
         />
       )}
       {isActive && variant === "line" && (
-        <motion.span
+        <m.span
           layout
           layoutId={`${layoutId}-line`}
           className={cn(

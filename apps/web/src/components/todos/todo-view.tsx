@@ -31,9 +31,9 @@ export function TodoView({
         <StatusIcon
           className={`size-5 mt-0.5 ${
             currentStatus === "done"
-              ? "text-green-500"
+              ? "text-primary"
               : currentStatus === "in_progress"
-                ? "text-blue-500"
+                ? "text-[var(--color-chart-2)]"
                 : "text-muted-foreground"
           }`}
         />

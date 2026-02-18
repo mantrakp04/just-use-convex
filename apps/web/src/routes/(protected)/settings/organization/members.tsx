@@ -79,10 +79,9 @@ function MembersTab() {
         </CardHeader>
         <CardContent>
           <form
-            onSubmit={(e) => {
-              e.preventDefault();
+            onSubmit={async (e) => {
               e.stopPropagation();
-              inviteForm.handleSubmit();
+              await inviteForm.handleSubmit();
             }}
             className="flex flex-col gap-2"
           >

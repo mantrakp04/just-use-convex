@@ -20,6 +20,8 @@ import {
 } from "@/components/ui/breadcrumb";
 import "xterm/css/xterm.css";
 
+type WorkspaceTab = "preview" | "terminal" | "explorer";
+
 type ChatSandboxWorkspaceProps = {
   sshSession: ChatSshSessionState;
   explorer: ChatExplorerState;
@@ -71,16 +73,7 @@ export function ChatSandboxWorkspace({
   terminalContainerRef,
   terminalBackground,
 }: ChatSandboxWorkspaceProps) {
-  const [activeTab, setActiveTab] = useState<"preview" | "terminal" | "explorer">("preview");
-  const iframeRef = useRef<HTMLIFrameElement | null>(null);
-
-  const refreshPreview = useCallback(() => {
-    if (iframeRef.current) {
-      const src = iframeRef.current.src;
-      iframeRef.current.src = "";
-      iframeRef.current.src = src;
-    }
-  }, []);
+  const [activeTab, setActiveTab] = useState<WorkspaceTab>("preview");
 
   const sortedEntries = useMemo(() => {
     const entries = explorer?.entries ?? [];
@@ -94,11 +87,10 @@ export function ChatSandboxWorkspace({
 
   const pathSegments = useMemo(() => {
     const parts = explorer?.path?.split("/").filter(Boolean) ?? [];
-    const segments = [{ name: "Home", path: "/" }, ...parts.map((part, index) => ({
+    return [{ name: "Home", path: "/" }, ...parts.map((part, index) => ({
       name: part,
       path: `/${parts.slice(0, index + 1).join("/")}`,
     }))];
-    return segments;
   }, [explorer?.path]);
 
   const sessionOptions = useMemo(() => {
@@ -108,6 +100,7 @@ export function ChatSandboxWorkspace({
     if (terminalSessions.some((session) => session.id === activeTerminalId)) {
       return terminalSessions;
     }
+
     return [
       ...terminalSessions,
       {
@@ -133,7 +126,7 @@ export function ChatSandboxWorkspace({
     <div className="h-full border-l bg-background">
       <Tabs
         value={activeTab}
-        onValueChange={(value) => setActiveTab(value as "preview" | "terminal" | "explorer")}
+        onValueChange={(value) => setActiveTab(value as WorkspaceTab)}
         className="flex h-full flex-col gap-0"
       >
         <div className="flex items-center justify-end border-b p-2">
@@ -151,243 +144,337 @@ export function ChatSandboxWorkspace({
               }
             />
             <DropdownMenuContent align="end">
-              <DropdownMenuItem onClick={() => void onOpenInEditor("vscode")}>
-                Open in VSCode
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => void onOpenInEditor("cursor")}>
-                Open in Cursor
-              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => void onOpenInEditor("vscode")}>Open in VSCode</DropdownMenuItem>
+              <DropdownMenuItem onClick={() => void onOpenInEditor("cursor")}>Open in Cursor</DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
 
-        <TabsContent value="preview" className="mt-0 flex min-h-0 flex-1 flex-col p-3">
-          <div className="mb-2 flex items-center gap-2">
-            <div className="flex h-8 flex-1 items-center overflow-hidden rounded-md border bg-muted/50 text-sm">
-              <span className="shrink-0 pl-2.5 text-muted-foreground">http://localhost:</span>
-              <Input
-                type="number"
-                min={1}
-                max={65535}
-                value={previewPort ?? ""}
-                onChange={(event) => {
-                  const nextPort = Number(event.target.value);
-                  onPreviewPortChange(Number.isFinite(nextPort) && nextPort > 0 ? nextPort : undefined);
-                }}
-                placeholder="3000"
-                className="h-full w-20 border-0 bg-transparent px-0.5 shadow-none focus-visible:ring-0"
-              />
-            </div>
-            <Button
-              type="button"
-              size="icon-sm"
-              variant="ghost"
-              onClick={refreshPreview}
-              disabled={!previewUrl}
-              aria-label="Refresh preview"
-            >
-              <RefreshCw className="size-3.5" />
-            </Button>
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              onClick={() => void onCreatePreviewAccess()}
-              disabled={previewPort === undefined || isConnectingPreview}
-            >
-              {isConnectingPreview ? "Connecting..." : "Connect"}
-            </Button>
-          </div>
-          <div className="min-h-0 flex-1 overflow-hidden rounded-md border">
-            <iframe
-              ref={iframeRef}
-              className="h-full w-full"
-              src={previewUrl || undefined}
-              title="Sandbox Preview"
-              sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-presentation"
-            />
-          </div>
-        </TabsContent>
+        <PreviewTabContent
+          previewPort={previewPort}
+          previewUrl={previewUrl}
+          isConnectingPreview={isConnectingPreview}
+          onPreviewPortChange={onPreviewPortChange}
+          onCreatePreviewAccess={onCreatePreviewAccess}
+        />
 
-        <TabsContent value="terminal" keepMounted className="mt-0 flex min-h-0 flex-1 flex-col p-3">
-          <div className="mb-2 flex items-center justify-between">
-            <p className="text-sm font-medium">Sandbox terminal</p>
-            <div className="flex items-center gap-2">
-              <DropdownMenu>
-                <DropdownMenuTrigger
-                  render={
-                    <Button type="button" variant="outline" size="sm">
-                      {activeTerminalId ? formatSessionLabel(activeTerminalId, true) : "Sessions"}
-                    </Button>
-                  }
-                />
-                <DropdownMenuContent align="end">
-                  {sessionOptions.length === 0 ? (
-                    <p className="px-2 py-1.5 text-sm text-muted-foreground">No sessions found.</p>
-                  ) : (
-                    sessionOptions.map((session) => {
-                      const isCurrentSession = session.id === activeTerminalId;
-                      return (
-                        <DropdownMenuItem
-                          key={session.id}
-                          disabled={isCurrentSession}
-                          onClick={() => onSwitchTerminalSession(session.id)}
-                          className="flex items-center justify-between gap-4"
-                        >
-                          <span className="truncate text-sm">
-                            {formatSessionLabel(session.id, session.active ?? false)}
-                            {isCurrentSession ? " (current)" : ""}
-                          </span>
-                          <Button
-                            type="button"
-                            size="icon-sm"
-                            variant="destructive"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              void onCloseTerminalSession(session.id);
-                            }}
-                            aria-label={`Delete session ${session.id}`}
-                          >
-                            <Trash2Icon className="size-3.5" />
-                          </Button>
-                        </DropdownMenuItem>
-                      );
-                    })
-                  )}
-                </DropdownMenuContent>
-              </DropdownMenu>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={onCreateTerminalSession}
-              >
-                <PlusIcon className="size-3.5" />
-                Session
-              </Button>
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon-sm"
-                onClick={() => {
-                  onReconnectTerminal();
-                  void onRefreshTerminalSessions();
-                }}
-                aria-label="Refresh sessions"
-              >
-                <RefreshCw className="size-3.5" />
-              </Button>
-            </div>
-          </div>
-          <div
-            ref={terminalContainerRef}
-            className="min-h-0 flex-1 overflow-hidden rounded-md border"
-            style={{ backgroundColor: terminalBackground }}
-          />
-          {sshSession && (
-            <div className="mt-2 text-xs text-muted-foreground">
-              SSH expires: {new Date(sshSession.expiresAt).toLocaleString()}
-            </div>
-          )}
-        </TabsContent>
+        <TerminalTabContent
+          sshSession={sshSession}
+          terminalContainerRef={terminalContainerRef}
+          terminalBackground={terminalBackground}
+          activeTerminalId={activeTerminalId}
+          sessionOptions={sessionOptions}
+          onSwitchTerminalSession={onSwitchTerminalSession}
+          onCloseTerminalSession={onCloseTerminalSession}
+          onCreateTerminalSession={onCreateTerminalSession}
+          onReconnectTerminal={onReconnectTerminal}
+          onRefreshTerminalSessions={onRefreshTerminalSessions}
+        />
 
-        <TabsContent value="explorer" className="mt-0 flex min-h-0 flex-1 flex-col p-3">
-          <div className="mb-2 flex items-center gap-2">
-            <div className="min-w-0 flex-1 overflow-hidden">
-              <Breadcrumb>
-                <BreadcrumbList>
-                  {pathSegments.map((segment, index) => (
-                    <Fragment key={segment.path}>
-                      {index > 0 && <BreadcrumbSeparator />}
-                      <BreadcrumbItem>
-                        {index === pathSegments.length - 1 ? (
-                          <BreadcrumbPage>{segment.name}</BreadcrumbPage>
-                        ) : (
-                          <BreadcrumbLink
-                            render={<button type="button" />}
-                            onClick={() => onNavigateExplorer(segment.path)}
-                          >
-                            {segment.name}
-                          </BreadcrumbLink>
-                        )}
-                      </BreadcrumbItem>
-                    </Fragment>
-                  ))}
-                </BreadcrumbList>
-              </Breadcrumb>
-            </div>
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon-sm"
-              onClick={onRefreshExplorer}
-              aria-label="Refresh file explorer"
-            >
-              <RefreshCw className="size-3" />
-            </Button>
-          </div>
-          <div className="min-h-0 flex-1 overflow-auto rounded-md border">
-            {sortedEntries.length === 0 ? (
-              <div className="p-3 text-sm text-muted-foreground">No files found.</div>
-            ) : (
-              <ul className="p-1">
-                {sortedEntries.map((entry) => (
-                  <li key={entry.path}>
-                    <div className="group flex w-full items-center rounded-md px-2 py-1 text-left text-xs hover:bg-muted/50">
-                      {entry.isDir ? (
-                        <button
-                          type="button"
-                          className="flex min-w-0 flex-1 items-center gap-2"
-                          onClick={() => onNavigateExplorer(entry.path)}
-                        >
-                          <FolderIcon className="size-3.5 shrink-0 text-blue-500" />
-                          <span className="truncate">{entry.name}</span>
-                        </button>
-                      ) : (
-                        <span className="flex min-w-0 flex-1 items-center gap-2">
-                          <FileIcon className="size-3.5 shrink-0 text-muted-foreground" />
-                          <span className="truncate">{entry.name}</span>
-                        </span>
-                      )}
-                      <div className="flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon-sm"
-                          onClick={() => {
-                            if (entry.isDir) {
-                              void onDownloadFolder(entry.path, entry.name);
-                            } else {
-                              void onDownloadFile(entry.path, entry.name);
-                            }
-                          }}
-                          aria-label={`Download ${entry.name}`}
-                        >
-                          <DownloadIcon className="size-3" />
-                        </Button>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon-sm"
-                          onClick={() => {
-                            if (window.confirm(`Delete "${entry.name}"? This cannot be undone.`)) {
-                              void onDeleteEntry(entry.path);
-                            }
-                          }}
-                          aria-label={`Delete ${entry.name}`}
-                        >
-                          <Trash2Icon className="size-3 text-destructive" />
-                        </Button>
-                      </div>
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-        </TabsContent>
+        <ExplorerTabContent
+          sortedEntries={sortedEntries}
+          pathSegments={pathSegments}
+          onNavigateExplorer={onNavigateExplorer}
+          onRefreshExplorer={onRefreshExplorer}
+          onDownloadFolder={onDownloadFolder}
+          onDownloadFile={onDownloadFile}
+          onDeleteEntry={onDeleteEntry}
+        />
       </Tabs>
     </div>
+  );
+}
+
+function PreviewTabContent({
+  previewPort,
+  previewUrl,
+  isConnectingPreview,
+  onPreviewPortChange,
+  onCreatePreviewAccess,
+}: Pick<
+  ChatSandboxWorkspaceProps,
+  "previewPort" | "previewUrl" | "isConnectingPreview" | "onPreviewPortChange" | "onCreatePreviewAccess"
+>) {
+  const iframeRef = useRef<HTMLIFrameElement | null>(null);
+
+  const refreshPreview = useCallback(() => {
+    if (!iframeRef.current) {
+      return;
+    }
+
+    const src = iframeRef.current.src;
+    iframeRef.current.src = "";
+    iframeRef.current.src = src;
+  }, []);
+
+  return (
+    <TabsContent value="preview" className="mt-0 flex min-h-0 flex-1 flex-col p-3">
+      <div className="mb-2 flex items-center gap-2">
+        <div className="flex h-8 flex-1 items-center overflow-hidden rounded-md border bg-muted/50 text-sm">
+          <span className="shrink-0 pl-2.5 text-muted-foreground">http://localhost:</span>
+          <Input
+            type="number"
+            min={1}
+            max={65535}
+            value={previewPort ?? ""}
+            onChange={(event) => {
+              const nextPort = Number(event.target.value);
+              onPreviewPortChange(Number.isFinite(nextPort) && nextPort > 0 ? nextPort : undefined);
+            }}
+            placeholder="3000"
+            className="h-full w-20 border-0 bg-transparent px-0.5 shadow-none focus-visible:ring-0"
+          />
+        </div>
+        <Button
+          type="button"
+          size="icon-sm"
+          variant="ghost"
+          onClick={refreshPreview}
+          disabled={!previewUrl}
+          aria-label="Refresh preview"
+        >
+          <RefreshCw className="size-3.5" />
+        </Button>
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          onClick={() => void onCreatePreviewAccess()}
+          disabled={previewPort === undefined || isConnectingPreview}
+        >
+          {isConnectingPreview ? "Connecting..." : "Connect"}
+        </Button>
+      </div>
+      <div className="min-h-0 flex-1 overflow-hidden rounded-md border">
+        <iframe
+          ref={iframeRef}
+          className="h-full w-full"
+          src={previewUrl || undefined}
+          title="Sandbox Preview"
+          sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-presentation"
+        />
+      </div>
+    </TabsContent>
+  );
+}
+
+function TerminalTabContent({
+  sshSession,
+  terminalContainerRef,
+  terminalBackground,
+  activeTerminalId,
+  sessionOptions,
+  onSwitchTerminalSession,
+  onCloseTerminalSession,
+  onCreateTerminalSession,
+  onReconnectTerminal,
+  onRefreshTerminalSessions,
+}: Pick<
+  ChatSandboxWorkspaceProps,
+  | "sshSession"
+  | "terminalContainerRef"
+  | "terminalBackground"
+  | "activeTerminalId"
+  | "onSwitchTerminalSession"
+  | "onCloseTerminalSession"
+  | "onCreateTerminalSession"
+  | "onReconnectTerminal"
+  | "onRefreshTerminalSessions"
+> & {
+  sessionOptions: ChatTerminalSessionsState;
+}) {
+  return (
+    <TabsContent value="terminal" keepMounted className="mt-0 flex min-h-0 flex-1 flex-col p-3">
+      <div className="mb-2 flex items-center justify-between">
+        <p className="text-sm font-medium">Sandbox terminal</p>
+        <div className="flex items-center gap-2">
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              render={
+                <Button type="button" variant="outline" size="sm">
+                  {activeTerminalId ? formatSessionLabel(activeTerminalId, true) : "Sessions"}
+                </Button>
+              }
+            />
+            <DropdownMenuContent align="end">
+              {sessionOptions.length === 0 ? (
+                <p className="px-2 py-1.5 text-sm text-muted-foreground">No sessions found.</p>
+              ) : (
+                sessionOptions.map((session) => {
+                  const isCurrentSession = session.id === activeTerminalId;
+                  return (
+                    <DropdownMenuItem
+                      key={session.id}
+                      disabled={isCurrentSession}
+                      onClick={() => onSwitchTerminalSession(session.id)}
+                      className="flex items-center justify-between gap-4"
+                    >
+                      <span className="truncate text-sm">
+                        {formatSessionLabel(session.id, session.active ?? false)}
+                        {isCurrentSession ? " (current)" : ""}
+                      </span>
+                      <Button
+                        type="button"
+                        size="icon-sm"
+                        variant="destructive"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          void onCloseTerminalSession(session.id);
+                        }}
+                        aria-label={`Delete session ${session.id}`}
+                      >
+                        <Trash2Icon className="size-3.5" />
+                      </Button>
+                    </DropdownMenuItem>
+                  );
+                })
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
+          <Button type="button" variant="outline" size="sm" onClick={onCreateTerminalSession}>
+            <PlusIcon className="size-3.5" />
+            Session
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            onClick={() => {
+              onReconnectTerminal();
+              void onRefreshTerminalSessions();
+            }}
+            aria-label="Refresh sessions"
+          >
+            <RefreshCw className="size-3.5" />
+          </Button>
+        </div>
+      </div>
+      <div
+        ref={terminalContainerRef}
+        className="min-h-0 flex-1 overflow-hidden rounded-md border"
+        style={{ backgroundColor: terminalBackground }}
+      />
+      {sshSession && (
+        <div className="mt-2 text-xs text-muted-foreground">
+          SSH expires: {new Date(sshSession.expiresAt).toLocaleString()}
+        </div>
+      )}
+    </TabsContent>
+  );
+}
+
+function ExplorerTabContent({
+  sortedEntries,
+  pathSegments,
+  onNavigateExplorer,
+  onRefreshExplorer,
+  onDownloadFolder,
+  onDownloadFile,
+  onDeleteEntry,
+}: Pick<
+  ChatSandboxWorkspaceProps,
+  | "onNavigateExplorer"
+  | "onRefreshExplorer"
+  | "onDownloadFolder"
+  | "onDownloadFile"
+  | "onDeleteEntry"
+> & {
+  sortedEntries: NonNullable<ChatExplorerState>["entries"];
+  pathSegments: Array<{ name: string; path: string }>;
+}) {
+  return (
+    <TabsContent value="explorer" className="mt-0 flex min-h-0 flex-1 flex-col p-3">
+      <div className="mb-2 flex items-center gap-2">
+        <div className="min-w-0 flex-1 overflow-hidden">
+          <Breadcrumb>
+            <BreadcrumbList>
+              {pathSegments.map((segment, index) => (
+                <Fragment key={segment.path}>
+                  {index > 0 && <BreadcrumbSeparator />}
+                  <BreadcrumbItem>
+                    {index === pathSegments.length - 1 ? (
+                      <BreadcrumbPage>{segment.name}</BreadcrumbPage>
+                    ) : (
+                      <BreadcrumbLink render={<button type="button" />} onClick={() => onNavigateExplorer(segment.path)}>
+                        {segment.name}
+                      </BreadcrumbLink>
+                    )}
+                  </BreadcrumbItem>
+                </Fragment>
+              ))}
+            </BreadcrumbList>
+          </Breadcrumb>
+        </div>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-sm"
+          onClick={onRefreshExplorer}
+          aria-label="Refresh file explorer"
+        >
+          <RefreshCw className="size-3" />
+        </Button>
+      </div>
+      <div className="min-h-0 flex-1 overflow-auto rounded-md border">
+        {sortedEntries.length === 0 ? (
+          <div className="p-3 text-sm text-muted-foreground">No files found.</div>
+        ) : (
+          <ul className="p-1">
+            {sortedEntries.map((entry) => (
+              <li key={entry.path}>
+                <div className="group flex w-full items-center rounded-md px-2 py-1 text-left text-xs hover:bg-muted/50">
+                  {entry.isDir ? (
+                    <button
+                      type="button"
+                      className="flex min-w-0 flex-1 items-center gap-2"
+                      onClick={() => onNavigateExplorer(entry.path)}
+                    >
+                      <FolderIcon className="size-3.5 shrink-0 text-primary" />
+                      <span className="truncate">{entry.name}</span>
+                    </button>
+                  ) : (
+                    <span className="flex min-w-0 flex-1 items-center gap-2">
+                      <FileIcon className="size-3.5 shrink-0 text-muted-foreground" />
+                      <span className="truncate">{entry.name}</span>
+                    </span>
+                  )}
+                  <div className="flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon-sm"
+                      onClick={() => {
+                        if (entry.isDir) {
+                          void onDownloadFolder(entry.path, entry.name);
+                        } else {
+                          void onDownloadFile(entry.path, entry.name);
+                        }
+                      }}
+                      aria-label={`Download ${entry.name}`}
+                    >
+                      <DownloadIcon className="size-3" />
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon-sm"
+                      onClick={() => {
+                        if (window.confirm(`Delete "${entry.name}"? This cannot be undone.`)) {
+                          void onDeleteEntry(entry.path);
+                        }
+                      }}
+                      aria-label={`Delete ${entry.name}`}
+                    >
+                      <Trash2Icon className="size-3 text-destructive" />
+                    </Button>
+                  </div>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </TabsContent>
   );
 }
 

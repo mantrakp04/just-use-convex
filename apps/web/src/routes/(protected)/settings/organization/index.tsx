@@ -86,10 +86,9 @@ function OrganizationTab() {
         </CardHeader>
         <CardContent>
           <form
-            onSubmit={(e) => {
-              e.preventDefault();
+            onSubmit={async (e) => {
               e.stopPropagation();
-              form.handleSubmit();
+              await form.handleSubmit();
             }}
             className="flex flex-col gap-2"
           >

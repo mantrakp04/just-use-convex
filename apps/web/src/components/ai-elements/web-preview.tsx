@@ -15,7 +15,7 @@ import {
 import { cn } from "@/lib/utils";
 import { ChevronDownIcon } from "lucide-react";
 import type { ComponentProps, ReactNode } from "react";
-import { createContext, useContext, useEffect, useState } from "react";
+import { createContext, useContext, useState } from "react";
 
 export interface WebPreviewContextValue {
   url: string;
@@ -46,7 +46,7 @@ export const WebPreview = ({
   onUrlChange,
   ...props
 }: WebPreviewProps) => {
-  const [url, setUrl] = useState(defaultUrl);
+  const [url, setUrl] = useState(() => defaultUrl);
   const [consoleOpen, setConsoleOpen] = useState(false);
 
   const handleUrlChange = (newUrl: string) => {
@@ -121,22 +121,15 @@ export const WebPreviewUrl = ({
   ...props
 }: WebPreviewUrlProps) => {
   const { url, setUrl } = useWebPreview();
-  const [inputValue, setInputValue] = useState(url);
-
-  // Sync input value with context URL when it changes externally
-  useEffect(() => {
-    setInputValue(url);
-  }, [url]);
+  const isControlled = value !== undefined;
 
   const handleChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    setInputValue(event.target.value);
     onChange?.(event);
   };
 
   const handleKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
     if (event.key === "Enter") {
-      const target = event.target as HTMLInputElement;
-      setUrl(target.value);
+      setUrl(event.currentTarget.value);
     }
     onKeyDown?.(event);
   };
@@ -144,10 +137,12 @@ export const WebPreviewUrl = ({
   return (
     <Input
       className="h-8 flex-1 text-sm"
-      onChange={onChange ?? handleChange}
+      defaultValue={isControlled ? undefined : url}
+      key={isControlled ? "controlled" : url}
+      onChange={handleChange}
       onKeyDown={handleKeyDown}
       placeholder="Enter URL..."
-      value={value ?? inputValue}
+      value={isControlled ? value : undefined}
       {...props}
     />
   );
@@ -187,9 +182,11 @@ export type WebPreviewConsoleProps = ComponentProps<"div"> & {
   }>;
 };
 
+const EMPTY_WEB_PREVIEW_LOGS: NonNullable<WebPreviewConsoleProps["logs"]> = [];
+
 export const WebPreviewConsole = ({
   className,
-  logs = [],
+  logs = EMPTY_WEB_PREVIEW_LOGS,
   children,
   ...props
 }: WebPreviewConsoleProps) => {
@@ -219,7 +216,7 @@ export const WebPreviewConsole = ({
           {logs.length === 0 ? (
             <p className="text-muted-foreground">No console output</p>
           ) : (
-            logs.map((log, index) => (
+            logs.map((log) => (
               <div
                 className={cn(
                   "text-xs",
@@ -227,7 +224,7 @@ export const WebPreviewConsole = ({
                   log.level === "warn" && "text-yellow-600",
                   log.level === "log" && "text-foreground"
                 )}
-                key={`${log.timestamp.getTime()}-${index}`}
+                key={`${log.timestamp.getTime()}-${log.level}-${log.message}`}
               >
                 <span className="text-muted-foreground">
                   {log.timestamp.toLocaleTimeString()}

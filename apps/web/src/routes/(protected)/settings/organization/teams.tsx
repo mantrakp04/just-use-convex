@@ -80,10 +80,9 @@ function CreateTeamDialog({ onCreated }: { onCreated?: () => void }) {
           <DialogDescription>Create a new team within your organization</DialogDescription>
         </DialogHeader>
         <form
-          onSubmit={(e) => {
-            e.preventDefault();
+          onSubmit={async (e) => {
             e.stopPropagation();
-            form.handleSubmit();
+            await form.handleSubmit();
           }}
           className="flex flex-col gap-4"
         >

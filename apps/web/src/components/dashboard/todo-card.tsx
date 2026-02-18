@@ -61,9 +61,9 @@ export function TodoCard({
             onStatusChange(nextStatus);
           }}
         >
-          <StatusIcon
-            className={`size-4 ${status === "done" ? "text-green-500" : status === "in_progress" ? "text-blue-500" : ""}`}
-          />
+        <StatusIcon
+          className={`size-4 ${status === "done" ? "text-primary" : status === "in_progress" ? "text-[var(--color-chart-2)]" : ""}`}
+        />
         </Button>
         <div className="flex-1 min-w-0">
           <p

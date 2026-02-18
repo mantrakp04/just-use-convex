@@ -15,11 +15,12 @@ import { cjk } from "@streamdown/cjk";
 import { code } from "@streamdown/code";
 import { math } from "@streamdown/math";
 import { mermaid } from "@streamdown/mermaid";
+import { useControllableState } from "@radix-ui/react-use-controllable-state";
 import type { UIMessage } from "ai";
 import { ChevronLeftIcon, ChevronRightIcon } from "lucide-react";
 import type { ComponentProps, HTMLAttributes, ReactElement } from "react";
-import { createContext, useContext, useEffect, useState } from "react";
-import { Streamdown } from "streamdown";
+import { createContext, useContext, useEffect, useMemo, useState } from "react";
+import { LazyStreamdown, type LazyStreamdownProps } from "./lazy-streamdown";
 
 export type MessageProps = HTMLAttributes<HTMLDivElement> & {
   from: UIMessage["role"];
@@ -130,44 +131,48 @@ const useMessageBranch = () => {
 };
 
 export type MessageBranchProps = HTMLAttributes<HTMLDivElement> & {
+  branch?: number;
   defaultBranch?: number;
   onBranchChange?: (branchIndex: number) => void;
 };
 
 export const MessageBranch = ({
+  branch,
   defaultBranch = 0,
   onBranchChange,
   className,
   ...props
 }: MessageBranchProps) => {
-  const [currentBranch, setCurrentBranch] = useState(defaultBranch);
+  const [currentBranch, setCurrentBranch] = useControllableState({
+    prop: branch,
+    defaultProp: defaultBranch,
+    onChange: onBranchChange,
+  });
   const [branches, setBranches] = useState<ReactElement[]>([]);
-
-  const handleBranchChange = (newBranch: number) => {
-    setCurrentBranch(newBranch);
-    onBranchChange?.(newBranch);
-  };
 
   const goToPrevious = () => {
     const newBranch =
       currentBranch > 0 ? currentBranch - 1 : branches.length - 1;
-    handleBranchChange(newBranch);
+    setCurrentBranch(newBranch);
   };
 
   const goToNext = () => {
     const newBranch =
       currentBranch < branches.length - 1 ? currentBranch + 1 : 0;
-    handleBranchChange(newBranch);
+    setCurrentBranch(newBranch);
   };
 
-  const contextValue: MessageBranchContextType = {
-    currentBranch,
-    totalBranches: branches.length,
-    goToPrevious,
-    goToNext,
-    branches,
-    setBranches,
-  };
+  const contextValue: MessageBranchContextType = useMemo(
+    () => ({
+      currentBranch,
+      totalBranches: branches.length,
+      goToPrevious,
+      goToNext,
+      branches,
+      setBranches,
+    }),
+    [currentBranch, branches, goToPrevious, goToNext]
+  );
 
   return (
     <MessageBranchContext.Provider value={contextValue}>
@@ -302,10 +307,10 @@ export const MessageBranchPage = ({
   );
 };
 
-export type MessageResponseProps = ComponentProps<typeof Streamdown>;
+export type MessageResponseProps = LazyStreamdownProps;
 
 export const MessageResponse = ({ className, ...props }: MessageResponseProps) => (
-  <Streamdown
+  <LazyStreamdown
     className={cn(
       "size-full [&>*:first-child]:mt-0 [&>*:last-child]:mb-0",
       className

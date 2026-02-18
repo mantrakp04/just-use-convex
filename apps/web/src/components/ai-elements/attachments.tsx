@@ -18,7 +18,7 @@ import {
   XIcon,
 } from "lucide-react";
 import type { ComponentProps, HTMLAttributes, ReactNode } from "react";
-import { createContext, useContext, useMemo } from "react";
+import { createContext, memo, useContext, useMemo } from "react";
 
 // ============================================================================
 // Types
@@ -208,57 +208,6 @@ export const AttachmentPreview = ({
 }: AttachmentPreviewProps) => {
   const { data, mediaCategory, variant } = useAttachmentContext();
 
-  const iconSize = variant === "inline" ? "size-3" : "size-4";
-
-  const renderImage = (
-    url: string,
-    filename: string | undefined,
-    isGrid: boolean
-  ) =>
-    isGrid ? (
-      <img
-        alt={filename || "Image"}
-        className="size-full object-cover"
-        height={96}
-        src={url}
-        width={96}
-      />
-    ) : (
-      <img
-        alt={filename || "Image"}
-        className="size-full rounded object-cover"
-        height={20}
-        src={url}
-        width={20}
-      />
-    );
-
-  const renderIcon = (Icon: typeof ImageIcon) => (
-    <Icon className={cn(iconSize, "text-muted-foreground")} />
-  );
-
-  const renderContent = () => {
-    if (mediaCategory === "image" && data.type === "file" && data.url) {
-      return renderImage(data.url, data.filename, variant === "grid");
-    }
-
-    if (mediaCategory === "video" && data.type === "file" && data.url) {
-      return <video className="size-full object-cover" muted src={data.url} />;
-    }
-
-    const iconMap: Record<AttachmentMediaCategory, typeof ImageIcon> = {
-      image: ImageIcon,
-      video: VideoIcon,
-      audio: Music2Icon,
-      source: GlobeIcon,
-      document: FileTextIcon,
-      unknown: PaperclipIcon,
-    };
-
-    const Icon = iconMap[mediaCategory];
-    return fallbackIcon ?? renderIcon(Icon);
-  };
-
   return (
     <div
       className={cn(
@@ -270,10 +219,65 @@ export const AttachmentPreview = ({
       )}
       {...props}
     >
-      {renderContent()}
+      <AttachmentPreviewContent
+        data={data}
+        fallbackIcon={fallbackIcon}
+        mediaCategory={mediaCategory}
+        variant={variant}
+      />
     </div>
   );
 };
+
+const ICON_MAP: Record<AttachmentMediaCategory, typeof ImageIcon> = {
+  image: ImageIcon,
+  video: VideoIcon,
+  audio: Music2Icon,
+  source: GlobeIcon,
+  document: FileTextIcon,
+  unknown: PaperclipIcon,
+};
+
+const AttachmentPreviewContent = memo(function AttachmentPreviewContent({
+  data,
+  mediaCategory,
+  variant,
+  fallbackIcon,
+}: {
+  data: AttachmentData;
+  mediaCategory: AttachmentMediaCategory;
+  variant: AttachmentVariant;
+  fallbackIcon?: ReactNode;
+}) {
+  const iconSize = variant === "inline" ? "size-3" : "size-4";
+
+  if (mediaCategory === "image" && data.type === "file" && data.url) {
+    return variant === "grid" ? (
+      <img
+        alt={data.filename || "Image"}
+        className="size-full object-cover"
+        height={96}
+        src={data.url}
+        width={96}
+      />
+    ) : (
+      <img
+        alt={data.filename || "Image"}
+        className="size-full rounded object-cover"
+        height={20}
+        src={data.url}
+        width={20}
+      />
+    );
+  }
+
+  if (mediaCategory === "video" && data.type === "file" && data.url) {
+    return <video className="size-full object-cover" muted src={data.url} />;
+  }
+
+  const Icon = ICON_MAP[mediaCategory];
+  return fallbackIcon ?? <Icon className={cn(iconSize, "text-muted-foreground")} />;
+});
 
 // ============================================================================
 // AttachmentInfo - Name and type display

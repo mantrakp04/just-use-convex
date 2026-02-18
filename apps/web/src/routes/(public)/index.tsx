@@ -29,7 +29,7 @@ function HomeComponent() {
           <h2 className="font-medium">API Status</h2>
           <div className="flex items-center gap-1">
             <div
-              className={`h-2 w-2 rounded-full ${healthCheck.data === "OK" ? "bg-green-500" : "bg-red-500"}`}
+              className={`h-2 w-2 rounded-full ${healthCheck.data === "OK" ? "bg-primary" : "bg-destructive"}`}
             />
             <span className="text-muted-foreground text-sm">
               {healthCheck.data === "OK" ? "Connected" : "Error"}

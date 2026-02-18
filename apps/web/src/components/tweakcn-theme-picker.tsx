@@ -37,6 +37,7 @@ interface ThemePickerProps {
 }
 
 const SAVED_THEMES_KEY = "tweakcn-saved-themes"
+const EMPTY_THEMES: Theme[] = []
 
 function getSavedThemes(): SavedThemeEntry[] {
   if (typeof window === "undefined") return []
@@ -69,9 +70,9 @@ function ThemeColorDots({ theme }: { theme: Theme }) {
 
   return (
     <div className="flex items-center gap-0.5">
-      {colors.map((color, i) => (
+      {colors.map((color) => (
         <div
-          key={i}
+          key={`${theme.name}-${color}`}
           className="h-3 w-3 rounded-full border border-border/50"
           style={{ background: color }}
         />
@@ -81,7 +82,7 @@ function ThemeColorDots({ theme }: { theme: Theme }) {
 }
 
 export function ThemePicker({
-  themes: additionalThemes = [],
+  themes: additionalThemes = EMPTY_THEMES,
   className,
 }: ThemePickerProps) {
   const { currentTheme, setTheme: setTweakCNTheme } = useTweakCNThemes()

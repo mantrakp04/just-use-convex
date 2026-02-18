@@ -3,6 +3,7 @@ import type { QueryClient } from "@tanstack/react-query";
 import type { TokenClient } from "@/lib/token-client";
 
 import { ConvexBetterAuthProvider } from "@convex-dev/better-auth/react";
+import { MotionConfig } from "motion/react";
 import {
   HeadContent,
   Outlet,
@@ -13,6 +14,7 @@ import {
 import { TanStackRouterDevtools } from "@tanstack/react-router-devtools";
 import { ReactQueryDevtools } from '@tanstack/react-query-devtools'
 import { createServerFn } from "@tanstack/react-start";
+import { useEffect } from "react";
 import { ThemeProvider, ThemeScript } from "@/components/tweakcn-theme-provider";
 import appCss from "../index.css?url";
 import { Toaster } from "@/components/ui/sonner";
@@ -21,7 +23,7 @@ import { getToken } from "@/lib/auth-server";
 import { seo } from '@/utils/seo'
 import { PostHogProvider } from 'posthog-js/react'
 
-import Header from "../components/header/index";
+import Header from "../components/header/header";
 import { env } from "@just-use-convex/env/web";
 
 const getAuth = createServerFn({ method: "GET" }).handler(async () => {
@@ -88,6 +90,13 @@ export const Route = createRootRouteWithContext<RouterAppContext>()({
 
 function RootDocument() {
   const context = useRouteContext({ from: Route.id });
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const media = window.matchMedia("(prefers-reduced-motion: reduce)");
+    void media.matches;
+  }, []);
+
   return (
     <PostHogProvider apiKey={env.VITE_PUBLIC_POSTHOG_KEY} options={
       {
@@ -100,24 +109,26 @@ function RootDocument() {
         authClient={authClient}
         initialToken={context.token}
       >
-        <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
-          <html lang="en" suppressHydrationWarning>
-            <head>
-              <HeadContent />
-              <ThemeScript storageKey="theme" defaultTheme="system" attribute="class" enableSystem />
-            </head>
-            <body>
-              <div className="grid h-svh grid-rows-[auto_1fr]">
-                <Header />
-                <Outlet />
-              </div>
-              <Toaster richColors />
-              <ReactQueryDevtools buttonPosition="bottom-right" />
-              <TanStackRouterDevtools position="bottom-left" />
-              <Scripts />
-            </body>
-          </html>
-        </ThemeProvider>
+        <MotionConfig reducedMotion="user">
+          <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
+            <html lang="en" suppressHydrationWarning>
+              <head>
+                <HeadContent />
+                <ThemeScript storageKey="theme" defaultTheme="system" attribute="class" enableSystem />
+              </head>
+              <body>
+                <div className="grid h-svh grid-rows-[auto_1fr]">
+                  <Header />
+                  <Outlet />
+                </div>
+                <Toaster richColors />
+                <ReactQueryDevtools buttonPosition="bottom-right" />
+                <TanStackRouterDevtools position="bottom-left" />
+                <Scripts />
+              </body>
+            </html>
+          </ThemeProvider>
+        </MotionConfig>
       </ConvexBetterAuthProvider>
     </PostHogProvider>
   );

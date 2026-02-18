@@ -19,6 +19,8 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useReducer,
+  useRef,
   useState,
 } from "react";
 
@@ -146,20 +148,34 @@ export const InlineCitationCarouselIndex = ({
   ...props
 }: InlineCitationCarouselIndexProps) => {
   const api = useCarouselApi();
-  const [current, setCurrent] = useState(0);
-  const [count, setCount] = useState(0);
+  const [{ current, count }, dispatch] = useReducer(
+    (state: { current: number; count: number }, next: { current: number; count: number }) =>
+      state.current === next.current && state.count === next.count ? state : next,
+    { current: 0, count: 0 }
+  );
+  const handleSelectRef = useRef<(() => void) | null>(null);
 
   useEffect(() => {
     if (!api) {
       return;
     }
 
-    setCount(api.scrollSnapList().length);
-    setCurrent(api.selectedScrollSnap() + 1);
+    const sync = () => {
+      dispatch({
+        count: api.scrollSnapList().length,
+        current: api.selectedScrollSnap() + 1,
+      });
+    };
 
-    api.on("select", () => {
-      setCurrent(api.selectedScrollSnap() + 1);
-    });
+    sync();
+    handleSelectRef.current = sync;
+    api.on("select", sync);
+
+    return () => {
+      if (handleSelectRef.current) {
+        api.off("select", handleSelectRef.current);
+      }
+    };
   }, [api]);
 
   return (

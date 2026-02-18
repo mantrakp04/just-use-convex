@@ -39,7 +39,7 @@ export function TodoListItem({ todo, onOpen, onStatusChange }: TodoListItemProps
         className="text-muted-foreground hover:text-foreground"
       >
         <StatusIcon
-          className={`size-5 ${status === "done" ? "text-green-500" : status === "in_progress" ? "text-blue-500" : ""}`}
+          className={`size-5 ${status === "done" ? "text-primary" : status === "in_progress" ? "text-[var(--color-chart-2)]" : ""}`}
         />
       </Button>
       <div className="flex-1 min-w-0">

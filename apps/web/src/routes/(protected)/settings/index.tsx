@@ -114,10 +114,9 @@ function UserSettingsPage() {
         </CardHeader>
         <CardContent>
           <form
-            onSubmit={(e) => {
-              e.preventDefault();
+            onSubmit={async (e) => {
               e.stopPropagation();
-              profileForm.handleSubmit();
+              await profileForm.handleSubmit();
             }}
             className="flex flex-col gap-4"
           >
@@ -129,13 +128,14 @@ function UserSettingsPage() {
                     {getInitials(user.name || "U")}
                   </AvatarFallback>
                 </Avatar>
-                <button
+                <Button
                   type="button"
+                  size="icon-sm"
                   onClick={() => fileInputRef.current?.click()}
-                  className="bg-primary text-primary-foreground absolute -right-1 -bottom-1 flex size-7 items-center justify-center rounded-full shadow-sm transition-colors hover:bg-primary/90"
+                  className="absolute -right-1 -bottom-1 rounded-full shadow-sm"
                 >
                   <CameraIcon className="size-4" />
-                </button>
+                </Button>
                 <input
                   ref={fileInputRef}
                   type="file"
@@ -233,10 +233,9 @@ function UserSettingsPage() {
         </CardHeader>
         <CardContent>
           <form
-            onSubmit={(e) => {
-              e.preventDefault();
+            onSubmit={async (e) => {
               e.stopPropagation();
-              passwordForm.handleSubmit();
+              await passwordForm.handleSubmit();
             }}
             className="flex flex-col gap-4"
           >
