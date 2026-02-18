@@ -71,6 +71,17 @@ export function TodoDialog({ todo, open, onOpenChange, mode, onModeChange }: Tod
   }, [assignedMemberIds, members]);
 
   useEffect(() => {
+    if (!open) {
+      return;
+    }
+
+    dispatch({
+      type: "reset",
+      state: createTodoDialogFormState(todo, fetchedAssignedMemberIds),
+    });
+  }, [open, todo]);
+
+  useEffect(() => {
     if (!open || mode === "create") {
       return;
     }

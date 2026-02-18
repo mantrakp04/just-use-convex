@@ -1,6 +1,5 @@
 import { useNavigate, useLocation } from "@tanstack/react-router";
 import { useEffect, useRef } from "react";
-import { useReducedMotion } from "motion/react";
 import { Tabs, TabsTrigger, TabsList } from "../ui/tabs";
 import { useHeader } from "@/hooks/use-header";
 
@@ -9,7 +8,6 @@ export default function Header() {
   const location = useLocation();
   const headerRef = useRef<HTMLDivElement>(null);
   const { setHeaderHeight } = useHeader();
-  useReducedMotion();
 
   const links = [
     { to: "", label: "Home" },
