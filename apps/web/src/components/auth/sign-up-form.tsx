@@ -54,6 +54,7 @@ export default function SignUpForm({ onSwitchToSignIn }: { onSwitchToSignIn: () 
 
       <form
         onSubmit={async (e) => {
+          e.preventDefault();
           e.stopPropagation();
           await form.handleSubmit();
         }}

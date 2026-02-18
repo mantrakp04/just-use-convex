@@ -81,6 +81,7 @@ function CreateOrganizationDialog({
         </DialogHeader>
         <form
           onSubmit={async (e) => {
+            e.preventDefault();
             e.stopPropagation();
             await form.handleSubmit();
           }}

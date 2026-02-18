@@ -87,6 +87,7 @@ function OrganizationTab() {
         <CardContent>
           <form
             onSubmit={async (e) => {
+              e.preventDefault();
               e.stopPropagation();
               await form.handleSubmit();
             }}
