@@ -27,6 +27,14 @@ export const Route = createFileRoute("/(protected)/settings/organization/attachm
 
 const PAGE_SIZE = 20;
 const MAX_UPLOAD_SIZE_BYTES = 50 * 1024 * 1024;
+const ATTACHMENT_SKELETON_KEYS = [
+  "attachment-skeleton-1",
+  "attachment-skeleton-2",
+  "attachment-skeleton-3",
+  "attachment-skeleton-4",
+  "attachment-skeleton-5",
+  "attachment-skeleton-6",
+] as const;
 
 function formatBytes(bytes: number) {
   if (bytes === 0) return "0 B";
@@ -195,8 +203,8 @@ function AttachmentsSettings() {
         <CardContent>
           {isLoading ? (
             <div className="flex flex-col gap-3">
-              {Array.from({ length: 6 }).map((_, index) => (
-                <Skeleton key={index} className="h-12 w-full rounded-lg" />
+              {ATTACHMENT_SKELETON_KEYS.map((skeletonKey) => (
+                <Skeleton key={skeletonKey} className="h-12 w-full rounded-lg" />
               ))}
             </div>
           ) : !hasResults ? (

@@ -100,18 +100,37 @@ export function ThemePicker({
 
   React.useEffect(() => {
     setMounted(true)
+  }, [])
+
+  React.useEffect(() => {
     setSavedThemes(getSavedThemes())
-    
-    // Fetch themes internally
-    fetchThemes()
-      .then(setFetchedThemes)
-      .catch((error) => {
+  }, [])
+
+  React.useEffect(() => {
+    let isCancelled = false
+
+    const loadThemes = async () => {
+      let loadedThemes: Theme[] = []
+
+      try {
+        loadedThemes = await fetchThemes()
+      } catch (error) {
         console.error("Failed to load themes:", error)
-        setFetchedThemes([])
-      })
-      .finally(() => {
-        setIsLoadingThemes(false)
-      })
+      }
+
+      if (isCancelled) {
+        return
+      }
+
+      setFetchedThemes(loadedThemes)
+      setIsLoadingThemes(false)
+    }
+
+    void loadThemes()
+
+    return () => {
+      isCancelled = true
+    }
   }, [])
 
   // Combine fetched themes with additional themes provided by user

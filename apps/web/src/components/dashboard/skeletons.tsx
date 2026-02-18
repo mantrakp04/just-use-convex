@@ -1,6 +1,11 @@
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 
+const CALENDAR_DAY_SKELETON_KEYS = Array.from(
+  { length: 35 },
+  (_, dayNumber) => `calendar-day-${dayNumber + 1}`
+);
+
 export function KanbanSkeleton() {
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 flex-1 min-h-0">
@@ -76,8 +81,8 @@ export function CalendarSkeleton() {
         </div>
         {/* Calendar Days Grid */}
         <div className="grid grid-cols-7">
-          {Array.from({ length: 35 }).map((_, idx) => (
-            <div key={idx} className="border-b border-r p-1 min-h-24">
+          {CALENDAR_DAY_SKELETON_KEYS.map((dayKey) => (
+            <div key={dayKey} className="border-b border-r p-1 min-h-24">
               <Skeleton className="h-6 w-6 rounded-full mb-1" />
               <div className="space-y-1">
                 <Skeleton className="h-4 w-full rounded" />

@@ -102,8 +102,8 @@ export const WebSearchResults = ({
     className={cn("divide-y divide-border", className)}
     {...props}
   >
-    {results.map((result, index) => (
-      <WebSearchResultItem key={`${result.url}-${index}`} result={result} />
+    {results.map((result) => (
+      <WebSearchResultItem key={`${result.url}-${result.title}`} result={result} />
     ))}
   </div>
 );

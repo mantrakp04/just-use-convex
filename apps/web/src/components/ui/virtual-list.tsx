@@ -84,17 +84,16 @@ export function VirtualList<T>({
         {virtualItems.map((virtualItem) => {
           const item = results[virtualItem.index];
           return (
-            <div
+            <VirtualListItem
               key={virtualItem.key}
-              data-index={virtualItem.index}
-              ref={virtualizer.measureElement}
-              className={cn("absolute left-0 top-0 w-full", itemClassName)}
-              style={{
-                transform: `translateY(${virtualItem.start + virtualItem.index * gap}px)`,
-              }}
-            >
-              {renderItem(item, virtualItem.index)}
-            </div>
+              item={item}
+              index={virtualItem.index}
+              start={virtualItem.start}
+              gap={gap}
+              itemClassName={itemClassName}
+              renderItem={renderItem}
+              measureElement={virtualizer.measureElement}
+            />
           );
         })}
         {isLoadingMore && (
@@ -113,3 +112,34 @@ export function VirtualList<T>({
 }
 
 export type { VirtualListProps };
+
+type VirtualListItemProps<T> = Pick<VirtualListProps<T>, "itemClassName" | "renderItem"> & {
+  item: T;
+  index: number;
+  start: number;
+  gap: number;
+  measureElement: (element: HTMLElement | null) => void;
+};
+
+function VirtualListItem<T>({
+  item,
+  index,
+  start,
+  gap,
+  itemClassName,
+  renderItem,
+  measureElement,
+}: VirtualListItemProps<T>) {
+  return (
+    <div
+      data-index={index}
+      ref={measureElement}
+      className={cn("absolute left-0 top-0 w-full", itemClassName)}
+      style={{
+        transform: `translateY(${start + index * gap}px)`,
+      }}
+    >
+      {renderItem(item, index)}
+    </div>
+  );
+}

@@ -31,8 +31,8 @@ export const CitationBadge = ({
         "inline-flex items-center gap-0.5 text-[10px] font-medium text-muted-foreground align-super",
         className
       )}>
-        {indices.map((i) => (
-          <span key={i} className="rounded bg-muted px-1">{i}</span>
+        {indices.map((citationIndex) => (
+          <span key={`citation-${citationIndex}`} className="rounded bg-muted px-1">{citationIndex}</span>
         ))}
       </span>
     );
@@ -81,7 +81,7 @@ export const CitationBadge = ({
       >
         {relevantSources.map((source) => (
           <a
-            key={source.index}
+            key={getSourceKey(source)}
             href={source.result.url}
             target="_blank"
             rel="noopener noreferrer"
@@ -95,7 +95,7 @@ export const CitationBadge = ({
       <HoverCardContent side="top" className="w-80 p-0" align="start">
         <div className="divide-y">
           {relevantSources.map((source) => (
-            <div key={source.index} className="p-3">
+            <div key={getSourceKey(source)} className="p-3">
               <SourcePreview source={source} />
             </div>
           ))}
@@ -142,4 +142,8 @@ function SourcePreview({ source }: { source: SourceReference }) {
       </div>
     </a>
   );
+}
+
+function getSourceKey(source: SourceReference): string {
+  return `${source.result.url}-${source.index}`;
 }

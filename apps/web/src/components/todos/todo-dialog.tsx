@@ -71,23 +71,12 @@ export function TodoDialog({ todo, open, onOpenChange, mode, onModeChange }: Tod
   }, [assignedMemberIds, members]);
 
   useEffect(() => {
-    if (!open) {
-      return;
-    }
-
-    dispatch({
-      type: "reset",
-      state: createTodoDialogFormState(todo, fetchedAssignedMemberIds),
-    });
-  }, [open, todo]);
-
-  useEffect(() => {
-    if (!open || mode === "create") {
+    if (mode === "create") {
       return;
     }
 
     dispatch({ type: "hydrateAssignedMembers", memberIds: fetchedAssignedMemberIds });
-  }, [fetchedAssignedMemberIds, mode, open]);
+  }, [fetchedAssignedMemberIds, mode]);
 
   // Helper to convert time string (HH:MM) to timestamp using dueDate as the date
   const timeToTimestamp = (time: string): number | undefined => {

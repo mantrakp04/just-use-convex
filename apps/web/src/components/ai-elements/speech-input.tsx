@@ -267,12 +267,12 @@ export const SpeechInput = ({
     <div className="relative inline-flex items-center justify-center">
       {/* Animated pulse rings */}
       {isListening &&
-        [0, 1, 2].map((index) => (
+        [0, 1, 2].map((ring) => (
           <div
             className="absolute inset-0 animate-ping rounded-full border-2 border-red-400/30"
-            key={index}
+            key={`ring-${ring}`}
             style={{
-              animationDelay: `${index * 0.3}s`,
+              animationDelay: `${ring * 0.3}s`,
               animationDuration: "2s",
             }}
           />

@@ -78,11 +78,16 @@ export const MicSelector = ({
   const [width, setWidth] = useState(200);
   const { devices, loading, hasPermission, loadDevices } = useAudioDevices();
 
-  useEffect(() => {
-    if (open && !hasPermission && !loading) {
-      loadDevices();
-    }
-  }, [open, hasPermission, loading, loadDevices]);
+  const handleOpenChange = useCallback(
+    (nextOpen: boolean) => {
+      if (nextOpen && !hasPermission && !loading) {
+        void loadDevices();
+      }
+
+      onOpenChange(nextOpen);
+    },
+    [hasPermission, loadDevices, loading, onOpenChange]
+  );
 
   return (
     <MicSelectorContext.Provider
@@ -91,12 +96,12 @@ export const MicSelector = ({
         value,
         onValueChange,
         open,
-        onOpenChange,
+        onOpenChange: handleOpenChange,
         width,
         setWidth,
       }}
     >
-      <Popover {...props} onOpenChange={onOpenChange} open={open} />
+      <Popover {...props} onOpenChange={handleOpenChange} open={open} />
     </MicSelectorContext.Provider>
   );
 };

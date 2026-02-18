@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { Bot } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { PanelImperativeHandle } from "react-resizable-panels";
 import type { Id } from "@just-use-convex/backend/convex/_generated/dataModel";
 import { useOpenRouterModels, type OpenRouterModel } from "@/hooks/use-openrouter-models";
@@ -53,6 +53,9 @@ function ChatPage() {
   const [isAnimating, setIsAnimating] = useState(false);
   const isFirstRender = useRef(true);
   const { headerHeight } = useHeader();
+  const stopPanelResizing = useCallback(() => {
+    setIsPanelResizing(false);
+  }, []);
 
   const selectedModel = useMemo(
     () => models.find((m: OpenRouterModel) => m.slug === settings.model),
@@ -127,22 +130,20 @@ function ChatPage() {
       const timeout = setTimeout(() => {
         restoreScroll();
         observer.disconnect();
-        setIsPanelResizing(false);
+        stopPanelResizing();
       }, 300);
 
       return () => {
         observer.disconnect();
         clearTimeout(timeout);
-        setIsPanelResizing(false);
       };
     }
 
-    const timeout = setTimeout(() => setIsPanelResizing(false), 300);
+    const timeout = setTimeout(stopPanelResizing, 300);
     return () => {
       clearTimeout(timeout);
-      setIsPanelResizing(false);
     };
-  }, [sandbox.isOpen]);
+  }, [sandbox.isOpen, stopPanelResizing]);
 
   if (!isReady || !chat) {
     return (

@@ -136,7 +136,7 @@ export const SourcesList = ({ sources, className }: SourcesListProps) => {
       <SourcesContent className="max-w-full">
         {sources.map((source) => (
           <NumberedSource
-            key={`${source.result.url}-${source.index}`}
+            key={`${source.result.url}-${source.result.title}`}
             index={source.index}
             source={source}
           />

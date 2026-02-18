@@ -139,8 +139,8 @@ export const MessageItem = memo(function MessageItem({
             <Attachments variant="grid">
               {editedFiles.map((file, index) => (
                 <Attachment
-                  key={`${file.url}-${index}`}
-                  data={{ ...file, id: String(index) }}
+                  key={file.url}
+                  data={{ ...file, id: file.url }}
                   onRemove={() => handleRemoveFile(index)}
                 >
                   <AttachmentPreview />
@@ -253,7 +253,14 @@ function buildRenderedParts({
   sources: ReturnType<typeof extractSourcesFromMessage>;
 }) {
   const elements: ReactElement[] = [];
-  let chainGroup: { part: UIMessage["parts"][number]; index: number }[] = [];
+  let chainGroup: { part: UIMessage["parts"][number]; partIndex: number }[] = [];
+  const elementKeyCounts = new Map<string, number>();
+
+  const nextElementKey = (baseKey: string) => {
+    const nextCount = (elementKeyCounts.get(baseKey) ?? 0) + 1;
+    elementKeyCounts.set(baseKey, nextCount);
+    return `${message.id}-${baseKey}-${nextCount}`;
+  };
 
   const flushChainGroup = () => {
     if (chainGroup.length === 0) {
@@ -262,7 +269,7 @@ function buildRenderedParts({
 
     elements.push(
       <ChainOfThoughtPart
-        key={`${message.id}-chain-${chainGroup[0].index}`}
+        key={nextElementKey(`chain-${getMessagePartKeyBase(chainGroup[0].part)}`)}
         isStreaming={isStreaming}
         chainGroup={chainGroup}
         toolApprovalResponse={toolApprovalResponse}
@@ -280,7 +287,7 @@ function buildRenderedParts({
       flushChainGroup();
       elements.push(
         <ToolPart
-          key={`${message.id}-tool-${i}`}
+          key={nextElementKey(`tool-${getMessagePartKeyBase(part)}`)}
           part={part as ToolPartType}
           partKey={i}
           toolApprovalResponse={toolApprovalResponse}
@@ -290,23 +297,59 @@ function buildRenderedParts({
     }
 
     if (isChainOfThoughtPart(part)) {
-      chainGroup.push({ part, index: i });
+      chainGroup.push({ part, partIndex: i });
       return;
     }
 
     flushChainGroup();
     if (part.type === "text") {
       elements.push(
-        <TextPart key={`${message.id}-text-${i}`} part={part} role={message.role} partKey={i} sources={sources} />
+        <TextPart
+          key={nextElementKey(`text-${getMessagePartKeyBase(part)}`)}
+          part={part}
+          role={message.role}
+          partKey={i}
+          sources={sources}
+        />
       );
       return;
     }
 
     if (part.type === "file") {
-      elements.push(<FilePart key={`${message.id}-file-${i}`} part={part} partKey={i} />);
+      elements.push(
+        <FilePart
+          key={nextElementKey(`file-${getMessagePartKeyBase(part)}`)}
+          part={part}
+          partKey={i}
+        />
+      );
     }
   });
 
   flushChainGroup();
   return elements;
+}
+
+function getMessagePartKeyBase(part: UIMessage["parts"][number]): string {
+  if ("toolCallId" in part && typeof part.toolCallId === "string") {
+    return `${part.type}-${part.toolCallId}`;
+  }
+
+  if ("id" in part && typeof part.id === "string") {
+    return `${part.type}-${part.id}`;
+  }
+
+  if ("text" in part && typeof part.text === "string") {
+    return `${part.type}-${part.text}`;
+  }
+
+  if ("url" in part && typeof part.url === "string") {
+    return `${part.type}-${part.url}`;
+  }
+
+  if ("filename" in part && typeof part.filename === "string") {
+    return `${part.type}-${part.filename}`;
+  }
+
+  return part.type;
 }

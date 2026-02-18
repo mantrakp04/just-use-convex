@@ -48,6 +48,7 @@ function RouteComponent() {
   const [calendarDateRange, setCalendarDateRange] = useAtom(calendarDateRangeAtom);
 
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [dialogSessionKey, setDialogSessionKey] = useState(0);
   const [selectedTodo, setSelectedTodo] = useState<Todo | null>(null);
   const [dialogMode, setDialogMode] = useState<"view" | "edit" | "create">("view");
 
@@ -86,12 +87,14 @@ function RouteComponent() {
   const openTodoDialog = useCallback((todo: Todo, mode: "view" | "edit" = "view") => {
     setSelectedTodo(todo);
     setDialogMode(mode);
+    setDialogSessionKey((prev) => prev + 1);
     setDialogOpen(true);
   }, []);
 
   const openCreateDialog = useCallback(() => {
     setSelectedTodo(null);
     setDialogMode("create");
+    setDialogSessionKey((prev) => prev + 1);
     setDialogOpen(true);
   }, []);
 
@@ -182,6 +185,7 @@ function RouteComponent() {
       )}
 
       <TodoDialog
+        key={dialogSessionKey}
         todo={selectedTodo}
         open={dialogOpen}
         onOpenChange={setDialogOpen}
