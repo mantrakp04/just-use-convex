@@ -107,6 +107,9 @@ export const SpeechInput = ({
     speechInputInitialState
   );
   const [mode] = useState<SpeechInputMode>(() => detectSpeechInputMode());
+  const [isRecognitionReady, setIsRecognitionReady] = useState(
+    mode !== "speech-recognition"
+  );
   const recognitionRef = useRef<SpeechRecognition | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
@@ -154,8 +157,10 @@ export const SpeechInput = ({
     };
 
     recognitionRef.current = speechRecognition;
+    setIsRecognitionReady(true);
 
     return () => {
+      setIsRecognitionReady(false);
       if (recognitionRef.current) {
         recognitionRef.current.stop();
       }
@@ -254,7 +259,7 @@ export const SpeechInput = ({
   // Determine if button should be disabled
   const isDisabled =
     mode === "none" ||
-    (mode === "speech-recognition" && !recognitionRef.current) ||
+    (mode === "speech-recognition" && !isRecognitionReady) ||
     (mode === "media-recorder" && !onAudioRecorded) ||
     isProcessing;
 

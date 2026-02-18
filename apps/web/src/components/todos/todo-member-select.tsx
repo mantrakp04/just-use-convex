@@ -70,12 +70,18 @@ export function TodoMemberSelect({
             members.map((member) => {
               const isSelected = selectedMemberIds.includes(member.id);
               return (
-                <Button
-                  variant="ghost"
-                  size="sm"
+                <div
                   key={member.id}
-                  className="flex items-center gap-2 rounded-md px-2 py-1.5 cursor-pointer hover:bg-accent"
+                  role="button"
+                  tabIndex={0}
+                  className="flex items-center gap-2 rounded-md px-2 py-1.5 cursor-pointer hover:bg-accent focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-ring"
                   onClick={() => handleToggleMember(member.id)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" || event.key === " ") {
+                      event.preventDefault();
+                      handleToggleMember(member.id);
+                    }
+                  }}
                 >
                   <Checkbox checked={isSelected} />
                   <Avatar size="sm">
@@ -85,7 +91,7 @@ export function TodoMemberSelect({
                   <span className="flex-1 truncate text-sm">
                     {member.user.name || member.user.email}
                   </span>
-                </Button>
+                </div>
               );
             })
           )}

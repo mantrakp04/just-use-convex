@@ -19,7 +19,7 @@ import { useControllableState } from "@radix-ui/react-use-controllable-state";
 import type { UIMessage } from "ai";
 import { ChevronLeftIcon, ChevronRightIcon } from "lucide-react";
 import type { ComponentProps, HTMLAttributes, ReactElement } from "react";
-import { createContext, useContext, useEffect, useMemo, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { LazyStreamdown, type LazyStreamdownProps } from "./lazy-streamdown";
 
 export type MessageProps = HTMLAttributes<HTMLDivElement> & {
@@ -150,17 +150,17 @@ export const MessageBranch = ({
   });
   const [branches, setBranches] = useState<ReactElement[]>([]);
 
-  const goToPrevious = () => {
+  const goToPrevious = useCallback(() => {
     const newBranch =
       currentBranch > 0 ? currentBranch - 1 : branches.length - 1;
     setCurrentBranch(newBranch);
-  };
+  }, [branches.length, currentBranch, setCurrentBranch]);
 
-  const goToNext = () => {
+  const goToNext = useCallback(() => {
     const newBranch =
       currentBranch < branches.length - 1 ? currentBranch + 1 : 0;
     setCurrentBranch(newBranch);
-  };
+  }, [branches.length, currentBranch, setCurrentBranch]);
 
   const contextValue: MessageBranchContextType = useMemo(
     () => ({

@@ -14,7 +14,6 @@ import {
 import { TanStackRouterDevtools } from "@tanstack/react-router-devtools";
 import { ReactQueryDevtools } from '@tanstack/react-query-devtools'
 import { createServerFn } from "@tanstack/react-start";
-import { useEffect } from "react";
 import { ThemeProvider, ThemeScript } from "@/components/tweakcn-theme-provider";
 import appCss from "../index.css?url";
 import { Toaster } from "@/components/ui/sonner";
@@ -23,7 +22,7 @@ import { getToken } from "@/lib/auth-server";
 import { seo } from '@/utils/seo'
 import { PostHogProvider } from 'posthog-js/react'
 
-import Header from "../components/header/header";
+import Header from "../components/header/index";
 import { env } from "@just-use-convex/env/web";
 
 const getAuth = createServerFn({ method: "GET" }).handler(async () => {
@@ -90,12 +89,6 @@ export const Route = createRootRouteWithContext<RouterAppContext>()({
 
 function RootDocument() {
   const context = useRouteContext({ from: Route.id });
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const media = window.matchMedia("(prefers-reduced-motion: reduce)");
-    void media.matches;
-  }, []);
 
   return (
     <PostHogProvider apiKey={env.VITE_PUBLIC_POSTHOG_KEY} options={
