@@ -336,7 +336,7 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, AgentArgs> {
   override async onStateChanged(state: AgentArgs, source: Connection | "server"): Promise<void> {
     await this.ctx.storage.put("chatState", state);
     await this._patchAgent();
-    await super.onStateUpdate(state, source);
+    await super.onStateChanged(state, source);
   }
 
   override async persistMessages(messages: UIMessage[]): Promise<void> {
