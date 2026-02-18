@@ -7,7 +7,9 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Filter, X, LayoutGrid, List, Calendar } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
+import { Filter, X, LayoutGrid, List, Calendar, Search, Info } from "lucide-react";
 import type {
   ViewMode,
   KanbanGroupBy,
@@ -33,6 +35,8 @@ interface DashboardToolbarProps {
   onFilterTeamIdChange: (teamId: string | "all") => void;
   filterMemberId: string | "all";
   onFilterMemberIdChange: (memberId: string | "all") => void;
+  searchQuery: string;
+  onSearchQueryChange: (query: string) => void;
   teams: Team[];
   members: Member[];
   onClearFilters: () => void;
@@ -51,6 +55,8 @@ export function DashboardToolbar({
   onFilterTeamIdChange,
   filterMemberId,
   onFilterMemberIdChange,
+  searchQuery,
+  onSearchQueryChange,
   teams,
   members,
   onClearFilters,
@@ -86,6 +92,59 @@ export function DashboardToolbar({
           </SelectContent>
         </Select>
       )}
+
+      {/* Search */}
+      <div className="flex items-center gap-1">
+        <div className="relative">
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground" />
+          <Input
+            placeholder="Search todos..."
+            value={searchQuery}
+            onChange={(e) => onSearchQueryChange(e.target.value)}
+            className="w-48 pl-8 h-9"
+          />
+          {searchQuery && (
+            <button
+              type="button"
+              onClick={() => onSearchQueryChange("")}
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+            >
+              <X className="size-3.5" />
+            </button>
+          )}
+        </div>
+        <Popover>
+          <PopoverTrigger
+            className="text-muted-foreground hover:text-foreground transition-colors p-1 rounded-md hover:bg-muted"
+          >
+            <Info className="size-3.5" />
+          </PopoverTrigger>
+          <PopoverContent align="start" className="w-64 text-xs">
+            <p className="font-medium text-sm mb-1.5">Search syntax</p>
+            <div className="space-y-1.5 text-muted-foreground">
+              <p>Type any text to search by title, description, status, priority, or assigned members.</p>
+              <p className="font-medium text-foreground mt-2">Time filters</p>
+              <div className="grid grid-cols-[auto_1fr] gap-x-2 gap-y-0.5">
+                <code className="text-[11px] bg-muted px-1 rounded">due:today</code>
+                <span>Due today</span>
+                <code className="text-[11px] bg-muted px-1 rounded">due:tomorrow</code>
+                <span>Due tomorrow</span>
+                <code className="text-[11px] bg-muted px-1 rounded">due:2026-03-15</code>
+                <span>Due on date</span>
+                <code className="text-[11px] bg-muted px-1 rounded">due:2026-03-01..2026-03-31</code>
+                <span>Due in range</span>
+                <code className="text-[11px] bg-muted px-1 rounded">after:2026-03-01</code>
+                <span>Due after date</span>
+                <code className="text-[11px] bg-muted px-1 rounded">before:2026-04-01</code>
+                <span>Due before date</span>
+                <code className="text-[11px] bg-muted px-1 rounded">updated:today</code>
+                <span>Updated today</span>
+              </div>
+              <p className="mt-1.5">Combine text with filters: <code className="text-[11px] bg-muted px-1 rounded">fix bug due:today</code></p>
+            </div>
+          </PopoverContent>
+        </Popover>
+      </div>
 
       <div className="flex-1" />
 

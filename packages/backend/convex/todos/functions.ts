@@ -249,6 +249,46 @@ export async function UnassignMember(ctx: zMutationCtx, args: z.infer<typeof typ
   return true;
 }
 
+export async function SearchTodos(ctx: zQueryCtx, args: z.infer<typeof types.SearchArgs>) {
+  assertPermission(
+    ctx.identity.organizationRole,
+    { todo: ["read"] },
+    "You are not authorized to search todos"
+  );
+
+  const results = await ctx.db
+    .query("todosContent")
+    .withSearchIndex("content", (q) =>
+      q.search("content", args.query)
+        .eq("organizationId", ctx.identity.activeOrganizationId)
+    )
+    .take(100);
+
+  const todos = await Promise.all(
+    results.map(async (result) => {
+      const todo = await ctx.table("todos").get(result.todoId);
+      return todo;
+    })
+  );
+
+  const filtered = todos.filter((todo) => {
+    if (!todo) return false;
+    const tf = args.timeFilters;
+    if (!tf) return true;
+    if (tf.dueDateFrom !== undefined && (!todo.dueDate || todo.dueDate < tf.dueDateFrom)) return false;
+    if (tf.dueDateTo !== undefined && (!todo.dueDate || todo.dueDate > tf.dueDateTo)) return false;
+    if (tf.startTimeFrom !== undefined && (!todo.startTime || todo.startTime < tf.startTimeFrom)) return false;
+    if (tf.startTimeTo !== undefined && (!todo.startTime || todo.startTime > tf.startTimeTo)) return false;
+    if (tf.endTimeFrom !== undefined && (!todo.endTime || todo.endTime < tf.endTimeFrom)) return false;
+    if (tf.endTimeTo !== undefined && (!todo.endTime || todo.endTime > tf.endTimeTo)) return false;
+    if (tf.updatedAtFrom !== undefined && todo.updatedAt < tf.updatedAtFrom) return false;
+    if (tf.updatedAtTo !== undefined && todo.updatedAt > tf.updatedAtTo) return false;
+    return true;
+  });
+
+  return filtered;
+}
+
 export async function ListAssignedTodos(ctx: zQueryCtx, args: z.infer<typeof types.ListAssignedTodosArgs>) {
   const memberId = args.memberId ?? ctx.identity.memberId;
   assertScopedPermission(

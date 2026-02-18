@@ -40,6 +40,7 @@ import type * as tables_orgMemberAttachments from "../tables/orgMemberAttachment
 import type * as tables_sandboxes from "../tables/sandboxes.js";
 import type * as tables_todoAssignedMembers from "../tables/todoAssignedMembers.js";
 import type * as tables_todos from "../tables/todos.js";
+import type * as tables_todosContent from "../tables/todosContent.js";
 import type * as todos_aggregates from "../todos/aggregates.js";
 import type * as todos_functions from "../todos/functions.js";
 import type * as todos_index from "../todos/index.js";
@@ -86,6 +87,7 @@ declare const fullApi: ApiFromModules<{
   "tables/sandboxes": typeof tables_sandboxes;
   "tables/todoAssignedMembers": typeof tables_todoAssignedMembers;
   "tables/todos": typeof tables_todos;
+  "tables/todosContent": typeof tables_todosContent;
   "todos/aggregates": typeof todos_aggregates;
   "todos/functions": typeof todos_functions;
   "todos/index": typeof todos_index;

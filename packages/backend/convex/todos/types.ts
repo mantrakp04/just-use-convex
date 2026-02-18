@@ -67,3 +67,19 @@ export const ListAssignedTodosArgs = z.object({
   memberId: z.string().optional(),
   paginationOpts: zPaginationOpts,
 });
+
+export const SearchTimeFilters = z.object({
+  dueDateFrom: z.number(),
+  dueDateTo: z.number(),
+  startTimeFrom: z.number(),
+  startTimeTo: z.number(),
+  endTimeFrom: z.number(),
+  endTimeTo: z.number(),
+  updatedAtFrom: z.number(),
+  updatedAtTo: z.number(),
+}).partial();
+
+export const SearchArgs = z.object({
+  query: z.string(),
+  timeFilters: SearchTimeFilters.optional(),
+});
