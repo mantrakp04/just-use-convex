@@ -2,6 +2,7 @@
 
 ## Project Overview
 AI-powered agentic chat platform — multi-tenant, real-time, with org/team support. Features multi-step planning agents with sub-agents, Daytona sandbox code execution (PTY terminals, file ops), vector search (RAG), and tool approval workflows. Cloudflare Workers + Durable Objects for persistent agent state, Convex for reactive backend, TanStack Start for SSR.
+THIS APP HAS NO USERS, thers no real data yet make whatever changes u want dont worry about it we will figure it out when we ship, this is super greenfield, its ok u can change the schema compleatly we are trying to get it in a good shape.
 
 ## Tech Stack
 | Layer | Stack |
