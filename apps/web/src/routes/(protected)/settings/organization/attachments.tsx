@@ -4,7 +4,7 @@ import { DownloadIcon, Trash2Icon } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 
 import { useAttachments, useAttachmentsList, type AttachmentItem } from "@/hooks/use-attachments";
-import { useActiveMember, useMembers, ROLE_HIERARCHY } from "@/hooks/auth/organization";
+import { isAtLeastRole, useActiveMember, useMembers } from "@/hooks/auth/organization";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -114,9 +114,7 @@ function AttachmentsSettings() {
   }, []);
 
   const isAdmin = useMemo(() => {
-    if (!currentUserRole) return false;
-    const level = ROLE_HIERARCHY[currentUserRole] ?? 0;
-    return level >= ROLE_HIERARCHY.admin;
+    return isAtLeastRole(currentUserRole, "admin");
   }, [currentUserRole]);
 
   const listMemberId = isAdmin && memberId !== "me" ? memberId : undefined;

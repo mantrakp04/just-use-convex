@@ -124,7 +124,7 @@ export class ConvexAdapter {
    */
   async query<F extends FunctionReference<"query", "public">>(
     fn: F,
-    args: FunctionArgs<F>
+    args: StripExternalAuth<FunctionArgs<F>>
   ): Promise<FunctionReturnType<F>> {
     const enrichedArgs = this.enrichArgs(args);
     return this.client.query(fn, enrichedArgs as FunctionArgs<F>);
@@ -136,7 +136,7 @@ export class ConvexAdapter {
    */
   async mutation<F extends FunctionReference<"mutation", "public">>(
     fn: F,
-    args: FunctionArgs<F>
+    args: StripExternalAuth<FunctionArgs<F>>
   ): Promise<FunctionReturnType<F>> {
     const enrichedArgs = this.enrichArgs(args);
     return this.client.mutation(fn, enrichedArgs as FunctionArgs<F>);
@@ -148,7 +148,7 @@ export class ConvexAdapter {
    */
   async action<F extends FunctionReference<"action", "public">>(
     fn: F,
-    args: FunctionArgs<F>
+    args: StripExternalAuth<FunctionArgs<F>>
   ): Promise<FunctionReturnType<F>> {
     const enrichedArgs = this.enrichArgs(args);
     return this.client.action(fn, enrichedArgs as FunctionArgs<F>);
@@ -207,48 +207,6 @@ export async function createConvexAdapter(
     tokenConfig.externalToken,
     tokenConfig.identifier
   );
-}
-
-// ═══════════════════════════════════════════════════════════════════
-// HELPER: TOKEN PARSING
-// ═══════════════════════════════════════════════════════════════════
-
-/**
- * Parse token config from URL search params.
- * Supports both JWT tokens and external tokens with identifier.
- *
- * For JWT: `?token=<jwt>` or `?token=<jwt>&tokenType=jwt`
- * For External: `?token=<ext_token>&tokenType=ext&userId=...` or `?token=<ext_token>&tokenType=ext&memberId=...`
- */
-export function parseTokenFromUrl(url: URL): TokenConfig | null {
-  const token = url.searchParams.get("token");
-  const tokenType = url.searchParams.get("tokenType") ?? "jwt";
-
-  if (!token) return null;
-
-  if (tokenType === "ext") {
-    const userId = url.searchParams.get("userId");
-    const memberId = url.searchParams.get("memberId");
-
-    if (!userId && !memberId) {
-      throw new Error("External token requires either userId or memberId");
-    }
-
-    const identifier: Identifier = memberId
-      ? { type: "memberId", value: memberId }
-      : { type: "userId", value: userId! };
-
-    return {
-      type: "ext",
-      externalToken: token,
-      identifier,
-    };
-  }
-
-  return {
-    type: "jwt",
-    token,
-  };
 }
 
 // ═══════════════════════════════════════════════════════════════════

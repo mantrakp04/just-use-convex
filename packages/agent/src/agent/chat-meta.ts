@@ -2,7 +2,7 @@ import { Output, generateText } from "ai";
 import { z } from "zod";
 import { api } from "@just-use-convex/backend/convex/_generated/api";
 import type { Id } from "@just-use-convex/backend/convex/_generated/dataModel";
-import { createAiClient } from "../client";
+import { createAiClient } from "./client";
 import type { ConvexAdapter } from "@just-use-convex/backend/convex/lib/convexAdapter";
 
 export async function generateTitle(args: {

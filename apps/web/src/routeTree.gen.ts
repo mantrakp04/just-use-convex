@@ -17,12 +17,16 @@ import { Route as ApiModelsRouteImport } from './routes/api/models'
 import { Route as publicAuthRouteImport } from './routes/(public)/auth'
 import { Route as protectedDashboardRouteImport } from './routes/(protected)/dashboard'
 import { Route as publicDocsRouteRouteImport } from './routes/(public)/docs/route'
+import { Route as protectedWorkflowsRouteRouteImport } from './routes/(protected)/workflows/route'
 import { Route as protectedSettingsRouteRouteImport } from './routes/(protected)/settings/route'
 import { Route as protectedChatsRouteRouteImport } from './routes/(protected)/chats/route'
+import { Route as protectedWorkflowsIndexRouteImport } from './routes/(protected)/workflows/index'
 import { Route as protectedSettingsIndexRouteImport } from './routes/(protected)/settings/index'
 import { Route as protectedChatsIndexRouteImport } from './routes/(protected)/chats/index'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
 import { Route as publicDocsSplatRouteImport } from './routes/(public)/docs/$'
+import { Route as protectedWorkflowsNewRouteImport } from './routes/(protected)/workflows/new'
+import { Route as protectedWorkflowsWorkflowIdRouteImport } from './routes/(protected)/workflows/$workflowId'
 import { Route as protectedChatsChatIdRouteImport } from './routes/(protected)/chats/$chatId'
 import { Route as protectedSettingsOrganizationRouteRouteImport } from './routes/(protected)/settings/organization/route'
 import { Route as protectedSettingsOrganizationIndexRouteImport } from './routes/(protected)/settings/organization/index'
@@ -68,6 +72,11 @@ const publicDocsRouteRoute = publicDocsRouteRouteImport.update({
   path: '/docs',
   getParentRoute: () => publicRouteRoute,
 } as any)
+const protectedWorkflowsRouteRoute = protectedWorkflowsRouteRouteImport.update({
+  id: '/workflows',
+  path: '/workflows',
+  getParentRoute: () => protectedRouteRoute,
+} as any)
 const protectedSettingsRouteRoute = protectedSettingsRouteRouteImport.update({
   id: '/settings',
   path: '/settings',
@@ -77,6 +86,11 @@ const protectedChatsRouteRoute = protectedChatsRouteRouteImport.update({
   id: '/chats',
   path: '/chats',
   getParentRoute: () => protectedRouteRoute,
+} as any)
+const protectedWorkflowsIndexRoute = protectedWorkflowsIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => protectedWorkflowsRouteRoute,
 } as any)
 const protectedSettingsIndexRoute = protectedSettingsIndexRouteImport.update({
   id: '/',
@@ -98,6 +112,17 @@ const publicDocsSplatRoute = publicDocsSplatRouteImport.update({
   path: '/$',
   getParentRoute: () => publicDocsRouteRoute,
 } as any)
+const protectedWorkflowsNewRoute = protectedWorkflowsNewRouteImport.update({
+  id: '/new',
+  path: '/new',
+  getParentRoute: () => protectedWorkflowsRouteRoute,
+} as any)
+const protectedWorkflowsWorkflowIdRoute =
+  protectedWorkflowsWorkflowIdRouteImport.update({
+    id: '/$workflowId',
+    path: '/$workflowId',
+    getParentRoute: () => protectedWorkflowsRouteRoute,
+  } as any)
 const protectedChatsChatIdRoute = protectedChatsChatIdRouteImport.update({
   id: '/$chatId',
   path: '/$chatId',
@@ -137,6 +162,7 @@ const protectedSettingsOrganizationAttachmentsRoute =
 export interface FileRoutesByFullPath {
   '/chats': typeof protectedChatsRouteRouteWithChildren
   '/settings': typeof protectedSettingsRouteRouteWithChildren
+  '/workflows': typeof protectedWorkflowsRouteRouteWithChildren
   '/docs': typeof publicDocsRouteRouteWithChildren
   '/dashboard': typeof protectedDashboardRoute
   '/auth': typeof publicAuthRoute
@@ -145,10 +171,13 @@ export interface FileRoutesByFullPath {
   '/': typeof publicIndexRoute
   '/settings/organization': typeof protectedSettingsOrganizationRouteRouteWithChildren
   '/chats/$chatId': typeof protectedChatsChatIdRoute
+  '/workflows/$workflowId': typeof protectedWorkflowsWorkflowIdRoute
+  '/workflows/new': typeof protectedWorkflowsNewRoute
   '/docs/$': typeof publicDocsSplatRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/chats/': typeof protectedChatsIndexRoute
   '/settings/': typeof protectedSettingsIndexRoute
+  '/workflows/': typeof protectedWorkflowsIndexRoute
   '/settings/organization/attachments': typeof protectedSettingsOrganizationAttachmentsRoute
   '/settings/organization/members': typeof protectedSettingsOrganizationMembersRoute
   '/settings/organization/teams': typeof protectedSettingsOrganizationTeamsRoute
@@ -162,10 +191,13 @@ export interface FileRoutesByTo {
   '/api/search': typeof ApiSearchRoute
   '/': typeof publicIndexRoute
   '/chats/$chatId': typeof protectedChatsChatIdRoute
+  '/workflows/$workflowId': typeof protectedWorkflowsWorkflowIdRoute
+  '/workflows/new': typeof protectedWorkflowsNewRoute
   '/docs/$': typeof publicDocsSplatRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/chats': typeof protectedChatsIndexRoute
   '/settings': typeof protectedSettingsIndexRoute
+  '/workflows': typeof protectedWorkflowsIndexRoute
   '/settings/organization/attachments': typeof protectedSettingsOrganizationAttachmentsRoute
   '/settings/organization/members': typeof protectedSettingsOrganizationMembersRoute
   '/settings/organization/teams': typeof protectedSettingsOrganizationTeamsRoute
@@ -177,6 +209,7 @@ export interface FileRoutesById {
   '/(public)': typeof publicRouteRouteWithChildren
   '/(protected)/chats': typeof protectedChatsRouteRouteWithChildren
   '/(protected)/settings': typeof protectedSettingsRouteRouteWithChildren
+  '/(protected)/workflows': typeof protectedWorkflowsRouteRouteWithChildren
   '/(public)/docs': typeof publicDocsRouteRouteWithChildren
   '/(protected)/dashboard': typeof protectedDashboardRoute
   '/(public)/auth': typeof publicAuthRoute
@@ -185,10 +218,13 @@ export interface FileRoutesById {
   '/(public)/': typeof publicIndexRoute
   '/(protected)/settings/organization': typeof protectedSettingsOrganizationRouteRouteWithChildren
   '/(protected)/chats/$chatId': typeof protectedChatsChatIdRoute
+  '/(protected)/workflows/$workflowId': typeof protectedWorkflowsWorkflowIdRoute
+  '/(protected)/workflows/new': typeof protectedWorkflowsNewRoute
   '/(public)/docs/$': typeof publicDocsSplatRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/(protected)/chats/': typeof protectedChatsIndexRoute
   '/(protected)/settings/': typeof protectedSettingsIndexRoute
+  '/(protected)/workflows/': typeof protectedWorkflowsIndexRoute
   '/(protected)/settings/organization/attachments': typeof protectedSettingsOrganizationAttachmentsRoute
   '/(protected)/settings/organization/members': typeof protectedSettingsOrganizationMembersRoute
   '/(protected)/settings/organization/teams': typeof protectedSettingsOrganizationTeamsRoute
@@ -199,6 +235,7 @@ export interface FileRouteTypes {
   fullPaths:
     | '/chats'
     | '/settings'
+    | '/workflows'
     | '/docs'
     | '/dashboard'
     | '/auth'
@@ -207,10 +244,13 @@ export interface FileRouteTypes {
     | '/'
     | '/settings/organization'
     | '/chats/$chatId'
+    | '/workflows/$workflowId'
+    | '/workflows/new'
     | '/docs/$'
     | '/api/auth/$'
     | '/chats/'
     | '/settings/'
+    | '/workflows/'
     | '/settings/organization/attachments'
     | '/settings/organization/members'
     | '/settings/organization/teams'
@@ -224,10 +264,13 @@ export interface FileRouteTypes {
     | '/api/search'
     | '/'
     | '/chats/$chatId'
+    | '/workflows/$workflowId'
+    | '/workflows/new'
     | '/docs/$'
     | '/api/auth/$'
     | '/chats'
     | '/settings'
+    | '/workflows'
     | '/settings/organization/attachments'
     | '/settings/organization/members'
     | '/settings/organization/teams'
@@ -238,6 +281,7 @@ export interface FileRouteTypes {
     | '/(public)'
     | '/(protected)/chats'
     | '/(protected)/settings'
+    | '/(protected)/workflows'
     | '/(public)/docs'
     | '/(protected)/dashboard'
     | '/(public)/auth'
@@ -246,10 +290,13 @@ export interface FileRouteTypes {
     | '/(public)/'
     | '/(protected)/settings/organization'
     | '/(protected)/chats/$chatId'
+    | '/(protected)/workflows/$workflowId'
+    | '/(protected)/workflows/new'
     | '/(public)/docs/$'
     | '/api/auth/$'
     | '/(protected)/chats/'
     | '/(protected)/settings/'
+    | '/(protected)/workflows/'
     | '/(protected)/settings/organization/attachments'
     | '/(protected)/settings/organization/members'
     | '/(protected)/settings/organization/teams'
@@ -322,6 +369,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof publicDocsRouteRouteImport
       parentRoute: typeof publicRouteRoute
     }
+    '/(protected)/workflows': {
+      id: '/(protected)/workflows'
+      path: '/workflows'
+      fullPath: '/workflows'
+      preLoaderRoute: typeof protectedWorkflowsRouteRouteImport
+      parentRoute: typeof protectedRouteRoute
+    }
     '/(protected)/settings': {
       id: '/(protected)/settings'
       path: '/settings'
@@ -335,6 +389,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/chats'
       preLoaderRoute: typeof protectedChatsRouteRouteImport
       parentRoute: typeof protectedRouteRoute
+    }
+    '/(protected)/workflows/': {
+      id: '/(protected)/workflows/'
+      path: '/'
+      fullPath: '/workflows/'
+      preLoaderRoute: typeof protectedWorkflowsIndexRouteImport
+      parentRoute: typeof protectedWorkflowsRouteRoute
     }
     '/(protected)/settings/': {
       id: '/(protected)/settings/'
@@ -363,6 +424,20 @@ declare module '@tanstack/react-router' {
       fullPath: '/docs/$'
       preLoaderRoute: typeof publicDocsSplatRouteImport
       parentRoute: typeof publicDocsRouteRoute
+    }
+    '/(protected)/workflows/new': {
+      id: '/(protected)/workflows/new'
+      path: '/new'
+      fullPath: '/workflows/new'
+      preLoaderRoute: typeof protectedWorkflowsNewRouteImport
+      parentRoute: typeof protectedWorkflowsRouteRoute
+    }
+    '/(protected)/workflows/$workflowId': {
+      id: '/(protected)/workflows/$workflowId'
+      path: '/$workflowId'
+      fullPath: '/workflows/$workflowId'
+      preLoaderRoute: typeof protectedWorkflowsWorkflowIdRouteImport
+      parentRoute: typeof protectedWorkflowsRouteRoute
     }
     '/(protected)/chats/$chatId': {
       id: '/(protected)/chats/$chatId'
@@ -463,15 +538,35 @@ const protectedSettingsRouteRouteWithChildren =
     protectedSettingsRouteRouteChildren,
   )
 
+interface protectedWorkflowsRouteRouteChildren {
+  protectedWorkflowsWorkflowIdRoute: typeof protectedWorkflowsWorkflowIdRoute
+  protectedWorkflowsNewRoute: typeof protectedWorkflowsNewRoute
+  protectedWorkflowsIndexRoute: typeof protectedWorkflowsIndexRoute
+}
+
+const protectedWorkflowsRouteRouteChildren: protectedWorkflowsRouteRouteChildren =
+  {
+    protectedWorkflowsWorkflowIdRoute: protectedWorkflowsWorkflowIdRoute,
+    protectedWorkflowsNewRoute: protectedWorkflowsNewRoute,
+    protectedWorkflowsIndexRoute: protectedWorkflowsIndexRoute,
+  }
+
+const protectedWorkflowsRouteRouteWithChildren =
+  protectedWorkflowsRouteRoute._addFileChildren(
+    protectedWorkflowsRouteRouteChildren,
+  )
+
 interface protectedRouteRouteChildren {
   protectedChatsRouteRoute: typeof protectedChatsRouteRouteWithChildren
   protectedSettingsRouteRoute: typeof protectedSettingsRouteRouteWithChildren
+  protectedWorkflowsRouteRoute: typeof protectedWorkflowsRouteRouteWithChildren
   protectedDashboardRoute: typeof protectedDashboardRoute
 }
 
 const protectedRouteRouteChildren: protectedRouteRouteChildren = {
   protectedChatsRouteRoute: protectedChatsRouteRouteWithChildren,
   protectedSettingsRouteRoute: protectedSettingsRouteRouteWithChildren,
+  protectedWorkflowsRouteRoute: protectedWorkflowsRouteRouteWithChildren,
   protectedDashboardRoute: protectedDashboardRoute,
 }
 

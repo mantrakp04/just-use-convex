@@ -1,7 +1,7 @@
 import { routeAgentRequest } from "agents";
 import type { worker } from "../alchemy.run";
 
-export { AgentWorker } from "./agent/worker";
+export { AgentWorker } from "./worker";
 
 export default {
   async fetch(request: Request, env: typeof worker.Env): Promise<Response> {
