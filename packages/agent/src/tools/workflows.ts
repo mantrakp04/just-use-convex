@@ -81,12 +81,12 @@ export async function createWorkflowToolkit(
 
   const getTool = createTool({
     name: "workflow_get",
-    description: "Get a workflow by ID. Defaults to the currently executing workflow when omitted.",
+    description: "Get a workflow by ID.",
     parameters: z.object({
-      workflowId: z.string().optional().describe("Workflow ID. Omit to use the current workflow in this execution."),
+      workflowId: z.string().describe("Workflow ID."),
     }),
-    execute: async ({ workflowId: workflowIdArg }) => {
-      const targetWorkflowId = workflowIdArg as Id<"workflows">;
+    execute: async ({ workflowId }) => {
+      const targetWorkflowId = workflowId as Id<"workflows">;
       const workflow = await getWorkflow(targetWorkflowId);
       return {
         ...workflow,
@@ -99,20 +99,20 @@ export async function createWorkflowToolkit(
     name: "workflow_get_runs",
     description: "Get workflow execution runs. Supports pagination and optional output previews.",
     parameters: z.object({
-      workflowId: z.string().optional().describe("Workflow ID. Omit to use the current workflow in this execution."),
+      workflowId: z.string().describe("Workflow ID."),
       cursor: z.string().nullable().optional().describe("Pagination cursor from a previous workflow_get_runs call."),
       numItems: z.number().int().min(1).max(50).optional().describe("Number of runs to return (1-50). Default 10."),
       includeOutputPreview: z.boolean().optional().describe("Include a truncated output preview for each run. Default false."),
       outputPreviewChars: z.number().int().min(100).max(5000).optional().describe("Preview size when includeOutputPreview is true. Default 500."),
     }),
     execute: async ({
-      workflowId: workflowIdArg,
+      workflowId,
       cursor = null,
       numItems = 10,
       includeOutputPreview = false,
       outputPreviewChars = 500,
     }) => {
-      const targetWorkflowId = workflowIdArg as Id<"workflows">;
+      const targetWorkflowId = workflowId as Id<"workflows">;
       const page = await listWorkflowRuns(targetWorkflowId, { cursor, numItems });
       return {
         ...page,
@@ -150,13 +150,13 @@ export async function createWorkflowToolkit(
 
   const updateTool = createTool({
     name: "workflow_update",
-    description: "Update workflow fields by ID. Defaults to the currently executing workflow when omitted.",
+    description: "Update workflow fields by ID.",
     parameters: z.object({
-      workflowId: z.string().optional().describe("Workflow ID. Omit to use the current workflow in this execution."),
+      workflowId: z.string().describe("Workflow ID."),
       patch: z.custom<WorkflowUpdatePatch>().describe("Patch object for workflow updates."),
     }),
-    execute: async ({ workflowId: workflowIdArg, patch }) => {
-      const targetWorkflowId = workflowIdArg as Id<"workflows">;
+    execute: async ({ workflowId, patch }) => {
+      const targetWorkflowId = workflowId as Id<"workflows">;
       await updateWorkflow(targetWorkflowId, patch);
       const workflow = await getWorkflow(targetWorkflowId);
       return {
@@ -168,12 +168,12 @@ export async function createWorkflowToolkit(
 
   const deleteTool = createTool({
     name: "workflow_delete",
-    description: "Delete a workflow by ID. Defaults to the currently executing workflow when omitted.",
+    description: "Delete a workflow by ID.",
     parameters: z.object({
-      workflowId: z.string().optional().describe("Workflow ID. Omit to use the current workflow in this execution."),
+      workflowId: z.string().describe("Workflow ID."),
     }),
-    execute: async ({ workflowId: workflowIdArg }) => {
-      const targetWorkflowId = workflowIdArg as Id<"workflows">;
+    execute: async ({ workflowId }) => {
+      const targetWorkflowId = workflowId as Id<"workflows">;
       await deleteWorkflow(targetWorkflowId);
       return {
         deleted: true,

@@ -55,6 +55,7 @@ export const workflowsZodSchema = {
   inputModalities: z.array(inputModalitySchema),
   sandboxId: sandboxesWithSystemFields._id.optional(),
   updatedAt: z.number(),
+  lastScheduledAt: z.number().optional(),
 };
 
 export const workflowsFields = zodToConvexFields(workflowsZodSchema);

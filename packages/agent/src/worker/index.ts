@@ -257,7 +257,7 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, AgentArgs> {
           executionId,
           status: "running",
         });
-        return await this._handleExecuteWorkflow();
+        return await this._onChatMessage(() => {});
       }
 
       // Chat HTTP requests (get-messages, etc.) — use stored state from onConnect
@@ -458,10 +458,6 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, AgentArgs> {
         { status: 500 },
       );
     }
-  }
-
-  private async _handleExecuteWorkflow(): Promise<Response> {
-    return await this._onChatMessage(() => {});
   }
 
   override async onChatMessage(onFinish: StreamTextOnFinishCallback<ToolSet>, options?: OnChatMessageOptions): Promise<Response> {

@@ -92,6 +92,7 @@ export function workflowEventTrigger<T extends "chats" | "sandboxes" | "todos">(
       }
 
       if (trigger.type !== "event") continue;
+      if (!events.includes(trigger.event)) continue;
 
       const memberIdentity = await resolveWorkflowMemberIdentity(
         ctx,
@@ -100,28 +101,24 @@ export function workflowEventTrigger<T extends "chats" | "sandboxes" | "todos">(
       );
       if (!memberIdentity) continue;
 
-      for (const event of events) {
-        if (trigger.event === event) {
-          const triggerPayload = JSON.stringify({
-            event,
-            table: tableName,
-            operation: change.operation,
-            documentId: change.id,
-            document: doc,
-            timestamp: Date.now(),
-          });
+      const triggerPayload = JSON.stringify({
+        event: trigger.event,
+        table: tableName,
+        operation: change.operation,
+        documentId: change.id,
+        document: doc,
+        timestamp: Date.now(),
+      });
 
-          dispatches.push({
-            workflowId: workflow._id,
-            triggerPayload,
-            userId: memberIdentity.userId,
-            activeOrganizationId: workflow.organizationId,
-            organizationRole: memberIdentity.role,
-            memberId: workflow.memberId,
-            activeTeamId: undefined,
-          });
-        }
-      }
+      dispatches.push({
+        workflowId: workflow._id,
+        triggerPayload,
+        userId: memberIdentity.userId,
+        activeOrganizationId: workflow.organizationId,
+        organizationRole: memberIdentity.role,
+        memberId: workflow.memberId,
+        activeTeamId: undefined,
+      });
     }
 
     if (dispatches.length > 0) {

@@ -21,6 +21,8 @@ export const tick = internalMutation({
       .collect();
 
     const now = Date.now();
+    const minuteStart = floorToMinute(now);
+    const minuteEnd = minuteStart + 60_000;
     const dispatches: DispatchWorkflowBatchArgs["dispatches"] = [];
 
     for (const workflow of enabledWorkflows) {
@@ -35,6 +37,9 @@ export const tick = internalMutation({
 
       // Simple cron matching: check if this workflow should run now
       if (!shouldRunCron(trigger.cron, now)) continue;
+      if (isSameScheduledMinute(workflow.lastScheduledAt, minuteStart, minuteEnd)) continue;
+
+      await ctx.db.patch(workflow._id, { lastScheduledAt: minuteStart });
 
       const triggerPayload = JSON.stringify({
         type: "schedule",
@@ -150,4 +155,19 @@ function matchesCronField(field: string, value: number, min: number, max: number
   }
 
   return false;
+}
+
+function floorToMinute(timestampMs: number): number {
+  return timestampMs - (timestampMs % 60_000);
+}
+
+function isSameScheduledMinute(
+  lastScheduledAt: number | undefined,
+  minuteStart: number,
+  minuteEnd: number,
+): boolean {
+  if (lastScheduledAt === undefined) {
+    return false;
+  }
+  return lastScheduledAt >= minuteStart && lastScheduledAt < minuteEnd;
 }

@@ -488,6 +488,25 @@ function parseCronForBuilder(cron: string): WorkflowCronBuilderState {
 
   const [minute, hour, dayOfMonth, month, dayOfWeek] = parts;
 
+  const everyMinutesWithHourRange = minute.match(/^(\d{1,2})-59\/(\d+)$/);
+  const everyMinutesHourStart = hour.match(/^(\d{1,2})-23$/);
+  if (
+    everyMinutesWithHourRange &&
+    everyMinutesHourStart &&
+    dayOfMonth === "*" &&
+    month === "*" &&
+    dayOfWeek === "*"
+  ) {
+    return {
+      scheduleMode: "every",
+      intervalAmount: Math.max(1, Number(everyMinutesWithHourRange[2] ?? 1)),
+      intervalUnit: "minutes",
+      intervalStart: `${padCronTime(everyMinutesHourStart[1] ?? "0")}:${padCronTime(everyMinutesWithHourRange[1] ?? "0")}`,
+      atTime: "09:00",
+      cron: normalized,
+    };
+  }
+
   // Every hour at minute patterns, eg `0 */6 * * *`
   const intervalEveryMinutes = minute.match(/^(\d{1,2})-59\/(\d+)$/);
   if (
@@ -564,23 +583,6 @@ function parseCronForBuilder(cron: string): WorkflowCronBuilderState {
   const everyDays = dayOfMonth.match(/^\*\/(\d+)$/);
   if (
     everyDays &&
-    minute.match(/^\d{1,2}$/) &&
-    hour.match(/^\d{1,2}$/) &&
-    month === "*" &&
-    dayOfWeek === "*"
-  ) {
-    return {
-      scheduleMode: "every",
-      intervalAmount: Math.max(1, Number(everyDays[1] ?? 1)),
-      intervalUnit: "days",
-      intervalStart: `${padCronTime(hour ?? "0")}:${padCronTime(minute ?? "0")}`,
-      atTime: "09:00",
-      cron: normalized,
-    };
-  }
-
-  if (
-    everyDays &&
     minute === "0" &&
     hour === "0" &&
     month === "*" &&
@@ -591,6 +593,23 @@ function parseCronForBuilder(cron: string): WorkflowCronBuilderState {
       intervalAmount: Math.max(1, Number(everyDays[1] ?? 1)),
       intervalUnit: "days",
       intervalStart: undefined,
+      atTime: "09:00",
+      cron: normalized,
+    };
+  }
+
+  if (
+    everyDays &&
+    minute.match(/^\d{1,2}$/) &&
+    hour.match(/^\d{1,2}$/) &&
+    month === "*" &&
+    dayOfWeek === "*"
+  ) {
+    return {
+      scheduleMode: "every",
+      intervalAmount: Math.max(1, Number(everyDays[1] ?? 1)),
+      intervalUnit: "days",
+      intervalStart: `${padCronTime(hour ?? "0")}:${padCronTime(minute ?? "0")}`,
       atTime: "09:00",
       cron: normalized,
     };

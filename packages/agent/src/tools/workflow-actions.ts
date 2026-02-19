@@ -195,7 +195,7 @@ function isPrivateIpv6(hostname: string): boolean {
     : hostname;
 
   if (!normalized.includes(":")) return false;
-  if (normalized === "::1") return true;
+  if (normalized === "::" || normalized === "::1") return true;
 
   const mappedIpv4 = parseIpv4FromMappedIpv6(normalized);
   if (mappedIpv4) {

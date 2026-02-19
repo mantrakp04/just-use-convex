@@ -1,4 +1,4 @@
-import type { Doc } from "@just-use-convex/backend/convex/_generated/dataModel";
+import type { Doc, Id } from "@just-use-convex/backend/convex/_generated/dataModel";
 
 export const CHAT_SYSTEM_PROMPT = (chat: Doc<"chats"> & { sandbox?: Doc<"sandboxes"> | null }) => `${CORE_SYSTEM_PROMPT}
 
@@ -11,11 +11,15 @@ ${chat.sandbox ? createSandboxContextMessage(chat.sandbox) : ""}
 - If a task cannot be completed, explain why and suggest alternatives
 `;
 
-export const WORKFLOW_SYSTEM_PROMPT = (workflow: Doc<"workflows"> & { sandbox?: Doc<"sandboxes"> | null }, triggerPayload: string) => `${CORE_SYSTEM_PROMPT}
+export const WORKFLOW_SYSTEM_PROMPT = (
+  workflow: Doc<"workflows"> & { sandbox?: Doc<"sandboxes"> | null },
+  executionId: Id<"workflowExecutions">,
+  triggerPayload: string,
+) => `${CORE_SYSTEM_PROMPT}
 
 ${workflow.sandbox ? createSandboxContextMessage(workflow.sandbox) : ""}
 
-${buildWorkflowSystemPrompt(workflow, triggerPayload)}
+${buildWorkflowSystemPrompt(workflow, executionId, triggerPayload)}
 `;
 
 export const TASK_PROMPT = `
@@ -71,10 +75,18 @@ function createSandboxContextMessage(sandbox?: Doc<"sandboxes"> | null): string 
   return lines.join("\n");
 }
 
-function buildWorkflowSystemPrompt(workflow: Doc<"workflows">, triggerPayload: string): string {
+function buildWorkflowSystemPrompt(
+  workflow: Doc<"workflows">,
+  executionId: Id<"workflowExecutions">,
+  triggerPayload: string,
+): string {
   return `You are executing a workflow automation.
 
 ## Workflow: ${workflow.name}
+
+## Workflow Context
+- workflowId: ${workflow._id}
+- workflowRunId: ${executionId}
 
 ## Instructions
 ${workflow.instructions}
@@ -91,6 +103,7 @@ ${workflow.allowedActions.map((action) => `- ${action}`).join("\n")}
 - If an action fails, note the failure and continue with remaining actions
 - Do not ask for user input — workflows run autonomously
 - Always use the actions context to carry out the workflow instructions
+- When calling workflow tools, pass workflowId or executionId explicitly using the IDs above
 `;
 }
 

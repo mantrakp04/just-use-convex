@@ -8,7 +8,7 @@ export function buildInitArgsFromUrl(url: URL, fallbackChatId?: Id<"chats">): Ag
   const raw: Record<string, unknown> = Object.fromEntries(url.searchParams.entries());
   raw.model ??= env.DEFAULT_MODEL;
   raw.inputModalities ??= "text";
-  raw.tokenConfig ??= buildTokenConfig(url.searchParams);
+  raw.tokenConfig ??= buildTokenConfig(url.searchParams.get("token") ?? raw.token);
   raw.modeConfig ??= { mode: "chat", chat: fallbackChatId };
   const args = agentArgsSchema.parse(raw);
   if (args.tokenConfig.type === "ext" && args.tokenConfig.externalToken !== env.EXTERNAL_TOKEN) {
@@ -17,8 +17,8 @@ export function buildInitArgsFromUrl(url: URL, fallbackChatId?: Id<"chats">): Ag
   return args;
 }
 
-function buildTokenConfig(p: URLSearchParams): TokenConfig {
-  const token = p.get("token");
+function buildTokenConfig(value: unknown): TokenConfig {
+  const token = typeof value === "string" ? value : null;
   if (!token) throw new Error("Missing token or tokenConfig");
   return { type: "jwt", token };
 }

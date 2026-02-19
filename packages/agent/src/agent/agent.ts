@@ -174,7 +174,11 @@ function resolveSystemPrompt(
     throw new Error("Agent not initialized: missing workflow context");
   }
 
-  return WORKFLOW_SYSTEM_PROMPT(workflowDoc, modeConfig.triggerPayload);
+  return WORKFLOW_SYSTEM_PROMPT(
+    workflowDoc,
+    modeConfig.executionId,
+    modeConfig.triggerPayload,
+  );
 }
 
 async function createSubagents({

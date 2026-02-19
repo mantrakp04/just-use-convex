@@ -29,7 +29,7 @@ export const ALL_EVENTS: { value: EventType; label: string }[] = [
 
 /**
  * Converts "Every X units, starting from HH:MM" to a cron expression.
- * - minutes: startMin-59/N startHour * * *   (or *\/N if no start)
+ * - minutes: startMin-59/N startHour-23 * * * (or *\/N if no start)
  * - hours:   startMin startHour-23/N * * *   (or 0 *\/N if no start)
  * - days:    startMin startHour *\/N * *      (or 0 0 *\/N if no start)
  */
@@ -41,8 +41,8 @@ export function intervalToCron(amount: number, unit: IntervalUnit, startFrom?: s
   switch (unit) {
     case "minutes": {
       if (!startFrom) return `*/${amount} * * * *`;
-      if (60 % amount === 0) return `${m}-59/${amount} * * * *`;
-      return `*/${amount} * * * *`;
+      if (60 % amount === 0) return `${m}-59/${amount} ${h}-23 * * *`;
+      return `*/${amount} ${h}-23 * * *`;
     }
     case "hours":
       return startFrom ? `${m} ${h}-23/${amount} * * *` : `0 */${amount} * * *`;
@@ -95,8 +95,12 @@ export function cronToHumanReadable(cron: string): string {
     if (hour === "*") {
       return `Every ${n} min at :${startMin.padStart(2, "0")}`;
     }
+    const minuteHourRangeMatch = hour.match(/^(\d+)-23$/);
+    if (minuteHourRangeMatch) {
+      return `Every ${n} min from ${minuteHourRangeMatch[1]!.padStart(2, "0")}:${startMin.padStart(2, "0")}`;
+    }
     const h = hour.padStart(2, "0");
-    return `Every ${n} min from ${h}:${startMin}`;
+    return `Every ${n} min from ${h}:${startMin.padStart(2, "0")}`;
   }
 
   // M H-N * * * — every N hours starting at H:M

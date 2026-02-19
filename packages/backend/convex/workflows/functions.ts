@@ -1,7 +1,7 @@
 import type { z } from "zod";
 import type { zMutationCtx, zQueryCtx } from "../functions";
 import * as types from "./types";
-import { triggerSchema as TriggerSchema } from "./types";
+import { triggerSchema as TriggerSchema } from "../tables/workflows";
 import { withInvalidCursorRetry } from "../shared/pagination";
 import { buildPatchData } from "../shared/patch";
 import {
@@ -69,13 +69,27 @@ export async function GetWorkflow(ctx: zQueryCtx, args: z.infer<typeof types.Get
   return { ...workflow.doc(), sandbox };
 }
 
-// Used by agent (external query) — no scoped permission, just org check
 export async function GetWorkflowForExecution(ctx: zQueryCtx, args: z.infer<typeof types.GetForExecutionArgs>) {
+  assertPermission(
+    ctx.identity.organizationRole,
+    { workflow: ["read"] },
+    "You are not authorized to view this workflow"
+  );
+
   const workflow = await ctx.table("workflows").getX(args._id);
   assertOrganizationAccess(
     workflow.organizationId,
     ctx.identity.activeOrganizationId,
-    "You are not authorized to execute this workflow"
+    "You are not authorized to view this workflow"
+  );
+  assertScopedPermission(
+    ctx.identity.organizationRole,
+    ctx.identity.memberId,
+    workflow.memberId,
+    { workflow: ["read"] },
+    { workflow: ["readAny"] },
+    "You are not authorized to view this workflow",
+    "You are not authorized to view this workflow"
   );
   const sandbox = await workflow.edge("sandbox");
   return { ...workflow.doc(), sandbox };
@@ -300,10 +314,25 @@ export async function CreateExecution(ctx: zMutationCtx, args: z.infer<typeof ty
 }
 
 export async function UpdateExecutionStatus(ctx: zMutationCtx, args: z.infer<typeof types.UpdateExecutionStatusArgs>) {
+  assertPermission(
+    ctx.identity.organizationRole,
+    { workflow: ["update"] },
+    "You are not authorized to update this execution"
+  );
+
   const execution = await ctx.table("workflowExecutions").getX(args.executionId);
   assertOrganizationAccess(
     execution.organizationId,
     ctx.identity.activeOrganizationId,
+    "You are not authorized to update this execution"
+  );
+  assertScopedPermission(
+    ctx.identity.organizationRole,
+    ctx.identity.memberId,
+    execution.memberId,
+    { workflow: ["update"] },
+    { workflow: ["updateAny"] },
+    "You are not authorized to update this execution",
     "You are not authorized to update this execution"
   );
 
