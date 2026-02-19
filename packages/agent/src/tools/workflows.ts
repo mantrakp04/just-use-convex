@@ -1,9 +1,11 @@
 import { createTool, createToolkit, type Toolkit } from "@voltagent/core";
 import { z } from "zod";
+import type { FunctionArgs } from "convex/server";
 import { api } from "@just-use-convex/backend/convex/_generated/api";
 import type { Id } from "@just-use-convex/backend/convex/_generated/dataModel";
 import type { ConvexAdapter } from "@just-use-convex/backend/convex/lib/convexAdapter";
-import { UpdateArgs } from "@just-use-convex/backend/convex/workflows/types";
+
+type WorkflowUpdatePatch = FunctionArgs<typeof api.workflows.index.update>["patch"];
 
 export async function createWorkflowToolkit(
   convexAdapter: ConvexAdapter,
@@ -47,7 +49,7 @@ export async function createWorkflowToolkit(
     return convexAdapter.query(api.workflows.index.getExecution, { _id });
   };
 
-  const updateWorkflow = async (_id: Id<"workflows">, patch: z.infer<typeof UpdateArgs.shape.patch>) => {
+  const updateWorkflow = async (_id: Id<"workflows">, patch: WorkflowUpdatePatch) => {
     if (isExternal) {
       return convexAdapter.mutation(api.workflows.index.updateExt, { _id, patch });
     }
@@ -151,7 +153,7 @@ export async function createWorkflowToolkit(
     description: "Update workflow fields by ID. Defaults to the currently executing workflow when omitted.",
     parameters: z.object({
       workflowId: z.string().optional().describe("Workflow ID. Omit to use the current workflow in this execution."),
-      patch: UpdateArgs.shape.patch.describe("Patch object for workflow updates."),
+      patch: z.custom<WorkflowUpdatePatch>().describe("Patch object for workflow updates."),
     }),
     execute: async ({ workflowId: workflowIdArg, patch }) => {
       const targetWorkflowId = workflowIdArg as Id<"workflows">;

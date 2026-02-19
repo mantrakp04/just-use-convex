@@ -4,9 +4,10 @@ import { useConvexMutation, useConvexPaginatedQuery, convexQuery } from "@convex
 import { api } from "@just-use-convex/backend/convex/_generated/api";
 import type { Id } from "@just-use-convex/backend/convex/_generated/dataModel";
 import type { FunctionReturnType } from "convex/server";
+import type { WorkflowWithSandbox } from "@convex/workflows/types";
 import { toast } from "sonner";
 
-export type Workflow = FunctionReturnType<typeof api.workflows.index.list>["page"][number];
+export type Workflow = WorkflowWithSandbox;
 export type WorkflowExecution = FunctionReturnType<typeof api.workflows.index.listExecutions>["page"][number];
 
 const INITIAL_NUM_ITEMS = 20;

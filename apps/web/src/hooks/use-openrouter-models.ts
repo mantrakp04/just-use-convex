@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
+import type { InputModality } from "@convex/workflows/types";
 
 export type OpenRouterModel = {
   slug: string;
@@ -9,7 +10,7 @@ export type OpenRouterModel = {
   context_length: number;
   supports_reasoning: boolean;
   created_at: string;
-  input_modalities?: string[];
+  input_modalities?: InputModality[];
   output_modalities?: string[];
   reasoning_config?: {
     supports_reasoning_effort?: boolean;

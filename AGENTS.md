@@ -164,15 +164,6 @@ AgentWorker (AIChatAgent / Durable Object)
 - Background tasks with configurable timeout (default 1hr)
 - Tool result truncation for large outputs
 
-### Auth Flow
-```
-Client → Better Auth (JWT with org context) → WebSocket → Agent
-Agent → ConvexAdapter (JWT or external token) → Convex
-```
-- Session fields: activeOrganizationId, activeTeamId, organizationRole, memberId
-- Roles: member, admin, owner
-- Permissions: create, read, readAny, update, updateAny, delete, deleteAny
-
 ### Frontend Hooks
 ```typescript
 export function useChats() {
@@ -244,74 +235,6 @@ File-based TanStack Router:
 - for anything related to implementation or research make use of background subagents
 - parallelize as much stuff you can, todos -> each todo is a subagent, make them background whenever possible
 
-## Review Flow
-
-- fetch **unresolved** PR comments from `greptile`, `cubic`, and `codex` only
-- normalize comments into a single actionable list with file + line context
-- spawn a background subagent to validate each comment (real issue vs noise/outdated)
-- fix every validated comment in code, following existing project patterns, then mark it as resolved
-- run required checks after fixes (`bun check-types` minimum)
-- post a concise end summary with:
-  - validated + fixed comments
-  - rejected comments with reason
-  - checks run and status
-
-## Refactor Flow
-
-- **scope first** — read the target file(s) and `Grep` all imports/usages across the codebase to understand blast radius before touching anything
-- **map dependencies** — catalog every consumer, re-export, and type reference; build a dependency graph (file + line) so nothing gets orphaned
-- **apply refactoring principles** — enforce the patterns from the Refactoring Principles section above (config-driven, one init, thin handlers, no forked methods, derive types)
-- **spawn parallel subagents** — one per independent file/module being refactored; block dependent files on their upstream refactor completing
-- **preserve public API** — unless explicitly asked to change it, keep all exported function signatures, prop interfaces, and hook return types identical; refactor internals only
-- **migrate consumers incrementally** — if the public API must change, update all consumers in the same pass; never leave a broken import
-- **delete dead code** — after moving/consolidating, `Grep` for any now-unused exports, types, helpers, and constants; remove them completely (no `// removed` comments, no `_deprecated` renames)
-- **centralize types** — pull any inline object types into the nearest `types.ts`; use `Pick`/`Omit`/`Extract` from existing definitions
-- **run checks after each logical unit** — `bun check-types` after each file group is done, not just at the end; catch regressions early
-- **post a concise end summary** with:
-  - files changed (moved, split, deleted)
-  - public API changes (if any)
-  - dead code removed
-  - checks run and status
-
-## Shadcn → Framer Motion Flow
-
-### 1. Audit
-- read the target shadcn component and `Grep` all consumer files for its imports
-- catalog every base-ui primitive used, its props, and data attributes it injects
-- note which props consumers actually rely on (controlled value, variants, callbacks, `keepMounted`, etc.)
-
-### 2. Replace primitives
-- swap each base-ui primitive for a plain HTML element (`div`, `button`, `span`)
-- extract all Tailwind classes verbatim onto the replacement elements
-- replicate stateful behavior (controlled/uncontrolled, open/closed, active selection) via React context
-- re-add every data attribute base-ui injected (`data-active`, `data-open`, `data-orientation`, `data-variant`, `data-horizontal`, etc.) so existing Tailwind `group-data-*` selectors keep working
-- for CVA variant checks, use negative guards (`variant !== "x"`) instead of strict equality to handle `null | undefined` from `VariantProps`
-
-### 3. Add motion
-- identify the state-change visual (active indicator, expand/collapse, enter/exit) and decide the animation primitive:
-  - **position transitions** (tabs, nav indicators): `layoutId` on a `motion.span` with `layout` prop + `initial={false}`
-  - **presence transitions** (modals, drawers, dropdowns): `AnimatePresence` + `motion.div` with `animate`/`exit`
-  - **height/collapse transitions**: `collapseVariants` from `@/lib/motion`
-- use `isolate` on the parent + `-z-10` on the indicator to layer behind content without wrapper spans
-- pick the right preset from `@/lib/motion`:
-  - `springSnappy` — position indicators (tabs, nav)
-  - `springBouncy` — attention-grabbing elements
-  - `springExpand` — height/accordion animations
-  - `transitionDefault` — hover/general UI
-  - `transitionInstant` — press feedback
-- invoke `emilkowal-animations` skill and cross-check the animation against relevant rules
-
-### 4. Gotchas
-- do NOT use `useReducedMotion` to set `duration: 0` — it silently kills `layoutId` animations
-- `keepMounted` panels: use inline `style={{ display: "none" }}` when inactive (not Tailwind `hidden` class, which can be overridden)
-- `layoutId` requires exactly ONE element with that ID in the tree at a time — conditional render, don't toggle opacity
-- always add `layout` prop alongside `layoutId` for reliability
-
-### 5. Verify
-- confirm all consumer files still type-check (`bun check-types`)
-- test every variant and orientation the component supports
-- verify no visual regression in static state (same colors, spacing, borders)
-
 ## Self-Updating Scratchpad
 
 - treat this `AGENTS.md` as a living scratchpad
@@ -340,3 +263,4 @@ File-based TanStack Router:
 ## Skills to Reference
 - `emilkowal-animations` — animation timing/easing
 - `vercel-react-best-practices` — re-render optimization
+- `flow` — structured execution flows for auth/review/refactor/shadcn-to-motion migrations

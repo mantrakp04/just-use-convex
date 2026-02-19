@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { Doc } from "../_generated/dataModel";
 import {
   workflowsZodSchema,
   workflowsWithSystemFields,
@@ -26,6 +27,11 @@ const zPaginationOpts = convexToZod(paginationOptsValidator);
 export const Workflow = z.object(workflowsZodSchema);
 export const WorkflowWithSystemFields = z.object(workflowsWithSystemFields);
 export const WorkflowExecution = z.object(workflowExecutionsWithSystemFields);
+
+/** Workflow list item (doc + sandbox edge). Use instead of inferring from FunctionReturnType for correct enum array types. */
+export type WorkflowWithSandbox = z.infer<typeof WorkflowWithSystemFields> & {
+  sandbox: Doc<"sandboxes"> | null;
+};
 
 // ═══════════════════════════════════════════════════════════════════
 // WORKFLOW ARGS

@@ -76,7 +76,7 @@ function parseAuthIdentity(
   identity: UserIdentity | null
 ): Infer<typeof baseIdentity> {
   if (!identity?.subject || !identity?.activeOrganizationId) {
-    throw new Error("Unauthorized: User must be authenticated with an active organization");
+    throw new Error(UNAUTHORIZED_IDENTITY_ERROR);
   }
   const parsedIdentity: Infer<typeof baseIdentity> = {
     userId: identity.subject,

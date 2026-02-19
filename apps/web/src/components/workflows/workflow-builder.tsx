@@ -1,7 +1,10 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
-import { useAtom } from "jotai";
+import { useAtom, useAtomValue } from "jotai";
+import type { InputModality } from "@convex/workflows/types";
 import { useWorkflows, type Workflow } from "@/hooks/use-workflows";
+import { useOpenRouterModels } from "@/hooks/use-openrouter-models";
+import { ChatModelSelector, type ChatSettings } from "@/components/chat";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -21,6 +24,7 @@ import {
   builderEventAtom,
   builderInstructionsAtom,
   builderAllowedActionsAtom,
+  builderModelAtom,
   builderSandboxIdAtom,
   ALL_ACTIONS,
   intervalToCron,
@@ -31,6 +35,7 @@ import {
   type IntervalUnit,
   type AllowedAction,
 } from "@/store/workflows";
+import { defaultChatSettingsAtom } from "@/store/models";
 import { SandboxSelector } from "@/components/sandboxes/sandbox-selector";
 import { TriggerConfig } from "./trigger-config";
 
@@ -49,6 +54,8 @@ export function WorkflowBuilder({
 }: WorkflowBuilderProps) {
   const navigate = useNavigate();
   const { createWorkflow, updateWorkflow, isCreating, isUpdating } = useWorkflows();
+  const { groupedModels, models } = useOpenRouterModels();
+  const defaultSettings = useAtomValue(defaultChatSettingsAtom);
   const isEditMode = mode === "edit" && !!workflow;
   const isSubmitting = isEditMode ? isUpdating : isCreating;
 
@@ -63,13 +70,20 @@ export function WorkflowBuilder({
   const [event, setEvent] = useAtom(builderEventAtom);
   const [instructions, setInstructions] = useAtom(builderInstructionsAtom);
   const [allowedActions, setAllowedActions] = useAtom(builderAllowedActionsAtom);
+  const [model, setModel] = useAtom(builderModelAtom);
   const [sandboxId, setSandboxId] = useAtom(builderSandboxIdAtom);
   const [webhookSecret, setWebhookSecret] = useState("");
+  const resolvedModel = model ?? defaultSettings.model;
+  const selectedModel = useMemo(
+    () => models.find((openRouterModel) => openRouterModel.slug === resolvedModel),
+    [models, resolvedModel]
+  );
 
   const resetForm = useCallback(() => {
     setName("");
     setInstructions("");
     setAllowedActions(["notify"]);
+    setModel(undefined);
     setSandboxId(null);
     setTriggerType("event");
     setScheduleMode("every");
@@ -80,7 +94,7 @@ export function WorkflowBuilder({
     setCron("0 * * * *");
     setEvent("on_todo_create");
     setWebhookSecret("");
-  }, [setName, setInstructions, setAllowedActions, setSandboxId, setTriggerType, setScheduleMode, setIntervalAmount, setIntervalUnit, setIntervalStart, setAtTime, setCron, setEvent]);
+  }, [setName, setInstructions, setAllowedActions, setModel, setSandboxId, setTriggerType, setScheduleMode, setIntervalAmount, setIntervalUnit, setIntervalStart, setAtTime, setCron, setEvent]);
 
   useEffect(() => {
     if (!isEditMode || !workflow) {
@@ -92,6 +106,7 @@ export function WorkflowBuilder({
     setName(workflow.name);
     setInstructions(workflow.instructions);
     setAllowedActions(workflow.allowedActions);
+    setModel(workflow.model);
     setSandboxId(workflow.sandboxId ?? null);
     setTriggerType(parsed.triggerType);
     setScheduleMode(parsed.scheduleMode);
@@ -108,6 +123,7 @@ export function WorkflowBuilder({
     setName,
     setInstructions,
     setAllowedActions,
+    setModel,
     setSandboxId,
     setTriggerType,
     setScheduleMode,
@@ -126,6 +142,16 @@ export function WorkflowBuilder({
     }
   }, [triggerType, webhookSecret]);
 
+  const handleModelSettingsChange = useCallback(
+    (settingsOrFn: ChatSettings | ((prev: ChatSettings) => ChatSettings)) => {
+      const nextSettings = typeof settingsOrFn === "function"
+        ? settingsOrFn({ model: resolvedModel })
+        : settingsOrFn;
+      setModel(nextSettings.model);
+    },
+    [resolvedModel, setModel]
+  );
+
   const handleSubmit = useCallback(async () => {
     if (!name.trim() || !instructions.trim()) return;
 
@@ -140,6 +166,11 @@ export function WorkflowBuilder({
       event,
       webhookSecret
     );
+    const inputModalities: InputModality[] =
+      selectedModel?.input_modalities ??
+      (isEditMode && workflow?.model === model ? workflow.inputModalities : undefined) ??
+      defaultSettings.inputModalities ??
+      (["text"] satisfies InputModality[]);
 
     if (isEditMode && workflow) {
       // undefined = no change, null = unset, Id = set
@@ -154,6 +185,8 @@ export function WorkflowBuilder({
           trigger,
           instructions: instructions.trim(),
           allowedActions,
+          model,
+          inputModalities,
           sandboxId: patchedSandboxId,
         },
       });
@@ -164,7 +197,8 @@ export function WorkflowBuilder({
           trigger,
           instructions: instructions.trim(),
           allowedActions,
-          inputModalities: ["text"],
+          model: resolvedModel,
+          inputModalities,
           sandboxId: sandboxId ?? undefined,
         },
       });
@@ -194,8 +228,12 @@ export function WorkflowBuilder({
     event,
     instructions,
     allowedActions,
+    model,
+    resolvedModel,
+    selectedModel,
     sandboxId,
     webhookSecret,
+    defaultSettings.inputModalities,
     updateWorkflow,
     createWorkflow,
     navigate,
@@ -261,6 +299,19 @@ export function WorkflowBuilder({
           <div className="flex flex-col gap-2">
             <Label>Sandbox</Label>
             <SandboxSelector value={sandboxId} onChange={setSandboxId} />
+          </div>
+
+          <div className="flex flex-col gap-2">
+            <Label>Model</Label>
+            <div className="w-fit rounded-md border border-border p-1">
+              <ChatModelSelector
+                groupedModels={groupedModels}
+                models={models}
+                selectedModel={selectedModel}
+                onSettingsChange={handleModelSettingsChange}
+                hasMessages
+              />
+            </div>
           </div>
 
           <TriggerConfig

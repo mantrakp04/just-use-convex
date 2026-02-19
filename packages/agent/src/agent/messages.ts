@@ -31,7 +31,7 @@ export function processMessagesForAgent(
           continue;
         }
       }
-      const toolName = "type" in part ? getToolNameFromPartType(part.type as string) : null;
+      const toolName = getToolNameFromPart(part);
       if (toolName != null && toolName.includes("sub-")) continue;
       mappedParts.push(part);
     }
@@ -99,6 +99,14 @@ function isMimeTypeSupported(mimeType: string, inputModalities?: string[]): bool
 function getToolNameFromPartType(type: string): string | null {
   if (!type.startsWith("tool-")) return null;
   return type.slice(5);
+}
+
+function getToolNameFromPart(part: UIMessage["parts"][number]): string | null {
+  if ("toolName" in part && typeof part.toolName === "string") {
+    return part.toolName;
+  }
+
+  return getToolNameFromPartType(part.type);
 }
 
 export function sanitizeFilename(filename: string): string {
