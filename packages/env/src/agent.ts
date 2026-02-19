@@ -10,7 +10,6 @@ export const env = createEnv({
     DAYTONA_API_KEY: z.string().default(""),
     DAYTONA_API_URL: z.url().default("https://app.daytona.io/api"),
     DAYTONA_TARGET: z.string().default("us"),
-    DEFAULT_MODEL: z.string().default("openai/gpt-5.2-chat"),
     EXA_API_KEY: z.string().default(""),
     SANDBOX_INACTIVITY_TIMEOUT_MINUTES: z.coerce.number().int().positive().default(2),
     SANDBOX_VOLUME_MOUNT_PATH: z.string().default("/home/daytona"),

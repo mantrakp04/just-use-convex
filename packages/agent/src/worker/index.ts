@@ -240,16 +240,16 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, AgentArgs> {
   override async onRequest(request: Request): Promise<Response> {
     const url = new URL(request.url);
     const isExecuteWorkflow = url.pathname.endsWith("/executeWorkflow") && request.method === "POST";
-    let executionId: Id<"workflowExecutions"> | null = null;
+    
+    const args = buildInitArgsFromUrl(url);
+    await this._init(args);
 
-    try {
-      if (isExecuteWorkflow) {
-        const args = buildInitArgsFromUrl(url);
+    if (isExecuteWorkflow) {
+      try {
         if (args.modeConfig.mode !== "workflow") {
           return new Response(JSON.stringify({ error: "Invalid mode for workflow execution" }), { status: 400 });
         }
-        executionId = args.modeConfig.executionId;
-        await this._init(args);
+        const executionId = args.modeConfig.executionId;
         if (!this.convexAdapter) {
           throw new Error("No convex adapter");
         }
@@ -258,24 +258,18 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, AgentArgs> {
           status: "running",
         });
         return await this._onChatMessage(() => {});
+      } catch (error) {
+        console.error("onRequest failed", error);
+        return new Response(JSON.stringify({ error: error instanceof Error ? error.message : "Internal Server Error" }), { status: 500 });
       }
-
-      // Chat HTTP requests (get-messages, etc.) — use stored state from onConnect
-      await this._init();
-      return await super.onRequest(request);
-    } catch (error) {
-      await this._markWorkflowExecutionFailed(error, executionId);
-
-      return new Response(
-        JSON.stringify({ error: error instanceof Error ? error.message : "Internal Server Error" }),
-        { status: 500 },
-      );
     }
+
+    return await super.onRequest(request);
   }
 
   override async onConnect(connection: Connection, ctx: ConnectionContext): Promise<void> {
     const url = new URL(ctx.request.url);
-    await this._init(buildInitArgsFromUrl(url, this.name as Id<"chats">));
+    await this._init(buildInitArgsFromUrl(url));
     await this._prepAgent();
     return await super.onConnect(connection, ctx);
   }
@@ -292,7 +286,7 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, AgentArgs> {
 
   override async persistMessages(messages: UIMessage[]): Promise<void> {
     await super.persistMessages(messages);
-    await indexMessagesInVectorStore({
+    void indexMessagesInVectorStore({
       env: this.env,
       memberId: this.chatDoc?.memberId ?? "",
       agentName: this.name,
@@ -331,14 +325,6 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, AgentArgs> {
     _onFinish: StreamTextOnFinishCallback<ToolSet>,
     options?: OnChatMessageOptions
   ): Promise<Response> {
-    if (!this.state?.model) {
-      await this._markWorkflowExecutionFailed(
-        new Error("Model not configured."),
-        this.state.modeConfig?.mode === "workflow" ? this.state.modeConfig.executionId : null,
-      );
-      return new Response("Model not configured.", { status: 400 });
-    }
-
     try {
       if (!this.convexAdapter) {
         await this._init();
@@ -404,39 +390,26 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, AgentArgs> {
         processMessagesForAgent(this.messages, this.state.inputModalities);
 
       const [retrievalMessage, downloadedPaths] = await Promise.all([
-        lastUserIdx !== -1 && lastUserQueryText
-          ? buildRetrievalMessage({
-              env: this.env,
-              memberId: this.chatDoc?.memberId,
-              queryText: lastUserQueryText,
-            })
-          : null,
+        buildRetrievalMessage({
+          env: this.env,
+          memberId: this.chatDoc?.memberId,
+          queryText: lastUserQueryText,
+        }),
         this.sandbox && lastUserFilePartUrls.length > 0
           ? downloadFileUrlsInSandbox(this.sandbox, lastUserFilePartUrls)
           : null,
       ]);
+      
+      const immediateSystemMessage: UIMessage = {
+        id: `immediate-system-${crypto.randomUUID()}`,
+        role: "system",
+        parts: [
+          { type: "text" as const, text: `Relevant past messages:\n\n${retrievalMessage?.join("\n\n") ?? ""}` },
+          ...(downloadedPaths ? [{ type: "text" as const, text: `Attached files downloaded to sandbox at: ${downloadedPaths.map((p) => `- ${p}`).join("\n")}` }] : []),
+        ],
+      };
 
-      let modelMessages = retrievalMessage && lastUserIdx !== -1
-        ? messagesForAgent.toSpliced(lastUserIdx, 0, retrievalMessage)
-        : messagesForAgent;
-
-      if (downloadedPaths && downloadedPaths.length > 0) {
-        const fileContextMessage: UIMessage = {
-          id: `file-downloads-${crypto.randomUUID()}`,
-          role: "system",
-          parts: [
-            {
-              type: "text",
-              text: `Attached files downloaded to sandbox at:\n${downloadedPaths.map((p) => `- ${p}`).join("\n")}`,
-            },
-          ],
-        };
-        modelMessages = modelMessages.toSpliced(
-          lastUserIdx + (retrievalMessage ? 1 : 0),
-          0,
-          fileContextMessage
-        );
-      }
+      const modelMessages = messagesForAgent.toSpliced(lastUserIdx, 0, immediateSystemMessage);
 
       const stream = await agent.streamText(modelMessages, {
         abortSignal: options?.abortSignal,

@@ -24,12 +24,7 @@ export function processMessagesForAgent(
     const mappedParts: UIMessage["parts"] = [];
     for (const part of msg.parts) {
       if (isFileUIPart(part)) {
-        if (!isMimeTypeSupported(part.mediaType, inputModalities)) {
-          const filename = sanitizeFilename(part.filename ?? "file");
-          const path = `/home/daytona/uploads/${filename}`;
-          mappedParts.push({ type: "text", text: `[File uploaded to sandbox: ${path}]` });
-          continue;
-        }
+        if (!isMimeTypeSupported(part.mediaType, inputModalities)) continue;
       }
       const toolName = getToolNameFromPart(part);
       if (toolName != null && toolName.includes("sub-")) continue;

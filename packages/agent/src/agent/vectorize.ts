@@ -90,7 +90,7 @@ export async function buildRetrievalMessage(args: {
   env: typeof worker.Env;
   memberId: string | undefined;
   queryText: string;
-}): Promise<UIMessage | null> {
+}): Promise<string[] | null> {
   const results = await queryVectorizedMessages({
     ...args,
     topK: 6,
@@ -105,16 +105,7 @@ export async function buildRetrievalMessage(args: {
     return `#${index + 1} (${role}, score ${score})\n${text}`;
   });
 
-  return {
-    id: `vectorize-${crypto.randomUUID()}`,
-    role: "system",
-    parts: [
-      {
-        type: "text",
-        text: `Relevant past messages:\n\n${contextLines.join("\n\n")}`,
-      },
-    ],
-  };
+  return contextLines
 }
 
 export async function queryVectorizedMessages(args: {
