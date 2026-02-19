@@ -1,6 +1,7 @@
 import type { z } from "zod";
 import type { zMutationCtx, zQueryCtx } from "../functions";
 import * as types from "./types";
+import { triggerSchema as TriggerSchema } from "./types";
 import { withInvalidCursorRetry } from "../shared/pagination";
 import { buildPatchData } from "../shared/patch";
 import {
@@ -158,7 +159,7 @@ export async function UpdateWorkflow(ctx: zMutationCtx, args: z.infer<typeof typ
   const patchData = buildPatchData(args.patch, {
     trigger: (value) => ({
       trigger: JSON.stringify(value),
-      triggerType: (value as z.infer<typeof types.CreateArgs>["data"]["trigger"]).type,
+      triggerType: (value as z.infer<typeof TriggerSchema>).type,
     }),
   });
 
@@ -324,4 +325,3 @@ function generateWebhookSecret(): string {
   const bytes = crypto.getRandomValues(new Uint8Array(32));
   return Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
 }
-
