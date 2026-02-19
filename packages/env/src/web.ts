@@ -10,8 +10,8 @@ const viteEnvSchema = {
   VITE_TERMINAL_BACKGROUND: z.string().default("#0b0f19"),
   VITE_SANDBOX_MOUNT_PATH: z.string().default("/home/daytona"),
   VITE_SANDBOX_SSH_HOST: z.string().default("ssh.app.daytona.io"),
-  VITE_PUBLIC_POSTHOG_KEY: z.string(),
-  VITE_PUBLIC_POSTHOG_HOST: z.url(),
+  VITE_PUBLIC_POSTHOG_KEY: z.string().optional(),
+  VITE_PUBLIC_POSTHOG_HOST: z.url().optional(),
 };
 
 export const webEnv = createEnv({
@@ -24,10 +24,11 @@ export const webEnv = createEnv({
 export const serverEnv = createEnv({
   extends: [webEnv],
   server: {
-    ALCHEMY_PASSWORD: z.string().optional(),
-    VERCEL_ACCESS_TOKEN: z.string().optional(),
+    ALCHEMY_PASSWORD: z.string(),
+    CONVEX_DEPLOY_KEY: z.string(),
+    VERCEL_ACCESS_TOKEN: z.string(),
     VERCEL_GIT_REPO: z.string().default("mantrakp04/just-use-convex"),
-    VERCEL_PROJECT_NAME: z.string().optional(),
+    VERCEL_PROJECT_NAME: z.string().optional().default("just-use-convex"),
   },
   runtimeEnv: process.env,
   emptyStringAsUndefined: true,

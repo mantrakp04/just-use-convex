@@ -1,6 +1,7 @@
 import type { ConvexQueryClient } from "@convex-dev/react-query";
 import type { QueryClient } from "@tanstack/react-query";
 import type { TokenClient } from "@/lib/token-client";
+import type { PropsWithChildren } from "react";
 
 import { ConvexBetterAuthProvider } from "@convex-dev/better-auth/react";
 import {
@@ -89,12 +90,7 @@ export const Route = createRootRouteWithContext<RouterAppContext>()({
 function RootDocument() {
   const context = useRouteContext({ from: Route.id });
   return (
-    <PostHogProvider apiKey={webEnv.VITE_PUBLIC_POSTHOG_KEY} options={
-      {
-        api_host: webEnv.VITE_PUBLIC_POSTHOG_HOST,
-        defaults: '2026-01-30',
-      }
-    }>
+    <OptionalPostHogProvider>
       <ConvexBetterAuthProvider
         client={context.convexQueryClient.convexClient}
         authClient={authClient}
@@ -119,6 +115,28 @@ function RootDocument() {
           </html>
         </ThemeProvider>
       </ConvexBetterAuthProvider>
+    </OptionalPostHogProvider>
+  );
+}
+
+function OptionalPostHogProvider({ children }: PropsWithChildren) {
+  if (!webEnv.VITE_PUBLIC_POSTHOG_KEY) {
+    return children;
+  }
+
+  return (
+    <PostHogProvider
+      apiKey={webEnv.VITE_PUBLIC_POSTHOG_KEY}
+      options={{
+        ...(webEnv.VITE_PUBLIC_POSTHOG_HOST
+          ? {
+            api_host: webEnv.VITE_PUBLIC_POSTHOG_HOST,
+          }
+          : {}),
+        defaults: '2026-01-30',
+      }}
+    >
+      {children}
     </PostHogProvider>
   );
 }

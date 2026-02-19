@@ -4,8 +4,7 @@ import { serverEnv } from "@just-use-convex/env/web";
 
 const VERCEL_ENV_TARGETS: ("production" | "preview" | "development")[] = [
   "production",
-  "preview",
-  "development",
+  "preview"
 ];
 
 const app = await alchemy("just-use-convex-web", {
@@ -28,10 +27,7 @@ await app.finalize();
 
 function inferViteEnvironmentVariables() {
   return Object.entries(serverEnv)
-    .filter(
-      (entry): entry is [string, string] =>
-        entry[0].startsWith("VITE_") && typeof entry[1] === "string"
-    )
+    .filter(([, value]) => value !== undefined)
     .map(([key, value]) => ({
       key,
       target: VERCEL_ENV_TARGETS,
