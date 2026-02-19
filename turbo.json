@@ -20,6 +20,9 @@
     "check-types": {
       "dependsOn": ["^check-types"]
     },
+    "deploy": {
+      "dependsOn": ["^deploy"]
+    },
     "dev": {
       "cache": false,
       "persistent": true

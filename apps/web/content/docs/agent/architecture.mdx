@@ -241,8 +241,11 @@ Retrieved context is injected as a system message before the last user message.
 ## File Structure
 
 ```
+packages/infra/
+├── agent.ts                    # IaC: DurableObject, Vectorize, secrets
+└── web.ts                      # IaC: Vercel project + env wiring
+
 packages/agent/
-├── alchemy.run.ts              # IaC: DurableObject, Vectorize, secrets
 └── src/
     ├── index.ts                # Entry point, CORS, routeAgentRequest
     ├── client.ts               # OpenRouter AI client + embedding

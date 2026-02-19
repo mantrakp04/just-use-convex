@@ -5,7 +5,7 @@ description: Configure the AI agent with environment variables, models, and Alch
 
 # Agent Configuration
 
-Configure the agent system through environment variables and Alchemy infrastructure-as-code. No `wrangler.toml` or manual Cloudflare config needed -- Alchemy generates `wrangler.json` from `alchemy.run.ts`.
+Configure the agent system through environment variables and Alchemy infrastructure-as-code. No `wrangler.toml` or manual Cloudflare config needed -- Alchemy generates `wrangler.json` from `packages/infra/agent.ts`.
 
 ## Environment Variables
 
@@ -53,7 +53,7 @@ For production, secrets are managed by Alchemy and deployed as Cloudflare Worker
 
 ## Alchemy Infrastructure
 
-The agent is deployed via Alchemy (`packages/agent/alchemy.run.ts`), which manages all Cloudflare resources declaratively.
+The agent is deployed via Alchemy (`packages/infra/agent.ts`), which manages all Cloudflare resources declaratively.
 
 ### DurableObjectNamespace
 

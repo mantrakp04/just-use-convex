@@ -28,7 +28,7 @@ export const serverEnv = createEnv({
     CONVEX_DEPLOY_KEY: z.string(),
     VERCEL_ACCESS_TOKEN: z.string(),
     VERCEL_GIT_REPO: z.string().default("mantrakp04/just-use-convex"),
-    VERCEL_PROJECT_NAME: z.string().optional().default("just-use-convex"),
+    VERCEL_PROJECT_NAME: z.string().optional().default("just-use-convex-web"),
   },
   runtimeEnv: process.env,
   emptyStringAsUndefined: true,

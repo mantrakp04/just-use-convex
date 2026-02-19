@@ -1,6 +1,7 @@
 import alchemy from "alchemy";
-import { Project } from "alchemy/vercel";
-import { serverEnv } from "@just-use-convex/env/web";
+import "alchemy/cloudflare";
+import { Project, type EnvironmentVariable } from "alchemy/vercel";
+import { serverEnv, webEnv } from "@just-use-convex/env/web";
 
 const VERCEL_ENV_TARGETS: ("production" | "preview" | "development")[] = [
   "production",
@@ -12,7 +13,7 @@ const app = await alchemy("just-use-convex-web", {
   password: serverEnv.ALCHEMY_PASSWORD,
 });
 
-export const project = await Project("web", {
+export const project = await Project("vercel-project", {
   accessToken: alchemy.secret(serverEnv.VERCEL_ACCESS_TOKEN),
   name: serverEnv.VERCEL_PROJECT_NAME,
   rootDirectory: "apps/web",
@@ -20,14 +21,13 @@ export const project = await Project("web", {
     type: "github",
     repo: serverEnv.VERCEL_GIT_REPO,
   },
-  environmentVariables: inferViteEnvironmentVariables(),
+  environmentVariables: inferFrontendEnvironmentVariables(),
 });
 
 await app.finalize();
 
-function inferViteEnvironmentVariables() {
-  return Object.entries(serverEnv)
-    .filter(([, value]) => value !== undefined)
+function inferFrontendEnvironmentVariables(): EnvironmentVariable[] {
+  return Object.entries(webEnv)
     .map(([key, value]) => ({
       key,
       target: VERCEL_ENV_TARGETS,

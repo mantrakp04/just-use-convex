@@ -155,10 +155,12 @@ just-use-convex/
 │       │       ├── (protected)/ # Dashboard & settings
 │       │       └── docs/       # Documentation pages (Fumadocs)
 ├── packages/
-│   ├── agent/                  # Cloudflare Workers AI agent (Alchemy-managed)
+│   ├── agent/                  # Cloudflare Workers AI agent runtime
 │   │   ├── src/agent/          # AgentWorker, ConvexAdapter, prompts, vectorize
-│   │   ├── src/tools/          # web_search, ask_user, sandbox (PTY, file ops)
-│   │   └── alchemy.run.ts      # IaC — DurableObject, Vectorize, secrets
+│   │   └── src/tools/          # web_search, ask_user, sandbox (PTY, file ops)
+│   ├── infra/                  # Alchemy IaC for Cloudflare + Vercel
+│   │   ├── agent.ts            # Agent IaC — DurableObject, Vectorize, secrets
+│   │   └── web.ts              # Vercel project + env wiring
 │   ├── backend/                # Convex backend
 │   │   └── convex/
 │   │       ├── chats/          # Chat CRUD, search, stats
@@ -181,13 +183,13 @@ just-use-convex/
 | `bun run dev:setup` | Setup and configure Convex project |
 | `bun run check-types` | TypeScript type checking across all packages |
 
-### Agent (Cloudflare)
+### Infra (Alchemy)
 
 ```bash
-cd packages/agent
-bunx alchemy dev alchemy.run.ts      # Local dev
-bunx alchemy deploy alchemy.run.ts   # Deploy to Cloudflare
-bunx alchemy destroy alchemy.run.ts  # Tear down infrastructure
+cd packages/infra
+bunx alchemy dev agent.ts      # Local agent infra dev
+bunx alchemy deploy agent.ts   # Deploy agent to Cloudflare
+bunx alchemy destroy agent.ts  # Tear down agent infrastructure
 ```
 
 ## Auth Flow (Built-in)

@@ -1,6 +1,6 @@
 import { useNavigate } from "@tanstack/react-router";
 import type { Id } from "@just-use-convex/backend/convex/_generated/dataModel";
-import { env } from "@just-use-convex/env/web";
+import { webEnv } from "@just-use-convex/env/web";
 import { useWorkflow, useWorkflows } from "@/hooks/use-workflows";
 import { cronToHumanReadable } from "@/store/workflows";
 import { Button } from "@/components/ui/button";
@@ -56,7 +56,7 @@ export function WorkflowDetail({ workflowId }: WorkflowDetailProps) {
 
   const copyWebhookUrl = () => {
     if (trigger.type === "webhook") {
-      const convexSiteUrl = env.VITE_CONVEX_SITE_URL?.replace(/\/$/, "");
+      const convexSiteUrl = webEnv.VITE_CONVEX_SITE_URL?.replace(/\/$/, "");
       if (!convexSiteUrl) {
         toast.error("Convex site URL is not configured");
         return;

@@ -97,7 +97,6 @@ The Cloudflare Workers AI agent handles chat interactions, tool use, and sandbox
 
 ```
 packages/agent/
-├── alchemy.run.ts              # Alchemy IaC (DurableObject, Vectorize, secrets)
 └── src/
     ├── index.ts                # Worker entry point + CORS
     ├── agent/
@@ -108,6 +107,16 @@ packages/agent/
         ├── sandbox/            # File ops, PTY terminal, code interpreter
         ├── web-search.ts       # Exa neural search
         └── ask-user.ts         # Structured user questions
+```
+
+## Infra (`packages/infra`)
+
+Alchemy infrastructure definitions for agent and frontend deployments:
+
+```
+packages/infra/
+├── agent.ts                    # Cloudflare Worker + DurableObject + Vectorize + secrets
+└── web.ts                      # Vercel project + environment variable wiring
 ```
 
 ## Shared Packages
@@ -151,7 +160,7 @@ Creates typed query/mutation factories with automatic auth injection and trigger
 
 Each factory injects the authenticated user context and Ent table access.
 
-### `alchemy.run.ts`
+### `packages/infra/agent.ts`
 
 Defines the Cloudflare infrastructure using Alchemy IaC:
 

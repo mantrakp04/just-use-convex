@@ -8,7 +8,7 @@ import {
   setWaitUntil,
   type Toolkit,
 } from "@voltagent/core";
-import type { worker } from "../../alchemy.run";
+import type { worker } from "@just-use-convex/infra/agent";
 import type { ConvexAdapter } from "@just-use-convex/backend/convex/lib/convexAdapter";
 import { createAiClient } from "./client";
 import { CHAT_SYSTEM_PROMPT, WORKFLOW_SYSTEM_PROMPT, TASK_PROMPT } from "./prompt";

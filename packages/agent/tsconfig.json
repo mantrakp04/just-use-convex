@@ -5,5 +5,5 @@
     "lib": ["ESNext"],
     "noEmit": true
   },
-  "include": ["src/**/*.ts", "alchemy.run.ts"]
+  "include": ["src/**/*.ts"]
 }
