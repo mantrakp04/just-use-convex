@@ -140,6 +140,24 @@ export async function DeleteSandbox(ctx: zMutationCtx, args: z.infer<typeof type
     }
     cursor = chats.continueCursor;
   }
+
+  cursor = null;
+  while (true) {
+    const workflows = await sandbox.edge("workflows").paginate({ cursor, numItems: 64 });
+    await Promise.all(
+      workflows.page.map(async (workflow) => {
+        await ctx.db.patch(workflow._id, {
+          sandboxId: undefined,
+          updatedAt,
+        });
+      })
+    );
+
+    if (workflows.isDone) {
+      break;
+    }
+    cursor = workflows.continueCursor;
+  }
   await ctx.db.delete(sandbox._id);
 
   return true;
