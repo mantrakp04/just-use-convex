@@ -18,7 +18,8 @@ import { mermaid } from "@streamdown/mermaid";
 import type { UIMessage } from "ai";
 import { ChevronLeftIcon, ChevronRightIcon } from "lucide-react";
 import type { ComponentProps, HTMLAttributes, ReactElement } from "react";
-import { createContext, useContext, useEffect, useState } from "react";
+import { createContext, useContext, useMemo } from "react";
+import { useControllableState } from "@radix-ui/react-use-controllable-state";
 import { Streamdown } from "streamdown";
 
 export type MessageProps = HTMLAttributes<HTMLDivElement> & {
@@ -109,8 +110,7 @@ interface MessageBranchContextType {
   totalBranches: number;
   goToPrevious: () => void;
   goToNext: () => void;
-  branches: ReactElement[];
-  setBranches: (branches: ReactElement[]) => void;
+  childrenArray: ReactElement[];
 }
 
 const MessageBranchContext = createContext<MessageBranchContextType | null>(
@@ -138,35 +138,44 @@ export const MessageBranch = ({
   defaultBranch = 0,
   onBranchChange,
   className,
+  children,
   ...props
 }: MessageBranchProps) => {
-  const [currentBranch, setCurrentBranch] = useState(defaultBranch);
-  const [branches, setBranches] = useState<ReactElement[]>([]);
+  const [currentBranch, setCurrentBranch] = useControllableState({
+    prop: defaultBranch,
+    defaultProp: 0,
+    onChange: onBranchChange,
+  });
+  const childrenArray = useMemo<ReactElement[]>(
+    () => (Array.isArray(children) ? children : [children]),
+    [children]
+  );
+
+  const totalBranches = childrenArray.length;
+  const safeBranchIndex = totalBranches > 0 ? Math.min(currentBranch, totalBranches - 1) : 0;
 
   const handleBranchChange = (newBranch: number) => {
     setCurrentBranch(newBranch);
-    onBranchChange?.(newBranch);
   };
 
   const goToPrevious = () => {
     const newBranch =
-      currentBranch > 0 ? currentBranch - 1 : branches.length - 1;
+      safeBranchIndex > 0 ? safeBranchIndex - 1 : totalBranches - 1;
     handleBranchChange(newBranch);
   };
 
   const goToNext = () => {
     const newBranch =
-      currentBranch < branches.length - 1 ? currentBranch + 1 : 0;
+      safeBranchIndex < totalBranches - 1 ? safeBranchIndex + 1 : 0;
     handleBranchChange(newBranch);
   };
 
   const contextValue: MessageBranchContextType = {
-    currentBranch,
-    totalBranches: branches.length,
+    currentBranch: safeBranchIndex,
+    totalBranches,
+    childrenArray,
     goToPrevious,
     goToNext,
-    branches,
-    setBranches,
   };
 
   return (
@@ -185,15 +194,7 @@ export const MessageBranchContent = ({
   children,
   ...props
 }: MessageBranchContentProps) => {
-  const { currentBranch, setBranches, branches } = useMessageBranch();
-  const childrenArray = Array.isArray(children) ? children : [children];
-
-  // Use useEffect to update branches when they change
-  useEffect(() => {
-    if (branches.length !== childrenArray.length) {
-      setBranches(childrenArray);
-    }
-  }, [childrenArray, branches, setBranches]);
+  const { currentBranch, childrenArray } = useMessageBranch();
 
   return childrenArray.map((branch, index) => (
     <div

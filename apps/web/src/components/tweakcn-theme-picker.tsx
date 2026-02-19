@@ -65,15 +65,18 @@ function ThemeColorDots({ theme }: { theme: Theme }) {
     theme.cssVars.light.secondary || "oklch(0.9 0.02 250)",
     theme.cssVars.light.accent || "oklch(0.95 0.02 250)",
     theme.cssVars.light.muted || "oklch(0.95 0.01 250)",
-  ]
+  ].map((value, index) => ({
+    key: `color-${index}`,
+    value,
+  }));
 
   return (
     <div className="flex items-center gap-0.5">
-      {colors.map((color, i) => (
+      {colors.map((color) => (
         <div
-          key={i}
+          key={color.key}
           className="h-3 w-3 rounded-full border border-border/50"
-          style={{ background: color }}
+          style={{ background: color.value }}
         />
       ))}
     </div>

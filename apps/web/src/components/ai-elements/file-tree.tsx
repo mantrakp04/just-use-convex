@@ -16,8 +16,8 @@ import {
   type HTMLAttributes,
   type ReactNode,
   useContext,
-  useState,
 } from "react";
+import { useControllableState } from "@radix-ui/react-use-controllable-state";
 
 interface FileTreeContextType {
   expandedPaths: Set<string>;
@@ -49,8 +49,11 @@ export const FileTree = ({
   children,
   ...props
 }: FileTreeProps) => {
-  const [internalExpanded, setInternalExpanded] = useState(defaultExpanded);
-  const expandedPaths = controlledExpanded ?? internalExpanded;
+  const [expandedPaths, setExpandedPaths] = useControllableState({
+    prop: controlledExpanded,
+    defaultProp: defaultExpanded,
+    onChange: onExpandedChange,
+  });
 
   const togglePath = (path: string) => {
     const newExpanded = new Set(expandedPaths);
@@ -59,8 +62,7 @@ export const FileTree = ({
     } else {
       newExpanded.add(path);
     }
-    setInternalExpanded(newExpanded);
-    onExpandedChange?.(newExpanded);
+    setExpandedPaths(newExpanded);
   };
 
   return (

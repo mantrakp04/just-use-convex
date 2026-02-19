@@ -44,6 +44,16 @@ const statement = {
     "readAny",
     "deleteAny",
   ],
+  workflow: [
+    "create",
+    "read",
+    "readAny",
+    "update",
+    "updateAny",
+    "delete",
+    "deleteAny",
+    "execute",
+  ],
 } as const;
 
 export const ac = createAccessControl(statement);
@@ -54,6 +64,7 @@ const member = ac.newRole({
   chat: ["create", "read", "update", "delete"],
   sandbox: ["create", "read", "update", "delete"],
   attachment: ["create", "read", "delete"],
+  workflow: ["create", "read", "update", "delete", "execute"],
 });
 
 const admin = ac.newRole({
@@ -62,6 +73,7 @@ const admin = ac.newRole({
   chat: ["create", "read", "readAny", "update", "updateAny", "delete", "deleteAny"],
   sandbox: ["create", "read", "readAny", "update", "updateAny", "delete", "deleteAny"],
   attachment: ["create", "read", "delete", "readAny", "deleteAny"],
+  workflow: ["create", "read", "readAny", "update", "updateAny", "delete", "deleteAny", "execute"],
 });
 
 const owner = ac.newRole({
@@ -70,6 +82,7 @@ const owner = ac.newRole({
   chat: ["create", "read", "readAny", "update", "updateAny", "delete", "deleteAny"],
   sandbox: ["create", "read", "readAny", "update", "updateAny", "delete", "deleteAny"],
   attachment: ["create", "read", "delete", "readAny", "deleteAny"],
+  workflow: ["create", "read", "readAny", "update", "updateAny", "delete", "deleteAny", "execute"],
 });
 
 // Roles ordered by hierarchy (lowest to highest)

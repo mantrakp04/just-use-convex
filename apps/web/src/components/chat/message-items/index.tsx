@@ -1,5 +1,5 @@
 
-import { memo, useMemo, useEffect } from "react";
+import { memo, useMemo } from "react";
 import type { UIMessage } from "@ai-sdk/react";
 import type { ChatAddToolApproveResponseFunction, FileUIPart } from "ai";
 import { Check, X, PaperclipIcon } from "lucide-react";
@@ -24,13 +24,10 @@ import { RegenerateButton } from "./regenerate-button";
 import { EditMessageButton } from "./edit-message-button";
 import { ChainOfThoughtPart, isChainOfThoughtPart } from "./chain-of-thought-part";
 import { ToolPart, getToolName, isToolPart, type ToolPartType } from "./tool-part";
-import type { AskUserState, TodosState } from "@/components/chat/types";
 import {
   useMessageEditing,
   extractMessageText,
   extractMessageFiles,
-  extractTodosFromMessage,
-  extractAskUserFromMessage,
 } from "@/hooks/use-chat";
 import { extractSourcesFromMessage } from "@/lib/citations";
 
@@ -40,10 +37,8 @@ export interface MessageItemProps {
   toolApprovalResponse: ChatAddToolApproveResponseFunction;
   onRegenerate?: (messageId: string) => void;
   onEditMessage?: (messageId: string, newText: string, files: FileUIPart[]) => void;
-  isLastAssistantMessage?: boolean;
+  // isLastAssistantMessage?: boolean;
   userMessageId?: string;
-  onTodosChange?: (todosState: TodosState) => void;
-  onAskUserChange?: (askUserState: AskUserState | null) => void;
 }
 
 // Tools completely hidden from message (rendered elsewhere or extracted)
@@ -59,16 +54,29 @@ function isInlineTool(part: UIMessage["parts"][number]): boolean {
   return INLINE_TOOLS.includes(getToolName(part.type));
 }
 
+const getPartBaseKey = (part: UIMessage["parts"][number]) =>
+  `${part.type}-${JSON.stringify(part)}`;
+
+const getPartRenderKey = (part: UIMessage["parts"][number], keyCounts: Map<string, number>) => {
+  const baseKey = getPartBaseKey(part);
+  const next = (keyCounts.get(baseKey) ?? 0) + 1;
+  keyCounts.set(baseKey, next);
+
+  return `${baseKey}:${next}`;
+};
+
+type MessagePartDescriptor = {
+  part: UIMessage["parts"][number];
+  key: string;
+};
+
 export const MessageItem = memo(function MessageItem({
   message,
   isStreaming,
   toolApprovalResponse,
   onRegenerate,
   onEditMessage,
-  isLastAssistantMessage,
   userMessageId,
-  onTodosChange,
-  onAskUserChange,
 }: MessageItemProps) {
   const messageText = extractMessageText(message);
   const messageFiles = extractMessageFiles(message);
@@ -96,13 +104,14 @@ export const MessageItem = memo(function MessageItem({
 
   const renderParts = () => {
     const elements: React.ReactNode[] = [];
-    let chainGroup: { part: UIMessage["parts"][number]; index: number }[] = [];
+    const partKeyCounts = new Map<string, number>();
+    let chainGroup: MessagePartDescriptor[] = [];
 
     const flushChainGroup = () => {
       if (chainGroup.length > 0) {
         elements.push(
           <ChainOfThoughtPart
-            key={`${message.id}-chain-${chainGroup[0].index}`}
+            key={`${message.id}-chain-${chainGroup[0].key}`}
             isStreaming={isStreaming}
             chainGroup={chainGroup}
             toolApprovalResponse={toolApprovalResponse}
@@ -112,7 +121,9 @@ export const MessageItem = memo(function MessageItem({
       }
     };
 
-    message.parts.forEach((part, i) => {
+    message.parts.forEach((part) => {
+      const partKey = getPartRenderKey(part, partKeyCounts);
+
       // Skip step-start and hidden tools (rendered elsewhere)
       if (part.type === "step-start" || isHiddenTool(part)) {
         return;
@@ -123,9 +134,9 @@ export const MessageItem = memo(function MessageItem({
         flushChainGroup();
         elements.push(
           <ToolPart
-            key={`${message.id}-tool-${i}`}
+            key={`${message.id}-${partKey}`}
             part={part as ToolPartType}
-            partKey={i}
+            partKey={partKey}
             toolApprovalResponse={toolApprovalResponse}
           />
         );
@@ -134,16 +145,28 @@ export const MessageItem = memo(function MessageItem({
 
       // Chain of thought parts (reasoning, tool calls, etc.)
       if (isChainOfThoughtPart(part)) {
-        chainGroup.push({ part, index: i });
+        chainGroup.push({ part, key: partKey });
       } else {
         flushChainGroup();
 
         if (part.type === "text") {
           elements.push(
-            <TextPart key={`${message.id}-text-${i}`} part={part} role={message.role} partKey={i} sources={sources} />
+            <TextPart
+              key={`${message.id}-${partKey}`}
+              part={part}
+              role={message.role}
+              partKey={partKey}
+              sources={sources}
+            />
           );
         } else if (part.type === "file") {
-          elements.push(<FilePart key={`${message.id}-file-${i}`} part={part} partKey={i} />);
+          elements.push(
+            <FilePart
+              key={`${message.id}-${partKey}`}
+              part={part}
+              partKey={partKey}
+            />
+          );
         }
       }
     });
@@ -152,23 +175,6 @@ export const MessageItem = memo(function MessageItem({
 
     return elements;
   };
-
-  // Extract todos in an effect, not during render
-  useEffect(() => {
-    if (isLastAssistantMessage && onTodosChange) {
-      const todosState = extractTodosFromMessage(message, true);
-      if (todosState) {
-        onTodosChange(todosState);
-      }
-    }
-  }, [message, isLastAssistantMessage, onTodosChange]);
-
-  useEffect(() => {
-    if (isLastAssistantMessage && onAskUserChange) {
-      const askUserState = extractAskUserFromMessage(message, true);
-      onAskUserChange(askUserState);
-    }
-  }, [message, isLastAssistantMessage, onAskUserChange]);
 
   const handleRegenerate = () => {
     if (onRegenerate) {
@@ -185,11 +191,11 @@ export const MessageItem = memo(function MessageItem({
         <div className="flex flex-col gap-3 max-w-[70%] ml-auto">
           {editedFiles.length > 0 && (
             <Attachments variant="grid">
-              {editedFiles.map((file, index) => (
+              {editedFiles.map((file, fileIndex) => (
                 <Attachment
-                  key={`${file.url}-${index}`}
-                  data={{ ...file, id: String(index) }}
-                  onRemove={() => handleRemoveFile(index)}
+                  key={file.url}
+                  data={{ ...file, id: file.url }}
+                  onRemove={() => handleRemoveFile(fileIndex)}
                 >
                   <AttachmentPreview />
                   <AttachmentRemove />
@@ -284,7 +290,6 @@ export const MessageItem = memo(function MessageItem({
   // For completed messages (not streaming), skip re-render if ID matches
   if (!prev.isStreaming && !next.isStreaming) {
     if (prev.message.id !== next.message.id) return false;
-    if (prev.isLastAssistantMessage !== next.isLastAssistantMessage) return false;
     // Same completed message, no need to re-render
     return true;
   }

@@ -4,7 +4,7 @@ import { z } from "zod";
 
 const exa = new Exa();
 
-export function createWebSearchToolkit() {
+export async function createWebSearchToolkit() {
   const webSearchTool = createTool({
     name: "web_search",
     description: `Search the web for information using Exa's neural search.
@@ -98,5 +98,3 @@ Rules:
     tools: [webSearchTool],
   });
 }
-
-export const webSearchToolkit = createWebSearchToolkit();

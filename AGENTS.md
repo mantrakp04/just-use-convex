@@ -2,6 +2,7 @@
 
 ## Project Overview
 AI-powered agentic chat platform — multi-tenant, real-time, with org/team support. Features multi-step planning agents with sub-agents, Daytona sandbox code execution (PTY terminals, file ops), vector search (RAG), and tool approval workflows. Cloudflare Workers + Durable Objects for persistent agent state, Convex for reactive backend, TanStack Start for SSR.
+THIS APP HAS NO USERS, thers no real data yet make whatever changes u want dont worry about it we will figure it out when we ship, this is super greenfield, its ok u can change the schema compleatly we are trying to get it in a good shape.
 
 ## Tech Stack
 | Layer | Stack |
@@ -77,6 +78,14 @@ If playback fails, explicitly report that in the final response with the command
 **Be concise and direct. No fluff. Match the energy.**
 
 User uses casual language ("bro", "dawg", "ugh"). Keep responses terse and actionable. When something breaks, diagnose fast, fix faster.
+
+### Clarification Gate (Mandatory)
+
+- before implementing any non-trivial change, ask for confirmation if scope/intent is not explicitly specified
+- do not assume architectural behavior for stateful flows (worker lifecycle, mode switching, persistence, auth propagation, background execution)
+- if multiple reasonable implementations exist, present options briefly and wait for selection before coding
+- when a change can affect cross-context behavior (chat vs workflow, server vs client, trigger vs interactive path), ask first and get approval
+- default to asking one targeted clarifying question rather than executing on inferred intent
 
 ---
 
@@ -156,15 +165,6 @@ AgentWorker (AIChatAgent / Durable Object)
 - Background tasks with configurable timeout (default 1hr)
 - Tool result truncation for large outputs
 
-### Auth Flow
-```
-Client → Better Auth (JWT with org context) → WebSocket → Agent
-Agent → ConvexAdapter (JWT or external token) → Convex
-```
-- Session fields: activeOrganizationId, activeTeamId, organizationRole, memberId
-- Roles: member, admin, owner
-- Permissions: create, read, readAny, update, updateAny, delete, deleteAny
-
 ### Frontend Hooks
 ```typescript
 export function useChats() {
@@ -221,71 +221,19 @@ File-based TanStack Router:
 - do not shy away from refactoring bad patterns, be proactive
 - avoid defining new types; infer and derive from existing types/packages (use `Pick`/`Omit` and TS utility types)
 - keep shared/custom types centralized in `types.ts` files (avoid inline object type blocks in implementation files)
+- when adding runtime validation, define/export the schema in `types.ts` and infer the type from it; import both instead of local guards/schemas
 - if you change server-side code, always verify affected client-side usage (and vice versa)
 - keep codebase DRY
 - cleanup stale code when changing methods/approach
 - keep helper functions at the bottom of the file
 - always use convex ents for convex related stuff
-- whenever implementing something for convex, analyze adjecent and relevant files for similar pattern implementation
+- whenever implementing something for convex, analyze adjacent and relevant files for similar pattern implementation
 - whenever working with external libraries always query context7 for their relevant docs
-- keep env schemas consolidated: extend `packages/env/src/web.ts` for web+infra needs instead of adding `packages/env/src/infra.ts`
-- keep `dev`/`deploy`/`destroy` scripts with the owning package (`packages/agent` owns agent commands)
 
 ## Background & Subagents
 
 - for anything related to implementation or research make use of background subagents
 - parallelize as much stuff you can, todos -> each todo is a subagent, make them background whenever possible
-
-## Review Flow
-
-- fetch all PR comments from `greptile`, `cubic`, and `codex`
-- normalize comments into a single actionable list with file + line context
-- spawn a background subagent to validate each comment (real issue vs noise/outdated)
-- fix every validated comment in code, following existing project patterns
-- run required checks after fixes (`bun check-types` minimum)
-- post a concise end summary with:
-  - validated + fixed comments
-  - rejected comments with reason
-  - checks run and status
-
-## Shadcn → Framer Motion Flow
-
-### 1. Audit
-- read the target shadcn component and `Grep` all consumer files for its imports
-- catalog every base-ui primitive used, its props, and data attributes it injects
-- note which props consumers actually rely on (controlled value, variants, callbacks, `keepMounted`, etc.)
-
-### 2. Replace primitives
-- swap each base-ui primitive for a plain HTML element (`div`, `button`, `span`)
-- extract all Tailwind classes verbatim onto the replacement elements
-- replicate stateful behavior (controlled/uncontrolled, open/closed, active selection) via React context
-- re-add every data attribute base-ui injected (`data-active`, `data-open`, `data-orientation`, `data-variant`, `data-horizontal`, etc.) so existing Tailwind `group-data-*` selectors keep working
-- for CVA variant checks, use negative guards (`variant !== "x"`) instead of strict equality to handle `null | undefined` from `VariantProps`
-
-### 3. Add motion
-- identify the state-change visual (active indicator, expand/collapse, enter/exit) and decide the animation primitive:
-  - **position transitions** (tabs, nav indicators): `layoutId` on a `motion.span` with `layout` prop + `initial={false}`
-  - **presence transitions** (modals, drawers, dropdowns): `AnimatePresence` + `motion.div` with `animate`/`exit`
-  - **height/collapse transitions**: `collapseVariants` from `@/lib/motion`
-- use `isolate` on the parent + `-z-10` on the indicator to layer behind content without wrapper spans
-- pick the right preset from `@/lib/motion`:
-  - `springSnappy` — position indicators (tabs, nav)
-  - `springBouncy` — attention-grabbing elements
-  - `springExpand` — height/accordion animations
-  - `transitionDefault` — hover/general UI
-  - `transitionInstant` — press feedback
-- invoke `emilkowal-animations` skill and cross-check the animation against relevant rules
-
-### 4. Gotchas
-- do NOT use `useReducedMotion` to set `duration: 0` — it silently kills `layoutId` animations
-- `keepMounted` panels: use inline `style={{ display: "none" }}` when inactive (not Tailwind `hidden` class, which can be overridden)
-- `layoutId` requires exactly ONE element with that ID in the tree at a time — conditional render, don't toggle opacity
-- always add `layout` prop alongside `layoutId` for reliability
-
-### 5. Verify
-- confirm all consumer files still type-check (`bun check-types`)
-- test every variant and orientation the component supports
-- verify no visual regression in static state (same colors, spacing, borders)
 
 ## Self-Updating Scratchpad
 
@@ -315,3 +263,4 @@ File-based TanStack Router:
 ## Skills to Reference
 - `emilkowal-animations` — animation timing/easing
 - `vercel-react-best-practices` — re-render optimization
+- `flow` — structured execution flows for auth/review/refactor/shadcn-to-motion migrations

@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
 import { CheckIcon, CopyIcon, EyeIcon, EyeOffIcon } from "lucide-react";
+import { useControllableState } from "@radix-ui/react-use-controllable-state";
 import {
   type ComponentProps,
   createContext,
@@ -37,17 +38,16 @@ export const EnvironmentVariables = ({
   children,
   ...props
 }: EnvironmentVariablesProps) => {
-  const [internalShowValues, setInternalShowValues] =
-    useState(defaultShowValues);
-  const showValues = controlledShowValues ?? internalShowValues;
-
-  const setShowValues = (show: boolean) => {
-    setInternalShowValues(show);
-    onShowValuesChange?.(show);
-  };
+  const [showValues, setShowValues] = useControllableState({
+    prop: controlledShowValues,
+    defaultProp: defaultShowValues,
+    onChange: onShowValuesChange,
+  });
 
   return (
-    <EnvironmentVariablesContext.Provider value={{ showValues, setShowValues }}>
+    <EnvironmentVariablesContext.Provider
+      value={{ showValues, setShowValues }}
+    >
       <div
         className={cn("rounded-lg border bg-background", className)}
         {...props}

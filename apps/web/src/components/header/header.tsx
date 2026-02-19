@@ -14,6 +14,7 @@ export default function Header() {
     { to: "docs", label: "Docs" },
     { to: "dashboard", label: "Dashboard" },
     { to: "chats", label: "Chats" },
+    { to: "workflows", label: "Workflows" },
     { to: "settings", label: "Settings" },
   ] as const;
 

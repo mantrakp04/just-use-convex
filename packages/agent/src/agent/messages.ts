@@ -24,14 +24,9 @@ export function processMessagesForAgent(
     const mappedParts: UIMessage["parts"] = [];
     for (const part of msg.parts) {
       if (isFileUIPart(part)) {
-        if (!isMimeTypeSupported(part.mediaType, inputModalities)) {
-          const filename = sanitizeFilename(part.filename ?? "file");
-          const path = `/home/daytona/uploads/${filename}`;
-          mappedParts.push({ type: "text", text: `[File uploaded to sandbox: ${path}]` });
-          continue;
-        }
+        if (!isMimeTypeSupported(part.mediaType, inputModalities)) continue;
       }
-      const toolName = "type" in part ? getToolNameFromPartType(part.type as string) : null;
+      const toolName = getToolNameFromPart(part);
       if (toolName != null && toolName.includes("sub-")) continue;
       mappedParts.push(part);
     }
@@ -99,6 +94,14 @@ function isMimeTypeSupported(mimeType: string, inputModalities?: string[]): bool
 function getToolNameFromPartType(type: string): string | null {
   if (!type.startsWith("tool-")) return null;
   return type.slice(5);
+}
+
+function getToolNameFromPart(part: UIMessage["parts"][number]): string | null {
+  if ("toolName" in part && typeof part.toolName === "string") {
+    return part.toolName;
+  }
+
+  return getToolNameFromPartType(part.type);
 }
 
 export function sanitizeFilename(filename: string): string {

@@ -26,7 +26,9 @@ export const CreateArgs = z.object({
 });
 
 export const UpdateArgs = SandboxWithSystemFields.pick({ _id: true }).extend({
-  patch: Sandbox.pick({ name: true, description: true }).partial(),
+  patch: Sandbox.pick({ name: true }).extend({
+    description: z.string().nullable().optional(),
+  }).partial(),
 });
 
 export const DeleteArgs = SandboxWithSystemFields.pick({ _id: true });

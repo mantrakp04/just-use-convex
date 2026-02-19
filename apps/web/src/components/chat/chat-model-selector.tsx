@@ -87,10 +87,10 @@ export function ChatModelSelector({
       <ModelSelectorContent title="Select a model" className="max-h-[28rem] h-full">
         <ModelSelectorInput placeholder="Search models..." />
         <div className="flex flex-1 min-w-0 overflow-hidden">
-          <ModelSelectorSidebar>
-            {authors.map((author, index) => (
+            <ModelSelectorSidebar>
+            {authors.map((author) => (
               <ModelSelectorProviderButton
-                key={author + index}
+                key={author}
                 provider={getProviderLogoSlug(author)}
                 displayName={getProviderDisplayName(author)}
                 isSelected={selectedAuthor === author}

@@ -6,7 +6,7 @@ import type { SourceReference } from "@/lib/citations";
 export interface TextPartProps {
   part: Extract<UIMessage["parts"][number], { type: "text" }>;
   role: UIMessage["role"];
-  partKey: number;
+  partKey: string;
   sources?: SourceReference[];
 }
 

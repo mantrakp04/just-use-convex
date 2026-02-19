@@ -12,7 +12,7 @@ import { ToolPart, isToolPart } from "./tool-part";
 
 export interface ChainOfThoughtPartProps {
   isStreaming: boolean;
-  chainGroup: { part: UIMessage["parts"][number]; index: number }[];
+  chainGroup: { part: UIMessage["parts"][number]; key: string }[];
   toolApprovalResponse: ChatAddToolApproveResponseFunction;
 }
 
@@ -31,11 +31,11 @@ export const ChainOfThoughtPart = memo(function ChainOfThoughtPart({
         {isStreaming ? "Exploring..." : "Explored"}
       </ChainOfThoughtHeader>
       <ChainOfThoughtContent>
-        {chainGroup.map(({ part: p, index }) => {
+        {chainGroup.map(({ part: p, key }) => {
           if (p.type === "reasoning") {
             return (
               <ReasoningPart
-                key={index}
+                key={key}
                 part={p}
                 isStreaming={isStreaming}
               />
@@ -44,9 +44,9 @@ export const ChainOfThoughtPart = memo(function ChainOfThoughtPart({
           if (isToolPart(p)) {
             return (
               <ToolPart
-                key={index}
+                key={key}
                 part={p}
-                partKey={index}
+                partKey={key}
                 toolApprovalResponse={toolApprovalResponse}
               />
             );

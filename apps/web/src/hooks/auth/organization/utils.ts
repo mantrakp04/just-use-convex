@@ -1,4 +1,4 @@
-import { ROLE_HIERARCHY, type MemberRole } from "./types";
+import { isMemberRole, ROLE_HIERARCHY, type MemberRole } from "./types";
 
 export function getInitials(name: string): string {
   return name
@@ -9,15 +9,17 @@ export function getInitials(name: string): string {
     .slice(0, 2);
 }
 
-function isValidRole(role: string): role is MemberRole {
-  return role in ROLE_HIERARCHY;
+export function isAtLeastRole(role: string | null, minimumRole: MemberRole): boolean {
+  if (!role) return false;
+  if (!isMemberRole(role)) return false;
+  return ROLE_HIERARCHY[role] >= ROLE_HIERARCHY[minimumRole];
 }
 
 export function canManageRole(currentRole: string | null, targetRole: string): boolean {
-  if (!currentRole) return false;
-  const currentLevel = isValidRole(currentRole) ? ROLE_HIERARCHY[currentRole] : 0;
-  const targetLevel = isValidRole(targetRole) ? ROLE_HIERARCHY[targetRole] : 0;
-  return currentLevel > targetLevel;
+  if (currentRole === null) return false;
+  if (!isMemberRole(currentRole)) return false;
+  if (!isMemberRole(targetRole)) return false;
+  return ROLE_HIERARCHY[currentRole] > ROLE_HIERARCHY[targetRole];
 }
 
 export function normalizeSlug(value: string): string {

@@ -4,7 +4,7 @@ import { DownloadIcon, Trash2Icon } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 
 import { useAttachments, useAttachmentsList, type AttachmentItem } from "@/hooks/use-attachments";
-import { useActiveMember, useMembers, ROLE_HIERARCHY } from "@/hooks/auth/organization";
+import { isAtLeastRole, useActiveMember, useMembers } from "@/hooks/auth/organization";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -27,6 +27,10 @@ export const Route = createFileRoute("/(protected)/settings/organization/attachm
 
 const PAGE_SIZE = 20;
 const MAX_UPLOAD_SIZE_BYTES = 50 * 1024 * 1024;
+const ATTACHMENT_SKELETON_IDS = Array.from(
+  { length: 6 },
+  (_, index) => `attachment-skeleton-${index}`
+);
 
 function formatBytes(bytes: number) {
   if (bytes === 0) return "0 B";
@@ -110,9 +114,7 @@ function AttachmentsSettings() {
   }, []);
 
   const isAdmin = useMemo(() => {
-    if (!currentUserRole) return false;
-    const level = ROLE_HIERARCHY[currentUserRole] ?? 0;
-    return level >= ROLE_HIERARCHY.admin;
+    return isAtLeastRole(currentUserRole, "admin");
   }, [currentUserRole]);
 
   const listMemberId = isAdmin && memberId !== "me" ? memberId : undefined;
@@ -200,8 +202,8 @@ function AttachmentsSettings() {
         <CardContent>
           {isLoading ? (
             <div className="flex flex-col gap-3">
-              {Array.from({ length: 6 }).map((_, index) => (
-                <Skeleton key={index} className="h-12 w-full rounded-lg" />
+              {ATTACHMENT_SKELETON_IDS.map((skeletonId) => (
+                <Skeleton key={skeletonId} className="h-12 w-full rounded-lg" />
               ))}
             </div>
           ) : !hasResults ? (

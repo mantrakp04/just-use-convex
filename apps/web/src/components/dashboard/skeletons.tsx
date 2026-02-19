@@ -76,15 +76,20 @@ export function CalendarSkeleton() {
         </div>
         {/* Calendar Days Grid */}
         <div className="grid grid-cols-7">
-          {Array.from({ length: 35 }).map((_, idx) => (
-            <div key={idx} className="border-b border-r p-1 min-h-24">
+          {Array.from({ length: 35 }, (_, dayIndex) => `day-${dayIndex}`).map(
+            (dayKey) => (
+              <div
+                key={dayKey}
+                className="border-b border-r p-1 min-h-24"
+              >
               <Skeleton className="h-6 w-6 rounded-full mb-1" />
               <div className="space-y-1">
                 <Skeleton className="h-4 w-full rounded" />
                 <Skeleton className="h-4 w-3/4 rounded" />
               </div>
             </div>
-          ))}
+            )
+          )}
         </div>
       </div>
     </div>

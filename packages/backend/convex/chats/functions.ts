@@ -9,28 +9,24 @@ import {
 } from "../shared/auth";
 
 async function runChatsQuery(ctx: zQueryCtx, args: z.infer<typeof types.ListArgs>) {
-  return ctx.table("chats", "organizationId_memberId_isPinned", (q) => q
-    .eq("organizationId", ctx.identity.activeOrganizationId)
-    .eq("memberId", ctx.identity.memberId)
-    .eq("isPinned", args.filters.isPinned)
-  )
-    .order("desc")
-    .filter((q) => {
-      const conditions: ReturnType<typeof q.eq>[] = [];
+  const { executionStatus } = args.filters;
+  const indexQuery =
+    executionStatus !== undefined
+      ? ctx.table("chats", "organizationId_memberId_isPinned_executionStatus", (q) =>
+          q
+            .eq("organizationId", ctx.identity.activeOrganizationId)
+            .eq("memberId", ctx.identity.memberId)
+            .eq("isPinned", args.filters.isPinned)
+            .eq("executionStatus", executionStatus)
+        )
+      : ctx.table("chats", "organizationId_memberId_isPinned_executionStatus", (q) =>
+          q
+            .eq("organizationId", ctx.identity.activeOrganizationId)
+            .eq("memberId", ctx.identity.memberId)
+            .eq("isPinned", args.filters.isPinned)
+        );
 
-      if (args.filters.title !== undefined) {
-        conditions.push(q.eq(q.field("title"), args.filters.title));
-      }
-
-      if (conditions.length === 0) {
-        return true;
-      }
-      if (conditions.length === 1) {
-        return conditions[0]!;
-      }
-      return q.and(...conditions);
-    })
-    .paginate(args.paginationOpts);
+  return indexQuery.order("desc").paginate(args.paginationOpts);
 }
 
 export async function ListChats(ctx: zQueryCtx, args: z.infer<typeof types.ListArgs>) {
@@ -107,6 +103,7 @@ export async function CreateChat(ctx: zMutationCtx, args: z.infer<typeof types.C
     memberId: ctx.identity.memberId,
     isPinned: false,
     updatedAt: now,
+    executionStatus: "idle",
   });
   return chat;
 }
@@ -173,6 +170,7 @@ export async function SearchChats(ctx: zQueryCtx, args: z.infer<typeof types.Sea
         .eq("organizationId", ctx.identity.activeOrganizationId)
         .eq("memberId", ctx.identity.memberId)
         .eq("isPinned", args.isPinned)
+        .eq("executionStatus", args.executionStatus)
     )
     .paginate(args.paginationOpts);
 

@@ -58,11 +58,16 @@ export const CitedMarkdown = ({
         className
       )}
     >
-      {segments.map((segment, index) => {
+      {segments.map((segment) => {
+        const segmentKey =
+          segment.type === "citation"
+            ? `citation-${segment.indices?.join("-") ?? "index"}`
+            : `text-${segment.content}`;
+
         if (segment.type === "citation") {
           return (
             <CitationBadge
-              key={index}
+              key={segmentKey}
               indices={segment.indices ?? []}
               sources={sources}
             />
@@ -73,7 +78,7 @@ export const CitedMarkdown = ({
         // Wrap in span to keep inline flow
         return (
           <Streamdown
-            key={index}
+            key={`${segmentKey}-${segment.content.length}`}
             className="inline [&>p]:inline [&>*:first-child]:mt-0 [&>*:last-child]:mb-0"
             plugins={{ code, mermaid, math, cjk }}
             shikiTheme={["github-light", "github-dark"]}

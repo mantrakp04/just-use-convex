@@ -1,4 +1,4 @@
-import type { BaseTool, ToolExecuteOptions, Toolkit } from "@voltagent/core";
+import type { ToolExecuteOptions } from "@voltagent/core";
 import type { ZodObject, ZodRawShape } from "zod";
 
 // ── Constants ──────────────────────────────────────────────────────────
@@ -168,7 +168,3 @@ export interface TruncatedOutputStoreApi {
   getAll(): TruncatedOutput[];
   cleanup(maxAgeMs?: number): void;
 }
-
-// ── Utilities ──────────────────────────────────────────────────────────
-
-export type ToolOrToolkit = BaseTool | Toolkit;

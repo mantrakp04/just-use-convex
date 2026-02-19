@@ -103,18 +103,13 @@ export const SpeechInput = ({
 }: SpeechInputProps) => {
   const [isListening, setIsListening] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
-  const [mode, setMode] = useState<SpeechInputMode>("none");
+  const [mode] = useState<SpeechInputMode>(detectSpeechInputMode);
   const [recognition, setRecognition] = useState<SpeechRecognition | null>(
     null
   );
   const recognitionRef = useRef<SpeechRecognition | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
-
-  // Detect mode on mount
-  useEffect(() => {
-    setMode(detectSpeechInputMode());
-  }, []);
 
   // Initialize Speech Recognition when mode is speech-recognition
   useEffect(() => {
@@ -266,12 +261,12 @@ export const SpeechInput = ({
     <div className="relative inline-flex items-center justify-center">
       {/* Animated pulse rings */}
       {isListening &&
-        [0, 1, 2].map((index) => (
+        [0, 0.3, 0.6].map((delaySeconds) => (
           <div
             className="absolute inset-0 animate-ping rounded-full border-2 border-red-400/30"
-            key={index}
+            key={delaySeconds}
             style={{
-              animationDelay: `${index * 0.3}s`,
+              animationDelay: `${delaySeconds}s`,
               animationDuration: "2s",
             }}
           />

@@ -9,6 +9,7 @@ import {
 } from "./aggregates";
 import type { zQueryCtx } from "../functions";
 import { exactBounds } from "../shared/aggregates";
+import { assertPermission } from "../shared/auth";
 
 // ═══════════════════════════════════════════════════════════════════
 // SHARED HELPERS (reusable across all stats functions)
@@ -68,6 +69,12 @@ async function getMemberStatusCounts(
 // ═══════════════════════════════════════════════════════════════════
 
 export async function GetOrgStats(ctx: zQueryCtx) {
+  assertPermission(
+    ctx.identity.organizationRole,
+    { todo: ["readAny"] },
+    "You are not authorized to view organization todo stats"
+  );
+
   const orgId = ctx.identity.activeOrganizationId;
 
   const [total, byStatus, byPriority] = await Promise.all([

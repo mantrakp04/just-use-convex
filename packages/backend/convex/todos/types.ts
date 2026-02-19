@@ -48,7 +48,10 @@ export const CreateArgs = z.object({
 });
 
 export const UpdateArgs = TodoWithSystemFields.pick({ _id: true }).extend({
-  patch: Todo.omit({ organizationId: true, memberId: true, updatedAt: true }).partial(),
+  patch: Todo.omit({ organizationId: true, memberId: true, updatedAt: true }).extend({
+    description: z.string().nullable().optional(),
+    teamId: z.string().nullable().optional(),
+  }).partial(),
 });
 
 export const DeleteArgs = TodoWithSystemFields.pick({ _id: true });

@@ -135,11 +135,7 @@ export const SourcesList = ({ sources, className }: SourcesListProps) => {
       <SourcesTrigger count={sources.length} />
       <SourcesContent className="max-w-full">
         {sources.map((source) => (
-          <NumberedSource
-            key={`${source.result.url}-${source.index}`}
-            index={source.index}
-            source={source}
-          />
+          <NumberedSource key={source.result.url} index={source.index} source={source} />
         ))}
       </SourcesContent>
     </Sources>

@@ -8,7 +8,7 @@ import {
 
 export interface FilePartProps {
   part: Extract<UIMessage["parts"][number], { type: "file" }>;
-  partKey: number;
+  partKey: string;
 }
 
 export const FilePart = memo(function FilePart({ part, partKey }: FilePartProps) {

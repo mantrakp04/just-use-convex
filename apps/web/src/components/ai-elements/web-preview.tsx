@@ -1,4 +1,3 @@
-
 import { Button } from "@/components/ui/button";
 import {
   Collapsible,
@@ -15,7 +14,8 @@ import {
 import { cn } from "@/lib/utils";
 import { ChevronDownIcon } from "lucide-react";
 import type { ComponentProps, ReactNode } from "react";
-import { createContext, useContext, useEffect, useState } from "react";
+import { createContext, useContext, useState } from "react";
+import { useControllableState } from "@radix-ui/react-use-controllable-state";
 
 export interface WebPreviewContextValue {
   url: string;
@@ -35,6 +35,7 @@ const useWebPreview = () => {
 };
 
 export type WebPreviewProps = ComponentProps<"div"> & {
+  url?: string;
   defaultUrl?: string;
   onUrlChange?: (url: string) => void;
 };
@@ -42,27 +43,27 @@ export type WebPreviewProps = ComponentProps<"div"> & {
 export const WebPreview = ({
   className,
   children,
+  url: controlledUrl,
   defaultUrl = "",
   onUrlChange,
   ...props
 }: WebPreviewProps) => {
-  const [url, setUrl] = useState(defaultUrl);
+  const [url, setUrl] = useControllableState({
+    prop: controlledUrl,
+    defaultProp: defaultUrl,
+    onChange: onUrlChange,
+  });
   const [consoleOpen, setConsoleOpen] = useState(false);
 
-  const handleUrlChange = (newUrl: string) => {
-    setUrl(newUrl);
-    onUrlChange?.(newUrl);
-  };
-
-  const contextValue: WebPreviewContextValue = {
-    url,
-    setUrl: handleUrlChange,
-    consoleOpen,
-    setConsoleOpen,
-  };
-
   return (
-    <WebPreviewContext.Provider value={contextValue}>
+    <WebPreviewContext.Provider
+      value={{
+        url,
+        setUrl,
+        consoleOpen,
+        setConsoleOpen,
+      }}
+    >
       <div
         className={cn(
           "flex size-full flex-col rounded-lg border bg-card",
@@ -104,7 +105,20 @@ export const WebPreviewNavigationButton = ({
 }: WebPreviewNavigationButtonProps) => (
   <TooltipProvider>
     <Tooltip>
-      <TooltipTrigger render={<Button className="h-8 w-8 p-0 hover:text-foreground" disabled={disabled} onClick={onClick} size="sm" variant="ghost" {...props} />}>{children}</TooltipTrigger>
+      <TooltipTrigger
+        render={
+          <Button
+            className="h-8 w-8 p-0 hover:text-foreground"
+            disabled={disabled}
+            onClick={onClick}
+            size="sm"
+            variant="ghost"
+            {...props}
+          />
+        }
+      >
+        {children}
+      </TooltipTrigger>
       <TooltipContent>
         <p>{tooltip}</p>
       </TooltipContent>
@@ -122,11 +136,7 @@ export const WebPreviewUrl = ({
 }: WebPreviewUrlProps) => {
   const { url, setUrl } = useWebPreview();
   const [inputValue, setInputValue] = useState(url);
-
-  // Sync input value with context URL when it changes externally
-  useEffect(() => {
-    setInputValue(url);
-  }, [url]);
+  const displayValue = value ?? inputValue;
 
   const handleChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     setInputValue(event.target.value);
@@ -143,11 +153,12 @@ export const WebPreviewUrl = ({
 
   return (
     <Input
+      key={url}
       className="h-8 flex-1 text-sm"
       onChange={onChange ?? handleChange}
       onKeyDown={handleKeyDown}
       placeholder="Enter URL..."
-      value={value ?? inputValue}
+      value={displayValue}
       {...props}
     />
   );
@@ -202,24 +213,33 @@ export const WebPreviewConsole = ({
       open={consoleOpen}
       {...props}
     >
-      <CollapsibleTrigger render={<Button className="flex w-full items-center justify-between p-4 text-left font-medium hover:bg-muted/50" variant="ghost" />}>Console
-                    <ChevronDownIcon
-                      className={cn(
-                        "h-4 w-4 transition-transform duration-200",
-                        consoleOpen && "rotate-180"
-                      )}
-                    /></CollapsibleTrigger>
+      <CollapsibleTrigger
+        render={
+          <Button
+            className="flex w-full items-center justify-between p-4 text-left font-medium hover:bg-muted/50"
+            variant="ghost"
+          />
+        }
+      >
+        Console
+        <ChevronDownIcon
+          className={cn(
+            "h-4 w-4 transition-transform duration-200",
+            consoleOpen && "rotate-180"
+          )}
+        />
+      </CollapsibleTrigger>
       <CollapsibleContent
         className={cn(
           "px-4 pb-4",
-          "data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 outline-none data-[state=closed]:animate-out data-[state=open]:animate-in"
+          "data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[state=closed]:slide-in-from-top-2 data-[state=left]:slide-in-from-right-2 data-[state=right]:slide-in-from-left-2 data-[state=top]:slide-in-from-bottom-2 outline-none data-[state=closed]:animate-out data-[state=open]:animate-in"
         )}
       >
         <div className="max-h-48 space-y-1 overflow-y-auto">
           {logs.length === 0 ? (
             <p className="text-muted-foreground">No console output</p>
           ) : (
-            logs.map((log, index) => (
+            logs.map((log) => (
               <div
                 className={cn(
                   "text-xs",
@@ -227,7 +247,7 @@ export const WebPreviewConsole = ({
                   log.level === "warn" && "text-yellow-600",
                   log.level === "log" && "text-foreground"
                 )}
-                key={`${log.timestamp.getTime()}-${index}`}
+                key={`${log.timestamp.toISOString()}-${log.level}-${log.message}`}
               >
                 <span className="text-muted-foreground">
                   {log.timestamp.toLocaleTimeString()}

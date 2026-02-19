@@ -126,6 +126,8 @@ function AgentInstanceInner({
       model: defaultSettings.model,
       reasoningEffort: defaultSettings.reasoningEffort ?? null,
       inputModalities: defaultSettings.inputModalities?.join(",") ?? null,
+      tokenConfig: JSON.stringify({ type: "jwt", token }),
+      modeConfig: JSON.stringify({ mode: "chat", chat: chatId }),
     },
   });
 

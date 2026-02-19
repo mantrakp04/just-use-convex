@@ -13,10 +13,15 @@ import {
 } from "@/components/ai-elements/conversation";
 import { Skeleton } from "@/components/ui/skeleton";
 import { MessageList } from "@/components/chat/message-list";
-import type { AskUserState, TodosState } from "@/components/chat/types";
 import { useAgentInstance } from "@/providers/agent";
 import { TodosDisplay } from "@/components/chat/todos-display";
-import { useChat } from "@/hooks/use-chat";
+import {
+  extractAskUserFromMessage,
+  extractTodosFromMessage,
+  findLastAssistantMessageIndex,
+  useChat,
+} from "@/hooks/use-chat";
+import { useChat as useConvexChat } from "@/hooks/use-chats";
 import { AskUserDisplay } from "@/components/chat/ask-user-display";
 import { ChatSandboxWorkspace } from "@/components/chat/chat-sandbox-workspace";
 import { useChatSandbox } from "@/hooks/use-sandbox";
@@ -45,6 +50,7 @@ function ChatPage() {
   const { chatId } = Route.useParams();
   const typedChatId = chatId as Id<"chats">;
   const { chat, agent, settings, setSettings, isReady } = useAgentInstance(chatId);
+  const { data: convexChat } = useConvexChat(typedChatId);
   const { groupedModels, models } = useOpenRouterModels();
   const sandbox = useChatSandbox(typedChatId, agent);
   const chatContentRef = useRef<HTMLDivElement>(null);
@@ -59,9 +65,6 @@ function ChatPage() {
     [models, settings.model]
   );
 
-  const [todosState, setTodosState] = useState<TodosState>({ todos: [] });
-  const [askUserState, setAskUserState] = useState<AskUserState | null>(null);
-
   const {
     status,
     error,
@@ -73,6 +76,28 @@ function ChatPage() {
     handleRegenerate,
     handleEditMessage,
   } = useChat(chat, agent);
+
+  const lastAssistantMessage = useMemo(() => {
+    const assistantIndex = findLastAssistantMessageIndex(messages);
+    return assistantIndex >= 0 ? messages[assistantIndex] : null;
+  }, [messages]);
+
+  const lastAssistantTodosState = useMemo(() => {
+    const extractedState =
+      lastAssistantMessage ? extractTodosFromMessage(lastAssistantMessage, true) : null;
+    return extractedState ?? { todos: [] };
+  }, [lastAssistantMessage]);
+
+  const lastAssistantAskUserState = useMemo(() => {
+    if (!lastAssistantMessage) {
+      return null;
+    }
+
+    return extractAskUserFromMessage(lastAssistantMessage, true);
+  }, [lastAssistantMessage]);
+
+  const activeAskUserState =
+    lastAssistantAskUserState?.state === "approval-requested" ? lastAssistantAskUserState : null;
 
   // Sync sandbox.isOpen with panel collapse/expand via imperative API
   useEffect(() => {
@@ -170,8 +195,6 @@ function ChatPage() {
               toolApprovalResponse={handleToolApprovalResponse}
               onRegenerate={handleRegenerate}
               onEditMessage={handleEditMessage}
-              onTodosChange={setTodosState}
-              onAskUserChange={setAskUserState}
             />
           )}
           {error && (
@@ -184,18 +207,18 @@ function ChatPage() {
       </Conversation>
 
       <div className="w-full px-3 @xl/chat-column:mx-auto @xl/chat-column:w-4xl @xl/chat-column:px-0">
-        {askUserState?.state === "approval-requested" ? (
+        {activeAskUserState ? (
           <AskUserDisplay
-            input={askUserState.input}
-            approval={askUserState.approval}
-            state={askUserState.state}
+            input={activeAskUserState.input}
+            approval={activeAskUserState.approval}
+            state={activeAskUserState.state}
             toolApprovalResponse={handleToolApprovalResponse}
           />
         ) : (
           <TodosDisplay
-            todos={todosState.todos}
-            approval={todosState.todosApproval}
-            state={todosState.todosState}
+            todos={lastAssistantTodosState.todos}
+            approval={lastAssistantTodosState.todosApproval}
+            state={lastAssistantTodosState.todosState}
             toolApprovalResponse={handleToolApprovalResponse}
           />
         )}
@@ -210,9 +233,11 @@ function ChatPage() {
         models={models}
         selectedModel={selectedModel}
         hasMessages={messages.length > 0}
-        onSandboxToggle={() => void sandbox.toggle()}
-        isSandboxPanelOpen={sandbox.isOpen}
-        isSandboxConnecting={sandbox.isConnectingSsh}
+        {...(convexChat?.sandboxId && {
+          onSandboxToggle: () => void sandbox.toggle(),
+          isSandboxPanelOpen: sandbox.isOpen,
+          isSandboxConnecting: sandbox.isConnectingSsh,
+        })}
       />
     </div>
   );

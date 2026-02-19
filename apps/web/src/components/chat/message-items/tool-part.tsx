@@ -24,7 +24,7 @@ export type ToolPartType = Extract<UIMessage["parts"][number], { type: `tool-${s
 
 export interface ToolPartProps {
   part: ToolPartType;
-  partKey: number;
+  partKey: string;
   toolApprovalResponse: ChatAddToolApproveResponseFunction;
 }
 

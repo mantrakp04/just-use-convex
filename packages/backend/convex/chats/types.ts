@@ -2,6 +2,7 @@ import { z } from "zod";
 import { chatsZodSchema, chatsWithSystemFields } from "../tables/chats";
 import { paginationOptsValidator } from "convex/server";
 import { convexToZod } from "convex-helpers/server/zod4";
+import { executionStatusSchema } from "../tables/shared";
 
 const zPaginationOpts = convexToZod(paginationOptsValidator);
 
@@ -11,7 +12,7 @@ export const ChatWithSystemFields = z.object(chatsWithSystemFields);
 // Filter schema
 const ChatFilters = z.object({
   memberId: z.string(),
-  title: z.string(),
+  executionStatus: executionStatusSchema.optional(),
 }).partial().extend({
   isPinned: z.boolean().default(false),
 });
@@ -37,5 +38,6 @@ export const DeleteArgs = ChatWithSystemFields.pick({ _id: true });
 export const SearchArgs = z.object({
   query: z.string(),
   isPinned: z.boolean().default(false),
+  executionStatus: executionStatusSchema.optional(),
   paginationOpts: zPaginationOpts,
 });
