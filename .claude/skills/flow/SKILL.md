@@ -20,11 +20,13 @@ Agent -> ConvexAdapter (JWT or external token) -> Convex
 
 ## Review Flow
 
-- Fetch unresolved PR comments from `greptile`, `cubic`, and `codex` only.
+- Fetch unresolved PR comments.
 - Normalize comments into one actionable list with file + line context.
 - Spawn a background subagent to validate each comment (real issue vs noise/outdated).
-- Fix every validated comment in code and then mark it resolved.
+- Present a detailed summary with priority and wait for further instructions
+- Fix every validated comment in code.
 - Run required checks after fixes (`bun check-types` minimum).
+- Mark the appropriate comments as resolved using the gh cli
 - Post an end summary with:
   - validated + fixed comments
   - rejected comments with reason
