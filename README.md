@@ -2,7 +2,7 @@
 
 An AI-powered agentic chat platform built with [Better-T-Stack](https://github.com/AmanVarshney01/create-better-t-stack). Multi-tenant, real-time, with Better Auth, Convex, Daytona sandboxes, vector search (RAG), and planning agents with sub-agents.
 
-[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fmantrakp04%2Fjust-use-convex&env=CONVEX_DEPLOY_KEY,VITE_CONVEX_URL,VITE_CONVEX_SITE_URL,VITE_AGENT_URL&envDefaults=%7B%22%3A%22https%3A%2F%2Fyour-project.vercel.app%22%2C%22CONVEX_DEPLOY_KEY%22%3A%22Generate%20at%20dashboard.convex.dev%20-%3E%20Project%20Settings%20-%3E%20Deploy%20Keys%22%2C%22VITE_CONVEX_URL%22%3A%22https%3A%2F%2F%3Cslug%3E.convex.cloud%22%2C%22VITE_CONVEX_SITE_URL%22%3A%22https%3A%2F%2F%3Cslug%3E.convex.site%22%2C%22VITE_AGENT_URL%22%3A%22https%3A%2F%2Fyour-agent.your-subdomain.workers.dev%22%7D&project-name=just-use-convex&demo-title=Just-Use-Convex&demo-description=An%20org%20configured%20template)
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fmantrakp04%2Fjust-use-convex&env=CONVEX_DEPLOY_KEY,VITE_CONVEX_URL,VITE_CONVEX_SITE_URL,VITE_AGENT_URL&project-name=just-use-convex&demo-title=Just-Use-Convex&demo-description=An%20org%20configured%20template)
 
 ## Why This Template?
 

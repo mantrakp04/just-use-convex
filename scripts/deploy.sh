@@ -12,6 +12,20 @@ set -euo pipefail
 # Flow: convex deploy → alchemy deploy → convex env set → web build
 # ─────────────────────────────────────────────────────────────────────
 
+sanitize_stage() {
+  local raw="${1:-preview}"
+  raw="${raw,,}"
+  raw="${raw//\//-}"
+  raw="${raw//[^a-z0-9-]/-}"
+  raw="${raw:0:40}"
+  raw="${raw%-}"
+  raw="${raw#-}"
+  if [[ -z "$raw" ]]; then
+    raw="preview"
+  fi
+  printf '%s\n' "$raw"
+}
+
 if [[ "${1:-}" == "--inner" ]]; then
   # ─── INNER: runs after convex deploy sets VITE_CONVEX_URL ────────
   echo "→ VITE_CONVEX_URL=$VITE_CONVEX_URL"
@@ -33,7 +47,7 @@ if [[ "${1:-}" == "--inner" ]]; then
   ALCHEMY_OUTPUT=$(bunx alchemy deploy alchemy.run.ts 2>&1 | tee /dev/stderr)
 
   # Extract worker URL from alchemy output
-  WORKER_URL=$(echo "$ALCHEMY_OUTPUT" | grep -oP 'ALCHEMY_WORKER_URL=\K.*' | tail -1)
+  WORKER_URL=$(printf '%s\n' "$ALCHEMY_OUTPUT" | sed -n 's/^ALCHEMY_WORKER_URL=//p' | tail -1)
 
   if [[ -z "${WORKER_URL:-}" ]]; then
     echo "ERROR: Failed to capture worker URL from alchemy deploy"
@@ -47,21 +61,41 @@ if [[ "${1:-}" == "--inner" ]]; then
   echo "→ Setting Convex environment variables..."
   cd "$REPO_ROOT/packages/backend"
 
-  CONVEX_ENV_FLAGS=""
+  CONVEX_ENV_ARGS=()
   if [[ "${IS_PREVIEW:-false}" == "true" ]]; then
-    CONVEX_ENV_FLAGS="--preview-name ${VERCEL_GIT_COMMIT_REF}"
+    CONVEX_ENV_ARGS+=(--preview-name "${VERCEL_GIT_COMMIT_REF}")
   fi
 
   # Override AGENT_URL with the freshly deployed worker URL
   export AGENT_URL="$VITE_AGENT_URL"
 
-  # Push all vars from root .env to Convex deployment
-  while IFS='=' read -r key value; do
-    [[ -z "$key" || "$key" == \#* ]] && continue
-    # Resolve from current env (may have been overridden, e.g. AGENT_URL)
-    resolved="${!key:-$value}"
-    [[ -n "$resolved" ]] && bunx convex env set $CONVEX_ENV_FLAGS "$key" "$resolved" 2>/dev/null || echo "  ⚠ failed to set $key"
-  done < "$REPO_ROOT/.env"
+  # Push selected vars from CI env to Convex deployment.
+  # Do not depend on a checked-in .env file in Vercel builds.
+  CONVEX_ENV_ALLOWLIST=(
+    AGENT_URL
+    BETTER_AUTH_SECRET
+    COMPOSIO_API_KEY
+    DAYTONA_API_KEY
+    DAYTONA_API_URL
+    DAYTONA_TARGET
+    EXTERNAL_TOKEN
+    EXA_API_KEY
+    JWKS
+    MAX_VOLUME_READY_RETRIES
+    SANDBOX_INACTIVITY_TIMEOUT_MINUTES
+    SANDBOX_SNAPSHOT
+    SANDBOX_VOLUME_MOUNT_PATH
+    SITE_URL
+    VOLTAGENT_PUBLIC_KEY
+    VOLTAGENT_SECRET_KEY
+  )
+
+  for key in "${CONVEX_ENV_ALLOWLIST[@]}"; do
+    value="${!key:-}"
+    if [[ -n "$value" ]]; then
+      bunx convex env set "${CONVEX_ENV_ARGS[@]}" "$key" "$value" 2>/dev/null || echo "  ⚠ failed to set $key"
+    fi
+  done
 
   # ─── Build web app ──────────────────────────────────────────────
   echo "→ Building web app..."
@@ -79,8 +113,9 @@ fi
 
 # Derive SITE_URL from Vercel env
 if [[ "$IS_PREVIEW" == "true" ]]; then
+  preview_name="${VERCEL_GIT_COMMIT_REF:-preview}"
   export SITE_URL="https://${VERCEL_BRANCH_URL:-$VERCEL_URL}"
-  export ALCHEMY_STAGE="preview-${VERCEL_GIT_COMMIT_REF}"
+  export ALCHEMY_STAGE="preview-$(sanitize_stage "$preview_name")"
 else
   export SITE_URL="https://${VERCEL_PROJECT_PRODUCTION_URL}"
   export ALCHEMY_STAGE="prod"
@@ -88,13 +123,15 @@ fi
 
 echo "→ Environment: ${VERCEL_ENV:-unknown}"
 echo "→ SITE_URL=$SITE_URL"
+echo "→ ALCHEMY_STAGE=$ALCHEMY_STAGE"
 
 # Deploy Convex, which triggers --inner for alchemy + web build
 cd packages/backend
 
 if [[ "$IS_PREVIEW" == "true" ]]; then
-  echo "→ Deploying Convex preview: ${VERCEL_GIT_COMMIT_REF}"
-  bunx convex deploy --preview "${VERCEL_GIT_COMMIT_REF}" \
+  preview_name="${VERCEL_GIT_COMMIT_REF:-preview}"
+  echo "→ Deploying Convex preview: ${preview_name}"
+  bunx convex deploy --preview-create "${preview_name}" \
     --cmd "bash ../../scripts/deploy.sh --inner" \
     --cmd-url-env-var-name VITE_CONVEX_URL
 else

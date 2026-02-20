@@ -3,6 +3,6 @@
   "framework": null,
   "installCommand": "bun install",
   "buildCommand": "bash scripts/deploy.sh",
-  "outputDirectory": "apps/web/.output",
+  "outputDirectory": "apps/web/.vercel/output",
   "devCommand": "cd apps/web && bun run dev"
 }
