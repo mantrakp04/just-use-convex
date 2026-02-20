@@ -42,27 +42,35 @@ if [[ "${1:-}" == "--inner" ]]; then
   echo "→ SITE_URL=$SITE_URL"
 
   # ─── Deploy Cloudflare agent via Alchemy ─────────────────────────
-  echo "→ Deploying Cloudflare agent..."
-  cd "$REPO_ROOT/packages/agent"
-  # CI deploys run in ephemeral environments; allow this unless explicitly overridden.
-  export ALCHEMY_CI_STATE_STORE_CHECK="${ALCHEMY_CI_STATE_STORE_CHECK:-false}"
-  ALCHEMY_LOG_FILE="$(mktemp)"
-  if ! bunx alchemy deploy alchemy.run.ts >"$ALCHEMY_LOG_FILE" 2>&1; then
-    cat "$ALCHEMY_LOG_FILE" >&2 || true
+  WORKER_URL=""
+  if [[ -n "${CLOUDFLARE_API_TOKEN:-}" || -n "${CLOUDFLARE_API_KEY:-}" ]]; then
+    echo "→ Deploying Cloudflare agent..."
+    cd "$REPO_ROOT/packages/agent"
+    # CI deploys run in ephemeral environments; allow this unless explicitly overridden.
+    export ALCHEMY_CI_STATE_STORE_CHECK="${ALCHEMY_CI_STATE_STORE_CHECK:-false}"
+    ALCHEMY_LOG_FILE="$(mktemp)"
+    if ! bunx alchemy deploy alchemy.run.ts >"$ALCHEMY_LOG_FILE" 2>&1; then
+      cat "$ALCHEMY_LOG_FILE" >&2 || true
+      rm -f "$ALCHEMY_LOG_FILE"
+      echo "ERROR: Alchemy deploy failed"
+      exit 1
+    fi
+    ALCHEMY_OUTPUT="$(cat "$ALCHEMY_LOG_FILE")"
+    cat "$ALCHEMY_LOG_FILE"
     rm -f "$ALCHEMY_LOG_FILE"
-    echo "ERROR: Alchemy deploy failed"
-    exit 1
-  fi
-  ALCHEMY_OUTPUT="$(cat "$ALCHEMY_LOG_FILE")"
-  cat "$ALCHEMY_LOG_FILE"
-  rm -f "$ALCHEMY_LOG_FILE"
-
-  # Extract worker URL from alchemy output
-  WORKER_URL=$(printf '%s\n' "$ALCHEMY_OUTPUT" | sed -n 's/^ALCHEMY_WORKER_URL=//p' | tail -1)
-
-  if [[ -z "${WORKER_URL:-}" ]]; then
-    echo "ERROR: Failed to capture worker URL from alchemy deploy"
-    exit 1
+    WORKER_URL=$(printf '%s\n' "$ALCHEMY_OUTPUT" | sed -n 's/^ALCHEMY_WORKER_URL=//p' | tail -1)
+    if [[ -z "${WORKER_URL:-}" ]]; then
+      echo "ERROR: Failed to capture worker URL from alchemy deploy"
+      exit 1
+    fi
+  else
+    WORKER_URL="${VITE_AGENT_URL:-${AGENT_URL:-}}"
+    if [[ -z "${WORKER_URL:-}" ]]; then
+      echo "ERROR: Cloudflare credentials are missing and no fallback agent URL is set."
+      echo "Set CLOUDFLARE_API_TOKEN (or CLOUDFLARE_API_KEY) or provide VITE_AGENT_URL."
+      exit 1
+    fi
+    echo "→ Skipping Cloudflare deploy (no credentials), using existing worker URL"
   fi
 
   export VITE_AGENT_URL="$WORKER_URL"
