@@ -82,7 +82,8 @@ if [[ "${1:-}" == "--inner" ]]; then
 
   CONVEX_ENV_ARGS=()
   if [[ "${IS_PREVIEW:-false}" == "true" ]]; then
-    CONVEX_ENV_ARGS+=(--preview-name "${VERCEL_GIT_COMMIT_REF}")
+    PREVIEW_NAME="${CONVEX_PREVIEW_NAME:-$(sanitize_stage "${VERCEL_GIT_COMMIT_REF:-preview}")}"
+    CONVEX_ENV_ARGS+=(--preview-name "${PREVIEW_NAME}")
   fi
 
   if [[ "${IS_PREVIEW:-false}" == "true" && -z "${DAYTONA_API_KEY:-}" ]]; then
@@ -136,9 +137,11 @@ fi
 
 # Derive SITE_URL from Vercel env
 if [[ "$IS_PREVIEW" == "true" ]]; then
-  preview_name="${VERCEL_GIT_COMMIT_REF:-preview}"
+  preview_ref="${VERCEL_GIT_COMMIT_REF:-preview}"
+  sanitized_preview_name="$(sanitize_stage "$preview_ref")"
+  export CONVEX_PREVIEW_NAME="$sanitized_preview_name"
   export SITE_URL="https://${VERCEL_BRANCH_URL:-$VERCEL_URL}"
-  export ALCHEMY_STAGE="preview-$(sanitize_stage "$preview_name")"
+  export ALCHEMY_STAGE="preview-$sanitized_preview_name"
 else
   export SITE_URL="https://${VERCEL_PROJECT_PRODUCTION_URL}"
   export ALCHEMY_STAGE="prod"
@@ -152,7 +155,7 @@ echo "→ ALCHEMY_STAGE=$ALCHEMY_STAGE"
 cd "$REPO_ROOT/packages/backend"
 
 if [[ "$IS_PREVIEW" == "true" ]]; then
-  preview_name="${VERCEL_GIT_COMMIT_REF:-preview}"
+  preview_name="${CONVEX_PREVIEW_NAME:-$(sanitize_stage "${VERCEL_GIT_COMMIT_REF:-preview}")}"
   echo "→ Deploying Convex preview: ${preview_name}"
   bunx convex deploy --preview-create "${preview_name}" \
     --cmd "bash ../../scripts/deploy.sh --inner" \
