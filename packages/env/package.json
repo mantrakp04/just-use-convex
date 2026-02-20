@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./load": "./src/load.ts",
     "./web": "./src/web.ts",
     "./backend": "./src/backend.ts",
     "./agent": "./src/agent.ts"

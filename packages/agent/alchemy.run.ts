@@ -2,7 +2,10 @@ import alchemy from "alchemy";
 import { Worker, DurableObjectNamespace, WranglerJson, VectorizeIndex } from "alchemy/cloudflare";
 import { env } from "@just-use-convex/env/agent";
 
+const stage = process.env.ALCHEMY_STAGE ?? "dev";
+
 const app = await alchemy("just-use-convex", {
+  stage,
   phase: process.argv.includes("--destroy") ? "destroy" : "up",
   password: env.ALCHEMY_PASSWORD
 });
@@ -22,7 +25,7 @@ const chatMessagesIndex = await VectorizeIndex("chat-messages", {
 
 export const worker = await Worker("agent-worker", {
   entrypoint: "./src/index.ts",
-  url: false,
+  url: true,
   compatibility: "node",
   bindings: {
     agentWorker: agentWorkerNamespace,
@@ -51,6 +54,11 @@ export const worker = await Worker("agent-worker", {
 });
 
 await app.finalize();
+
+// Output worker URL for CI capture
+if (worker.url) {
+  console.log(`ALCHEMY_WORKER_URL=${worker.url}`);
+}
 
 await WranglerJson({
   worker: worker,

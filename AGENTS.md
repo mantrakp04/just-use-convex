@@ -95,6 +95,7 @@ User uses casual language ("bro", "dawg", "ugh"). Keep responses terse and actio
 - **Check existing patterns** in codebase before implementing
 - **Cross-check server/client impact** — if you edit server-side code, verify client usage, and vice versa
 - **Use Context7 for third-party SDK API verification** before integrating
+- **For Convex deployment config (especially Vercel build commands), follow official Convex docs as source of truth**
 - **Keep responses terse** and actionable
 - **Use memo with custom comparison** for streaming optimization
 - **Use `useSyncExternalStore`** for shared mutable state
