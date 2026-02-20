@@ -44,7 +44,16 @@ if [[ "${1:-}" == "--inner" ]]; then
   # ─── Deploy Cloudflare agent via Alchemy ─────────────────────────
   echo "→ Deploying Cloudflare agent..."
   cd "$REPO_ROOT/packages/agent"
-  ALCHEMY_OUTPUT=$(bunx alchemy deploy alchemy.run.ts 2>&1 | tee /dev/stderr)
+  ALCHEMY_LOG_FILE="$(mktemp)"
+  if ! bunx alchemy deploy alchemy.run.ts >"$ALCHEMY_LOG_FILE" 2>&1; then
+    cat "$ALCHEMY_LOG_FILE" >&2 || true
+    rm -f "$ALCHEMY_LOG_FILE"
+    echo "ERROR: Alchemy deploy failed"
+    exit 1
+  fi
+  ALCHEMY_OUTPUT="$(cat "$ALCHEMY_LOG_FILE")"
+  cat "$ALCHEMY_LOG_FILE"
+  rm -f "$ALCHEMY_LOG_FILE"
 
   # Extract worker URL from alchemy output
   WORKER_URL=$(printf '%s\n' "$ALCHEMY_OUTPUT" | sed -n 's/^ALCHEMY_WORKER_URL=//p' | tail -1)
