@@ -85,6 +85,10 @@ if [[ "${1:-}" == "--inner" ]]; then
     CONVEX_ENV_ARGS+=(--preview-name "${VERCEL_GIT_COMMIT_REF}")
   fi
 
+  if [[ "${IS_PREVIEW:-false}" == "true" && -z "${DAYTONA_API_KEY:-}" ]]; then
+    bunx convex env remove "${CONVEX_ENV_ARGS[@]}" DAYTONA_API_KEY 2>/dev/null || true
+  fi
+
   # Override AGENT_URL with the freshly deployed worker URL
   export AGENT_URL="$VITE_AGENT_URL"
 
