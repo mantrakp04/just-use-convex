@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+
 # ─────────────────────────────────────────────────────────────────────
 # Unified deploy script for Vercel CI.
 #
@@ -40,9 +43,6 @@ if [[ "${1:-}" == "--inner" ]]; then
 
   # ─── Deploy Cloudflare agent via Alchemy ─────────────────────────
   echo "→ Deploying Cloudflare agent..."
-  SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-  REPO_ROOT="$(dirname "$SCRIPT_DIR")"
-
   cd "$REPO_ROOT/packages/agent"
   ALCHEMY_OUTPUT=$(bunx alchemy deploy alchemy.run.ts 2>&1 | tee /dev/stderr)
 
@@ -126,7 +126,7 @@ echo "→ SITE_URL=$SITE_URL"
 echo "→ ALCHEMY_STAGE=$ALCHEMY_STAGE"
 
 # Deploy Convex, which triggers --inner for alchemy + web build
-cd packages/backend
+cd "$REPO_ROOT/packages/backend"
 
 if [[ "$IS_PREVIEW" == "true" ]]; then
   preview_name="${VERCEL_GIT_COMMIT_REF:-preview}"
