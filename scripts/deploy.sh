@@ -50,7 +50,7 @@ if [[ "${1:-}" == "--inner" ]]; then
     export ALCHEMY_CI_STATE_STORE_CHECK="${ALCHEMY_CI_STATE_STORE_CHECK:-false}"
     ALCHEMY_LOG_FILE="$(mktemp)"
     if ! bunx alchemy deploy alchemy.run.ts >"$ALCHEMY_LOG_FILE" 2>&1; then
-      cat "$ALCHEMY_LOG_FILE" >&2 || true
+      cat "$ALCHEMY_LOG_FILE" >&2
       rm -f "$ALCHEMY_LOG_FILE"
       echo "ERROR: Alchemy deploy failed"
       exit 1
@@ -64,7 +64,7 @@ if [[ "${1:-}" == "--inner" ]]; then
       exit 1
     fi
   else
-    WORKER_URL="${VITE_AGENT_URL:-${AGENT_URL:-}}"
+    WORKER_URL="${VITE_AGENT_URL:-}"
     if [[ -z "${WORKER_URL:-}" ]]; then
       echo "ERROR: Cloudflare credentials are missing and no fallback agent URL is set."
       echo "Set CLOUDFLARE_API_TOKEN (or CLOUDFLARE_API_KEY) or provide VITE_AGENT_URL."
@@ -82,12 +82,11 @@ if [[ "${1:-}" == "--inner" ]]; then
 
   CONVEX_ENV_ARGS=()
   if [[ "${IS_PREVIEW:-false}" == "true" ]]; then
-    PREVIEW_NAME="${CONVEX_PREVIEW_NAME:-$(sanitize_stage "${VERCEL_GIT_COMMIT_REF:-preview}")}"
-    CONVEX_ENV_ARGS+=(--preview-name "${PREVIEW_NAME}")
+    CONVEX_ENV_ARGS+=(--preview-name "${CONVEX_PREVIEW_NAME}")
   fi
 
   if [[ "${IS_PREVIEW:-false}" == "true" && -z "${DAYTONA_API_KEY:-}" ]]; then
-    bunx convex env set "${CONVEX_ENV_ARGS[@]}" DAYTONA_API_KEY "" 2>/dev/null || true
+    bunx convex env set "${CONVEX_ENV_ARGS[@]}" DAYTONA_API_KEY ""
   fi
 
   # Override AGENT_URL with the freshly deployed worker URL
@@ -117,7 +116,7 @@ if [[ "${1:-}" == "--inner" ]]; then
   for key in "${CONVEX_ENV_ALLOWLIST[@]}"; do
     value="${!key:-}"
     if [[ -n "$value" ]]; then
-      bunx convex env set "${CONVEX_ENV_ARGS[@]}" "$key" "$value" 2>/dev/null || echo "  ⚠ failed to set $key"
+      bunx convex env set "${CONVEX_ENV_ARGS[@]}" "$key" "$value"
     fi
   done
 
