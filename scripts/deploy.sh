@@ -44,6 +44,8 @@ if [[ "${1:-}" == "--inner" ]]; then
   # ─── Deploy Cloudflare agent via Alchemy ─────────────────────────
   echo "→ Deploying Cloudflare agent..."
   cd "$REPO_ROOT/packages/agent"
+  # CI deploys run in ephemeral environments; allow this unless explicitly overridden.
+  export ALCHEMY_CI_STATE_STORE_CHECK="${ALCHEMY_CI_STATE_STORE_CHECK:-false}"
   ALCHEMY_LOG_FILE="$(mktemp)"
   if ! bunx alchemy deploy alchemy.run.ts >"$ALCHEMY_LOG_FILE" 2>&1; then
     cat "$ALCHEMY_LOG_FILE" >&2 || true
