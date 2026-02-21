@@ -110,7 +110,7 @@ const main = async () => {
 
     const convexUrl = process.env.CONVEX_URL;
     if (!convexUrl) {
-      throw new Error("VITE_CONVEX_URL or CONVEX_URL is required in --continue mode");
+      throw new Error("CONVEX_URL is required in --continue mode");
     }
 
     const convexSiteUrl = convexUrl.replace(".convex.cloud", ".convex.site");
@@ -209,13 +209,13 @@ const main = async () => {
   if (isPreview) {
     console.log(`→ Deploying Convex preview: ${convexPreviewName}`);
     runCommand(
-      `bunx convex deploy --preview-create ${convexPreviewName} --cmd "bun scripts/deploy.ts --continue" --cmd-url-env-var-name VITE_CONVEX_URL`,
+      `bunx convex deploy --preview-create ${convexPreviewName} --cmd "bun scripts/deploy.ts --continue" --cmd-url-env-var-name CONVEX_URL`,
       { cwd: backendCwd },
     );
   } else {
     console.log("→ Deploying Convex production");
     runCommand(
-      `bunx convex deploy --cmd "bun scripts/deploy.ts --continue" --cmd-url-env-var-name VITE_CONVEX_URL`,
+      `bunx convex deploy --cmd "bun scripts/deploy.ts --continue" --cmd-url-env-var-name CONVEX_URL`,
       { cwd: backendCwd },
     );
   }
