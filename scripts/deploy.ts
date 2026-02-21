@@ -2,6 +2,7 @@
 
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import type { SpawnSyncOptions } from "node:child_process";
 import { spawnSync } from "node:child_process";
 import { cpSync, rmSync } from "node:fs";
 import { createHash, generateKeyPairSync, randomBytes } from "node:crypto";
@@ -11,12 +12,9 @@ import { bytesToHex, managedNonce, utf8ToBytes } from "@noble/ciphers/utils.js";
 import { z } from "zod";
 
 // @ts-ignore
-import { env as deployEnv } from "@just-use-convex/env/deploy";
+import "@just-use-convex/env/deploy";
 
-type RunOptions = {
-  cwd?: string;
-  env?: NodeJS.ProcessEnv;
-};
+type RunOptions = Pick<SpawnSyncOptions, "cwd" | "env">;
 
 const scriptFilePath = fileURLToPath(import.meta.url);
 const repoRoot = path.resolve(path.dirname(scriptFilePath), "..");
