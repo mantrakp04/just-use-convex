@@ -66,11 +66,9 @@ const runCommandCapture = (command: string, options: RunOptions = {}) => {
   return output;
 };
 
-const isPreview = process.argv.includes("--inner")
-  ? process.env.IS_PREVIEW === "true"
-  : process.env.VERCEL_ENV === "preview";
+const isPreview = process.env.VERCEL_ENV === "preview"
 
-if (process.argv.includes("--inner")) {
+if (process.argv.includes("--continue")) {
   console.log(`→ VITE_CONVEX_URL=${process.env.VITE_CONVEX_URL}`);
 
   const convexUrl = process.env.VITE_CONVEX_URL ?? "";
@@ -85,7 +83,7 @@ if (process.argv.includes("--inner")) {
   console.log(`→ SITE_URL=${process.env.SITE_URL}`);
 
   let workerUrl = "";
-  if (process.env.CLOUDFLARE_API_TOKEN || process.env.CLOUDFLARE_API_KEY) {
+  if (process.env.CLOUDFLARE_API_TOKEN) {
     console.log("→ Deploying Cloudflare agent...");
     const output = runCommandCapture("bunx alchemy deploy alchemy.run.ts", {
       cwd: path.resolve(repoRoot, "packages/agent"),
@@ -102,58 +100,26 @@ if (process.argv.includes("--inner")) {
       throw new Error("Failed to capture worker URL from alchemy deploy");
     }
   } else {
-    workerUrl = process.env.VITE_AGENT_URL ?? "";
-    if (!workerUrl) {
-      throw new Error(
-        "Cloudflare credentials are missing and no fallback agent URL is set.\nSet CLOUDFLARE_API_TOKEN (or CLOUDFLARE_API_KEY) or provide VITE_AGENT_URL.",
-      );
-    }
-    console.log("→ Skipping Cloudflare deploy (no credentials), using existing worker URL");
+    throw new Error("Cloudflare credentials are missing");
   }
 
   process.env.VITE_AGENT_URL = workerUrl;
   console.log(`→ VITE_AGENT_URL=${process.env.VITE_AGENT_URL}`);
 
   console.log("→ Setting Convex environment variables...");
-  const convexEnvArgs = isPreview ? [`--preview-name ${process.env.CONVEX_PREVIEW_NAME}`] : [];
-  const convexEnvArgsStr = convexEnvArgs.join(" ").trim();
-  const convexEnvBaseCommand = convexEnvArgsStr
-    ? `bunx convex env set ${convexEnvArgsStr}`
-    : "bunx convex env set";
-
-  if (isPreview && !(process.env.DAYTONA_API_KEY ?? "").trim()) {
-    runCommand(`${convexEnvBaseCommand} DAYTONA_API_KEY ""`, {
-      cwd: path.resolve(repoRoot, "packages/backend"),
-    });
-  }
+  const convexEnvArgs = isPreview ? `--preview-name ${process.env.CONVEX_PREVIEW_NAME}` : ``;
+  const convexEnvBaseCommand = `bunx convex env set ${convexEnvArgs}`;
 
   process.env.AGENT_URL = workerUrl;
 
-  const convexEnvAllowlist = [
-    "AGENT_URL",
-    "BETTER_AUTH_SECRET",
-    "COMPOSIO_API_KEY",
-    "DAYTONA_API_KEY",
-    "DAYTONA_API_URL",
-    "DAYTONA_TARGET",
-    "EXTERNAL_TOKEN",
-    "EXA_API_KEY",
-    "JWKS",
-    "MAX_VOLUME_READY_RETRIES",
-    "SANDBOX_INACTIVITY_TIMEOUT_MINUTES",
-    "SANDBOX_SNAPSHOT",
-    "SANDBOX_VOLUME_MOUNT_PATH",
-    "SITE_URL",
-    "VOLTAGENT_PUBLIC_KEY",
-    "VOLTAGENT_SECRET_KEY",
-  ];
 
-  for (const key of convexEnvAllowlist) {
-    const value = process.env[key] ?? "";
-    if (value.trim()) {
+  for (const [key, value] of Object.entries(process.env)) {
+    if (value?.trim()) {
       runCommand(`${convexEnvBaseCommand} ${key} "${value}"`, {
         cwd: path.resolve(repoRoot, "packages/backend"),
       });
+    } else {
+      console.error(`→ Skipping ${key} because it is empty`);
     }
   }
 
@@ -163,14 +129,11 @@ if (process.argv.includes("--inner")) {
   process.exit(0);
 }
 
-process.env.IS_PREVIEW = isPreview ? "true" : "false";
-
 if (isPreview) {
-  const previewRef = process.env.VERCEL_GIT_COMMIT_REF ?? "preview";
-  const sanitizedPreviewName = sanitizeStage(previewRef);
-  process.env.CONVEX_PREVIEW_NAME = sanitizedPreviewName;
+  const previewRef = sanitizeStage(process.env.VERCEL_GIT_COMMIT_REF);
+  process.env.CONVEX_PREVIEW_NAME = previewRef;
   process.env.SITE_URL = `https://${process.env.VERCEL_BRANCH_URL ?? process.env.VERCEL_URL ?? ""}`;
-  process.env.ALCHEMY_STAGE = `preview-${sanitizedPreviewName}`;
+  process.env.ALCHEMY_STAGE = `preview-${previewRef}`;
 } else {
   process.env.SITE_URL = `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL ?? ""}`;
   process.env.ALCHEMY_STAGE = "prod";
@@ -181,16 +144,16 @@ console.log(`→ SITE_URL=${process.env.SITE_URL}`);
 console.log(`→ ALCHEMY_STAGE=${process.env.ALCHEMY_STAGE}`);
 
 if (isPreview) {
-  const previewName = process.env.CONVEX_PREVIEW_NAME ?? sanitizeStage(process.env.VERCEL_GIT_COMMIT_REF ?? "preview");
+  const previewName = process.env.CONVEX_PREVIEW_NAME;
   console.log(`→ Deploying Convex preview: ${previewName}`);
   runCommand(
-    `bunx convex deploy --preview-create ${previewName} --cmd "bun ../../scripts/deploy.ts --inner" --cmd-url-env-var-name VITE_CONVEX_URL`,
+    `bunx convex deploy --preview-create ${previewName} --cmd "bun scripts/deploy.ts --continue" --cmd-url-env-var-name VITE_CONVEX_URL`,
     { cwd: path.resolve(repoRoot, "packages/backend") },
   );
 } else {
   console.log("→ Deploying Convex production");
   runCommand(
-    `bunx convex deploy --cmd "bun ../../scripts/deploy.ts --inner" --cmd-url-env-var-name VITE_CONVEX_URL`,
+    `bunx convex deploy --cmd "bun scripts/deploy.ts --continue" --cmd-url-env-var-name VITE_CONVEX_URL`,
     { cwd: path.resolve(repoRoot, "packages/backend") },
   );
 }
