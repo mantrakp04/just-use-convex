@@ -4,8 +4,10 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
 import { cpSync, rmSync } from "node:fs";
-import { generateKeyPairSync, randomBytes } from "node:crypto";
+import { createHash, generateKeyPairSync, randomBytes } from "node:crypto";
 
+import { xchacha20poly1305 } from "@noble/ciphers/chacha.js";
+import { bytesToHex, managedNonce, utf8ToBytes } from "@noble/ciphers/utils.js";
 import { z } from "zod";
 
 // @ts-ignore
@@ -74,7 +76,17 @@ const runCommandCapture = (bin: string, args: string[] = [], options: RunOptions
 
 const generateSecret = () => randomBytes(32).toString("base64url");
 
+/** Encrypt a string using the same method as Better Auth (xchacha20poly1305) */
+const symmetricEncrypt = (key: string, data: string): string => {
+  const keyBytes = new Uint8Array(createHash("sha256").update(key).digest());
+  const dataBytes = utf8ToBytes(data);
+  return bytesToHex(managedNonce(xchacha20poly1305)(keyBytes).encrypt(dataBytes));
+};
+
 const generateJwks = async () => {
+  const secret = process.env.BETTER_AUTH_SECRET;
+  if (!secret) throw new Error("BETTER_AUTH_SECRET must be set before generating JWKS");
+
   const { publicKey, privateKey } = generateKeyPairSync("rsa", {
     modulusLength: 2048,
     publicExponent: 0x10001,
@@ -82,12 +94,14 @@ const generateJwks = async () => {
   const publicJwk = publicKey.export({ format: "jwk" }) as Record<string, unknown>;
   const privateJwk = privateKey.export({ format: "jwk" }) as Record<string, unknown>;
   const keyId = randomBytes(16).toString("hex");
+  const rawPrivateKey = JSON.stringify({ ...privateJwk, alg: "RS256", kid: keyId });
+  const encryptedPrivateKey = JSON.stringify(symmetricEncrypt(secret, rawPrivateKey));
   return JSON.stringify([
     {
       alg: "RS256",
       createdAt: Date.now(),
       id: keyId,
-      privateKey: JSON.stringify({ ...privateJwk, alg: "RS256", kid: keyId }),
+      privateKey: encryptedPrivateKey,
       publicKey: JSON.stringify({ ...publicJwk, alg: "RS256", kid: keyId }),
     },
   ]);
@@ -168,7 +182,10 @@ const continueMode = async () => {
   await ensureConvexEnvValue("EXTERNAL_TOKEN", async () => generateSecret(), {
     exposeInProcessEnv: true,
   });
-  await ensureConvexEnvValue("BETTER_AUTH_SECRET", async () => generateSecret());
+  await ensureConvexEnvValue("BETTER_AUTH_SECRET", async () => generateSecret(), {
+    exposeInProcessEnv: true,
+  });
+
   await ensureConvexEnvValue("JWKS", generateJwks);
 
   // 2. Ensure ALCHEMY_PASSWORD is set (generate if missing)
