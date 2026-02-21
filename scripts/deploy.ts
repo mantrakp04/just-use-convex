@@ -115,7 +115,8 @@ const resolvedSiteUrl = (process.env.VERCEL_BRANCH_URL
 const setConvexEnv = (key: string, value: string) => {
   const args = ["env", "set"];
   if (isPreviewDeployment) args.push("--preview-name", convexPreviewName);
-  args.push(key, value);
+  // Use -- to prevent values starting with '-' from being parsed as flags
+  args.push("--", key, value);
   runCommand(backendConvexCli, args, { cwd: backendCwd });
 };
 
