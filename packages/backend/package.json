@@ -17,8 +17,8 @@
     "@convex-dev/migrations": "^0.3.1",
     "better-auth": "catalog:",
     "convex": "catalog:",
-    "convex-ents": "^0.18.1",
-    "convex-helpers": "^0.1.112",
+    "convex-ents": "^0.20.0",
+    "convex-helpers": "^0.1.113",
     "dotenv": "catalog:",
     "zod": "catalog:"
   },
