@@ -95,6 +95,8 @@ User uses casual language ("bro", "dawg", "ugh"). Keep responses terse and actio
 - **Check existing patterns** in codebase before implementing
 - **Cross-check server/client impact** — if you edit server-side code, verify client usage, and vice versa
 - **Use Context7 for third-party SDK API verification** before integrating
+- **For Convex deployment config (especially Vercel build commands), follow official Convex docs as source of truth**
+- **Verify against DeepWiki before asserting**
 - **Keep responses terse** and actionable
 - **Use memo with custom comparison** for streaming optimization
 - **Use `useSyncExternalStore`** for shared mutable state
@@ -229,7 +231,6 @@ File-based TanStack Router:
 - always use convex ents for convex related stuff
 - whenever implementing something for convex, analyze adjacent and relevant files for similar pattern implementation
 - whenever working with external libraries always query context7 for their relevant docs
-- workflow execution namespace rule: `isolated` mode uses the workflow namespace (`workflow-${workflowId}`); `latestChat` mode uses the member's most recently updated chat id
 
 ## Background & Subagents
 
