@@ -6,7 +6,8 @@
   "exports": {
     "./web": "./src/web.ts",
     "./backend": "./src/backend.ts",
-    "./agent": "./src/agent.ts"
+    "./agent": "./src/agent.ts",
+    "./deploy": "./src/deploy.ts"
   },
   "dependencies": {
     "@t3-oss/env-core": "^0.13.10",
