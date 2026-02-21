@@ -91,10 +91,10 @@ This runs:
 
 ### Preview/Staging
 
-For pull request previews, create a separate Convex project:
+For pull request previews, use a preview deploy key and create/update a named preview deployment:
 
 ```bash
-bunx convex deploy --preview
+bunx convex deploy --preview-create my-branch
 ```
 
 ### Production
@@ -103,7 +103,7 @@ Production deployments should be automated through CI/CD:
 
 ```bash
 # Deploy backend
-bunx convex deploy --prod
+bunx convex deploy
 
 # Deploy agent
 cd packages/agent && bun run deploy
@@ -115,13 +115,13 @@ cd packages/agent && bun run deploy
 
 The fastest way to deploy the frontend is using the Vercel one-click deploy button:
 
-[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fmantrakp04%2Fjust-use-convex&env=VITE_SITE_URL,CONVEX_DEPLOY_KEY,VITE_CONVEX_URL,VITE_CONVEX_SITE_URL,VITE_AGENT_URL)
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fmantrakp04%2Fjust-use-convex&env=CONVEX_DEPLOY_KEY,VITE_CONVEX_URL,VITE_CONVEX_SITE_URL,VITE_AGENT_URL)
 
 ## Deployment Checklist
 
 Before deploying to production:
 
-- [ ] Set all frontend env vars (`VITE_CONVEX_URL`, `VITE_CONVEX_SITE_URL`, `VITE_SITE_URL`, `VITE_AGENT_URL`)
+- [ ] Set all frontend env vars (`VITE_CONVEX_URL`, `VITE_CONVEX_SITE_URL`, `VITE_AGENT_URL`)
 - [ ] Set Convex backend env vars (`JWKS`, `AGENT_URL`, `SITE_URL`, `EXTERNAL_TOKEN`)
 - [ ] Set agent secrets (`OPENROUTER_API_KEY`, `CONVEX_URL`, `CONVEX_SITE_URL`, `EXTERNAL_TOKEN`)
 - [ ] Configure Daytona API key for sandbox support (optional)

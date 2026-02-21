@@ -4,9 +4,9 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "bunx alchemy dev alchemy.run.ts",
-    "deploy": "bunx alchemy deploy alchemy.run.ts",
-    "destroy": "bunx alchemy destroy alchemy.run.ts",
+    "dev": "bunx alchemy dev alchemy.run.ts --env-file ../../.env",
+    "deploy": "bunx alchemy deploy alchemy.run.ts --env-file ../../.env",
+    "destroy": "bunx alchemy destroy alchemy.run.ts --env-file ../../.env",
     "check-types": "tsc --noEmit",
     "build": "tsc --noEmit"
   },
