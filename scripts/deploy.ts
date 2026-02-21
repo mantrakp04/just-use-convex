@@ -3,6 +3,7 @@
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
+import { cpSync, rmSync } from "node:fs";
 import { generateKeyPairSync, randomBytes } from "node:crypto";
 
 import { z } from "zod";
@@ -193,6 +194,13 @@ const continueMode = async () => {
   // 5. Build web app
   console.log("→ Building web app...");
   runCommand(webViteCli, ["build"], { cwd: webCwd });
+
+  // 6. Move Nitro Build Output API to repo root for Vercel
+  const nitroOutput = path.resolve(webCwd, ".vercel/output");
+  const vercelOutput = path.resolve(repoRoot, ".vercel/output");
+  rmSync(vercelOutput, { recursive: true, force: true });
+  cpSync(nitroOutput, vercelOutput, { recursive: true });
+  console.log(`→ Moved build output to ${vercelOutput}`);
 
   process.exit(0);
 };
