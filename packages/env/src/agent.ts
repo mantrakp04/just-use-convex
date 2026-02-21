@@ -15,4 +15,6 @@ export const env = createEnv({
   },
   runtimeEnv: process.env,
   emptyStringAsUndefined: true,
+  // Skip validation when env vars aren't populated yet (e.g. Alchemy deploy before Convex deploy)
+  skipValidation: !process.env.CONVEX_URL,
 });
