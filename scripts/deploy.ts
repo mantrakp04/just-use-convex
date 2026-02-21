@@ -162,25 +162,54 @@ const main = async () => {
     console.log(`→ CONVEX_SITE_URL=${process.env.CONVEX_SITE_URL}`);
     console.log(`→ SITE_URL=${process.env.SITE_URL}`);
 
-    console.log("→ Deploying Cloudflare agent...");
-    const alchemyDeployEnv =
-      process.env.CI
-        ? { ALCHEMY_CI_STATE_STORE_CHECK: "false" }
-        : undefined;
-    const output = runCommandCapture("bunx alchemy deploy alchemy.run.ts", {
-      cwd: path.resolve(repoRoot, "packages/agent"),
-      env: alchemyDeployEnv,
-    });
-    console.log(output);
+    const existingAgentUrl = resolveExistingAgentUrl(convexEnvArgs);
+    const hasCloudflareCredentials = Boolean(
+      process.env.CLOUDFLARE_API_TOKEN || process.env.CLOUDFLARE_API_KEY,
+    );
 
-    const workerUrl = output
-      .split("\n")
-      .reverse()
-      .map((line) => line.trim())
-      .find((line) => line.startsWith("ALCHEMY_WORKER_URL="))
-      ?.replace("ALCHEMY_WORKER_URL=", "") ?? "";
-    if (!workerUrl) {
-      throw new Error("Failed to capture worker URL from alchemy deploy");
+    let workerUrl = "";
+
+    if (hasCloudflareCredentials) {
+      console.log("→ Deploying Cloudflare agent...");
+      const alchemyDeployEnv =
+        process.env.CI
+          ? { ALCHEMY_CI_STATE_STORE_CHECK: "false" }
+          : undefined;
+
+      try {
+        const output = runCommandCapture("bunx alchemy deploy alchemy.run.ts", {
+          cwd: path.resolve(repoRoot, "packages/agent"),
+          env: alchemyDeployEnv,
+        });
+        console.log(output);
+
+        workerUrl = output
+          .split("\n")
+          .reverse()
+          .map((line) => line.trim())
+          .find((line) => line.startsWith("ALCHEMY_WORKER_URL="))
+          ?.replace("ALCHEMY_WORKER_URL=", "") ?? "";
+
+        if (!workerUrl) {
+          throw new Error("Failed to capture worker URL from alchemy deploy");
+        }
+      } catch (error) {
+        if (!existingAgentUrl) {
+          throw error;
+        }
+        workerUrl = existingAgentUrl;
+        console.warn("→ Alchemy deploy failed, reusing existing AGENT_URL");
+      }
+    } else {
+      if (!existingAgentUrl) {
+        throw new Error(
+          "Cloudflare credentials are missing and no existing AGENT_URL was found",
+        );
+      }
+      workerUrl = existingAgentUrl;
+      console.log(
+        "→ Skipping Cloudflare deploy (no credentials), reusing existing AGENT_URL",
+      );
     }
 
     process.env.VITE_AGENT_URL = workerUrl;
@@ -191,13 +220,16 @@ const main = async () => {
 
     await Promise.all(
       Object.entries(deployEnv)
-        .filter(([_, value]) => !!value)
+        .filter(([key, value]) => key !== "AGENT_URL" && !!value)
         .map(([key, value]) =>
           runCommand(`${convexEnvSetCommand} ${key} ${JSON.stringify(value)}`, {
             cwd: backendCwd,
           })
         )
     );
+    runCommand(`${convexEnvSetCommand} AGENT_URL ${JSON.stringify(workerUrl)}`, {
+      cwd: backendCwd,
+    });
 
     console.log("→ Building web app...");
     runCommand("bun run build", { cwd: path.resolve(repoRoot, "apps/web") });
@@ -247,6 +279,11 @@ const getConvexEnvLine = (key: string, convexEnvArgs: string) => {
     .map((line) => line.trim())
     .find((line) => line.startsWith(`${key}=`));
 };
+
+const resolveExistingAgentUrl = (convexEnvArgs: string) =>
+  getConvexEnvValue("AGENT_URL", convexEnvArgs) ??
+  process.env.VITE_AGENT_URL ??
+  process.env.AGENT_URL;
 
 main().catch((error) => {
   console.error(error instanceof Error ? error.message : error);
