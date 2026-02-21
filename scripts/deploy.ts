@@ -163,8 +163,13 @@ const main = async () => {
     console.log(`→ SITE_URL=${process.env.SITE_URL}`);
 
     console.log("→ Deploying Cloudflare agent...");
+    const alchemyDeployEnv =
+      process.env.CI
+        ? { ALCHEMY_CI_STATE_STORE_CHECK: "false" }
+        : undefined;
     const output = runCommandCapture("bunx alchemy deploy alchemy.run.ts", {
-      cwd: path.resolve(repoRoot, "packages/agent")
+      cwd: path.resolve(repoRoot, "packages/agent"),
+      env: alchemyDeployEnv,
     });
     console.log(output);
 
