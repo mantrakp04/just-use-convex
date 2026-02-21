@@ -217,17 +217,25 @@ const continueMode = async () => {
   console.log(`→ Set AGENT_URL=${workerUrl} in Convex env`);
 
   // 5. Sync known backend env vars to Convex
-  // Explicitly list keys to avoid syncing unrelated process.env vars
+  // Explicitly list keys + defaults to avoid syncing unrelated process.env vars
   // (skipValidation makes t3-env proxy all of process.env)
-  const backendEnvKeys = [
-    "DAYTONA_API_KEY", "EXA_API_KEY", "OPENROUTER_API_KEY",
-    "AGENT_URL", "DAYTONA_API_URL", "DAYTONA_TARGET",
-    "EXTERNAL_TOKEN", "SANDBOX_INACTIVITY_TIMEOUT_MINUTES",
-    "SANDBOX_VOLUME_MOUNT_PATH", "SITE_URL",
-    "MAX_VOLUME_READY_RETRIES", "JWKS", "SANDBOX_SNAPSHOT",
-  ] as const;
-  for (const key of backendEnvKeys) {
-    const value = process.env[key];
+  const backendEnvDefaults: Record<string, string | undefined> = {
+    DAYTONA_API_KEY: undefined,
+    EXA_API_KEY: undefined,
+    OPENROUTER_API_KEY: undefined,
+    AGENT_URL: undefined,
+    DAYTONA_API_URL: "https://app.daytona.io/api",
+    DAYTONA_TARGET: "us",
+    EXTERNAL_TOKEN: undefined,
+    SANDBOX_INACTIVITY_TIMEOUT_MINUTES: "2",
+    SANDBOX_VOLUME_MOUNT_PATH: "/home/daytona",
+    SITE_URL: undefined,
+    MAX_VOLUME_READY_RETRIES: "10",
+    JWKS: undefined,
+    SANDBOX_SNAPSHOT: "daytona-medium",
+  };
+  for (const [key, fallback] of Object.entries(backendEnvDefaults)) {
+    const value = process.env[key] || fallback;
     if (value) setConvexEnv(key, value);
   }
   console.log("→ Synced env vars to Convex");
