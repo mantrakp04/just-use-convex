@@ -1,165 +1,53 @@
 ---
-title: Deployment Overview
-description: Understanding the deployment architecture for the agentic chat platform
+title: Deployment Architecture
+description: How the deployment pipeline actually works under the hood
 ---
 
-# Deployment Overview
+# Deployment Architecture
 
-Deploying this application involves three separate components: the Convex backend, the frontend, and the Cloudflare Workers agent.
+Deploying this stack used to be a multi-step nightmare. You have Convex (backend), Cloudflare Workers (the AI agent), and Vercel (the frontend), and they all need each other's URLs and secrets. To fix this, we unified everything into a single script that orchestrates the entire deployment from Vercel.
 
-## Architecture
+## The Problem (The "Why")
 
-```
-┌─────────────────┐         ┌─────────────────┐         ┌─────────────────┐
-│   Frontend      │ ──────▶ │    Convex       │ ──────▶ │   Agent         │
-│   (Vercel,      │         │    Cloud        │         │   (Cloudflare   │
-│    CF Pages)    │         │                 │         │    Workers)     │
-└─────────────────┘         └─────────────────┘         └─────────────────┘
-        │                           │                           │
-        ▼                           ▼                           ▼
-   SSR + Static             Backend Functions            Durable Objects
-   React App                Database                     AI SDK + OpenRouter
-   Assets                   File Storage                 Sandbox Proxy
-        │                                                       │
-        └──────────── WebSocket ────────────────────────────────┘
-```
+We have a circular dependency of environment variables:
+1. The **Agent** (Cloudflare) needs the `CONVEX_URL` to talk to the database.
+2. The **Frontend** (Vercel) needs both the `VITE_CONVEX_URL` and the `VITE_AGENT_URL` to work.
+3. We also need shared secrets (like `EXTERNAL_TOKEN`, `BETTER_AUTH_SECRET`, and `JWKS`) securely synced between Convex and the Agent without manual copy-pasting.
 
-The frontend connects to the agent via WebSocket for real-time chat streaming. The agent communicates with Convex for persistence and with external services (OpenRouter, Daytona, Exa) for AI inference and sandbox management.
+If you deploy them separately, you're constantly waiting for one to finish just to copy a URL into the environment variables of the other. For PR preview environments, this is literally impossible to do manually.
 
-## Deployment Components
+## The Solution: `scripts/deploy.ts` (The "How")
 
-### 1. Convex Backend
+We wrote a monolithic script (`scripts/deploy.ts`) that Vercel runs as its Build Command. Here is exactly what happens under the hood when Vercel triggers a build:
 
-Convex handles your backend automatically:
+1. **Vercel starts the build**  
+   Vercel spins up and runs `bun scripts/deploy.ts`.
 
-- **Functions**: Queries, mutations, and actions (zQuery/zMutation wrappers with auth context)
-- **Database**: Document storage with real-time sync (Ents for relationships)
-- **File Storage**: User uploads and attachments
-- **Scheduled Jobs**: Background tasks and cron jobs
+2. **Convex Deployment & URL Provisioning**  
+   The script immediately fires off `bunx convex deploy --cmd "bun scripts/deploy.ts --continue"`.  
+   This tells Convex: "Deploy the backend, figure out the `CONVEX_URL` (whether it's prod or a new PR preview), and then pass that URL back to me by running this `--continue` command."
 
-Deploy with a single command:
+3. **Secret Generation & Syncing**  
+   Inside the `--continue` block, the script generates secure secrets on the fly (`EXTERNAL_TOKEN`, `BETTER_AUTH_SECRET`, `JWKS`, `ALCHEMY_PASSWORD`) and pushes them directly into your Convex environment. No manual `.env` juggling required. It also syncs any other required backend environment variables over to Convex.
 
+4. **Agent Deployment (Alchemy)**  
+   Now that we have the `CONVEX_URL` and secrets set up, the script deploys the Cloudflare Worker agent via Alchemy (`bunx alchemy deploy`). It parses the CLI output to grab the resulting `ALCHEMY_WORKER_URL`.
+
+5. **Frontend Build**  
+   Finally, we have all the pieces. The script injects `VITE_CONVEX_URL` and `VITE_AGENT_URL` into the current process environment and runs the Vite build for the TanStack Start frontend (`bunx vite build`). It then moves the Nitro build output into Vercel's `.vercel/output` folder so Vercel can serve it.
+
+## What You Need To Do
+
+Literally just push to Vercel.
+
+Set your Vercel Build Command to:
 ```bash
-bunx convex deploy
+bun scripts/deploy.ts
 ```
 
-### 2. Frontend
+Set these environment variables in Vercel:
+- `CONVEX_DEPLOY_KEY` (Get this from your Convex dashboard settings)
+- `CLOUDFLARE_API_TOKEN` (For the agent deployment via Alchemy)
+- `CLOUDFLARE_ACCOUNT_ID` (For the agent deployment via Alchemy)
 
-Your TanStack Start application can be deployed to any hosting provider that supports SSR:
-
-- **Vercel** (Recommended for TanStack Start)
-- **Cloudflare Pages**
-- **Netlify**
-- **AWS Amplify**
-
-The frontend handles SSR, file-based routing, and connects to both Convex (for reactive data) and the agent (for WebSocket chat).
-
-### 3. Agent (Cloudflare Workers)
-
-The AI agent runs on Cloudflare Workers using Durable Objects for persistent WebSocket connections. It is deployed via **Alchemy** (infrastructure-as-code for Cloudflare).
-
-- **Durable Objects**: One per chat session, manages WebSocket state
-- **AI SDK**: Streaming responses via OpenRouter
-- **Sandbox Proxy**: PTY terminal, file operations, preview URLs via Daytona
-- **Tools**: Web search (Exa), code execution, todo management, ask-user prompts
-
-Deploy with:
-
-```bash
-cd packages/agent && bun run deploy
-```
-
-Or via Alchemy in CI:
-
-```bash
-bunx alchemy deploy
-```
-
-## Deployment Environments
-
-### Development
-
-```bash
-# Start everything (Convex dev + frontend + agent)
-bun run dev
-```
-
-This runs:
-- Convex dev server (syncs functions in real-time)
-- Frontend dev server (hot reload on port 3001)
-- Agent dev server (Cloudflare Workers on port 1337)
-
-### Preview/Staging
-
-For pull request previews, use a preview deploy key and create/update a named preview deployment:
-
-```bash
-bunx convex deploy --preview-create my-branch
-```
-
-### Production
-
-Production deployments should be automated through CI/CD:
-
-```bash
-# Deploy backend
-bunx convex deploy
-
-# Deploy agent
-cd packages/agent && bun run deploy
-
-# Deploy frontend (via hosting provider CI)
-```
-
-## One-Click Deploy
-
-The fastest way to deploy the frontend is using the Vercel one-click deploy button:
-
-[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fmantrakp04%2Fjust-use-convex&env=CONVEX_DEPLOY_KEY,VITE_CONVEX_URL,VITE_CONVEX_SITE_URL,VITE_AGENT_URL)
-
-## Deployment Checklist
-
-Before deploying to production:
-
-- [ ] Set all frontend env vars (`VITE_CONVEX_URL`, `VITE_CONVEX_SITE_URL`, `VITE_AGENT_URL`)
-- [ ] Set Convex backend env vars (`JWKS`, `AGENT_URL`, `SITE_URL`, `EXTERNAL_TOKEN`)
-- [ ] Set agent secrets (`OPENROUTER_API_KEY`, `CONVEX_URL`, `CONVEX_SITE_URL`, `EXTERNAL_TOKEN`)
-- [ ] Configure Daytona API key for sandbox support (optional)
-- [ ] Generate and set JWKS for auth token validation
-- [ ] Configure `CONVEX_DEPLOY_KEY` for CI/CD
-- [ ] Configure authentication callback URLs
-- [ ] Set up custom domain (if applicable)
-- [ ] Test WebSocket connectivity between frontend and agent
-- [ ] Test sandbox creation and terminal connectivity
-- [ ] Set up monitoring and alerts
-
-## Cost Considerations
-
-### Convex Pricing
-
-| Feature | Free Tier | Pro |
-|---------|-----------|-----|
-| Function calls | 1M/month | Unlimited |
-| Database | 1GB | 10GB+ |
-| File storage | 1GB | Custom |
-| Bandwidth | 1GB | Custom |
-
-### Cloudflare Workers
-
-| Feature | Free Tier | Paid |
-|---------|-----------|------|
-| Requests | 100K/day | 10M+/month |
-| Durable Objects | Limited | Per-request pricing |
-| CPU time | 10ms | 50ms+ |
-
-### Frontend Hosting
-
-- **Vercel**: 100GB bandwidth/month (free tier)
-- **Cloudflare Pages**: Unlimited bandwidth
-- **Netlify**: 100GB bandwidth/month
-
-## Next Steps
-
-1. [Configure Environment Variables](/docs/deployment/environment-variables)
-2. [Deploy Convex Backend](/docs/deployment/convex-deploy)
-3. [Deploy Frontend](/docs/deployment/frontend-hosting)
+That's it. Every PR gets a full-stack preview environment (Convex preview + fresh Cloudflare worker + Vercel preview URL), and pushing to `main` deploys straight to production.

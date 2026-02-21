@@ -1,5 +1,6 @@
 import type { z } from "zod";
 import type { zMutationCtx, zQueryCtx } from "../functions";
+import { internal } from "../_generated/api";
 import * as types from "./types";
 import { triggerSchema as TriggerSchema } from "../tables/workflows";
 import { withInvalidCursorRetry } from "../shared/pagination";
@@ -177,9 +178,21 @@ export async function UpdateWorkflow(ctx: zMutationCtx, args: z.infer<typeof typ
     }),
   });
 
+  const now = Date.now();
   await workflow.patch({
     ...patchData,
+    updatedAt: now,
   });
+
+  const nextTriggerType = args.patch.trigger?.type ?? workflow.triggerType;
+  const nextEnabled = args.patch.enabled ?? workflow.enabled;
+  if (nextEnabled && nextTriggerType === "schedule") {
+    await ctx.scheduler.runAfter(0, internal.workflows.scheduler.scheduleNext, {
+      workflowId: workflow._id,
+      fromTimestamp: now,
+    });
+  }
+
   return workflow;
 }
 
@@ -222,7 +235,16 @@ export async function ToggleWorkflow(ctx: zMutationCtx, args: z.infer<typeof typ
     "You are not authorized to update this workflow"
   );
 
-  await workflow.patch({ enabled: args.enabled, updatedAt: Date.now() });
+  const now = Date.now();
+  await workflow.patch({ enabled: args.enabled, updatedAt: now });
+
+  if (args.enabled && workflow.triggerType === "schedule") {
+    await ctx.scheduler.runAfter(0, internal.workflows.scheduler.scheduleNext, {
+      workflowId: workflow._id,
+      fromTimestamp: now,
+    });
+  }
+
   return workflow;
 }
 
@@ -336,6 +358,8 @@ export async function UpdateExecutionStatus(ctx: zMutationCtx, args: z.infer<typ
     "You are not authorized to update this execution"
   );
 
+  const wasTerminal = isTerminalExecutionStatus(execution.status);
+  const isTerminal = isTerminalExecutionStatus(args.status);
   const patchData: Record<string, unknown> = { status: args.status };
   if (args.agentOutput !== undefined) patchData.agentOutput = args.agentOutput;
   if (args.toolCalls !== undefined) patchData.toolCalls = args.toolCalls;
@@ -343,6 +367,14 @@ export async function UpdateExecutionStatus(ctx: zMutationCtx, args: z.infer<typ
   if (args.completedAt !== undefined) patchData.completedAt = args.completedAt;
 
   await execution.patch(patchData);
+
+  if (!wasTerminal && isTerminal) {
+    await ctx.scheduler.runAfter(0, internal.workflows.scheduler.scheduleNext, {
+      workflowId: execution.workflowId,
+      fromTimestamp: args.completedAt ?? Date.now(),
+    });
+  }
+
   return execution;
 }
 
@@ -353,4 +385,8 @@ export async function UpdateExecutionStatus(ctx: zMutationCtx, args: z.infer<typ
 function generateWebhookSecret(): string {
   const bytes = crypto.getRandomValues(new Uint8Array(32));
   return Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+function isTerminalExecutionStatus(status: string): boolean {
+  return status === "completed" || status === "failed" || status === "cancelled";
 }

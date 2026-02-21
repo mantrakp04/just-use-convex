@@ -1,89 +1,106 @@
 import type { FunctionArgs } from "convex/server";
+import { v } from "convex/values";
 import { internalMutation } from "../_generated/server";
 import { internal } from "../_generated/api";
 import { triggerSchema } from "../tables/workflows";
 import { resolveWorkflowMemberIdentity } from "./memberIdentity";
 
-type DispatchWorkflowBatchArgs = FunctionArgs<
-  typeof internal.workflows.dispatch.dispatchWorkflowBatch
+type DispatchWorkflowArgs = FunctionArgs<
+  typeof internal.workflows.dispatch.dispatchWorkflow
 >;
 
-export const tick = internalMutation({
-  args: {},
-  handler: async (ctx) => {
-    // Query all enabled schedule-type workflows
-    const enabledWorkflows = await ctx.db
-      .query("workflows")
-      .withIndex("enabled_triggerType_updatedAt", (q) =>
-        q.eq("enabled", true).eq("triggerType", "schedule")
-      )
-      .order("desc")
-      .collect();
+export const scheduleNext = internalMutation({
+  args: {
+    workflowId: v.id("workflows"),
+    fromTimestamp: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const workflow = await ctx.db.get(args.workflowId);
+    if (!workflow) return;
 
-    const now = Date.now();
-    const minuteStart = floorToMinute(now);
-    const minuteEnd = minuteStart + 60_000;
-    const dispatches: DispatchWorkflowBatchArgs["dispatches"] = [];
-
-    for (const workflow of enabledWorkflows) {
-      let trigger: ReturnType<typeof triggerSchema.parse>;
-      try {
-        trigger = triggerSchema.parse(JSON.parse(workflow.trigger));
-      } catch {
-        continue;
-      }
-
-      if (trigger.type !== "schedule" || !trigger.cron) continue;
-
-      // Simple cron matching: check if this workflow should run now
-      if (!shouldRunCron(trigger.cron, now)) continue;
-      if (isSameScheduledMinute(workflow.lastScheduledAt, minuteStart, minuteEnd)) continue;
-
-      await ctx.db.patch(workflow._id, { lastScheduledAt: minuteStart });
-
-      const triggerPayload = JSON.stringify({
-        type: "schedule",
-        cron: trigger.cron,
-        scheduledAt: now,
-      });
-
-      const memberIdentity = await resolveWorkflowMemberIdentity(
-        ctx,
-        workflow.organizationId,
-        workflow.memberId,
-      );
-      if (!memberIdentity) continue;
-
-      dispatches.push({
-        workflowId: workflow._id,
-        triggerPayload,
-        userId: memberIdentity.userId,
-        activeOrganizationId: workflow.organizationId,
-        organizationRole: memberIdentity.role,
-        memberId: workflow.memberId,
-        activeTeamId: undefined,
-      });
+    const scheduleTrigger = parseScheduleTrigger(workflow.trigger);
+    if (!workflow.enabled || workflow.triggerType !== "schedule" || !scheduleTrigger) {
+      return;
     }
 
-    if (dispatches.length > 0) {
-      await ctx.scheduler.runAfter(0, internal.workflows.dispatch.dispatchWorkflowBatch, {
-        dispatches,
-      });
-    }
+    const fromTimestamp = args.fromTimestamp ?? Date.now();
+    const nextScheduledAt = getNextScheduledAt(scheduleTrigger.cron, fromTimestamp);
+    if (nextScheduledAt === null) return;
+    if (workflow.lastScheduledAt === nextScheduledAt) return;
+
+    await ctx.db.patch(workflow._id, { lastScheduledAt: nextScheduledAt });
+
+    await ctx.scheduler.runAt(nextScheduledAt, internal.workflows.scheduler.executeScheduledWorkflow, {
+      workflowId: workflow._id,
+      scheduledAt: nextScheduledAt,
+      expectedUpdatedAt: workflow.updatedAt,
+      cron: scheduleTrigger.cron,
+    });
   },
 });
 
-// ═══════════════════════════════════════════════════════════════════
-// SIMPLE CRON MATCHING
-// Supports: "* * * * *" (min hour dom month dow)
-// Runs at 1-min granularity — matches current minute
-// ═══════════════════════════════════════════════════════════════════
+export const executeScheduledWorkflow = internalMutation({
+  args: {
+    workflowId: v.id("workflows"),
+    scheduledAt: v.number(),
+    expectedUpdatedAt: v.number(),
+    cron: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const workflow = await ctx.db.get(args.workflowId);
+    if (!workflow) return;
+    if (!workflow.enabled || workflow.triggerType !== "schedule") return;
+    if (workflow.updatedAt !== args.expectedUpdatedAt) return;
+    if (workflow.lastScheduledAt !== args.scheduledAt) return;
 
-function shouldRunCron(cronExpr: string, nowMs: number): boolean {
+    const scheduleTrigger = parseScheduleTrigger(workflow.trigger);
+    if (!scheduleTrigger || scheduleTrigger.cron !== args.cron) return;
+
+    const memberIdentity = await resolveWorkflowMemberIdentity(
+      ctx,
+      workflow.organizationId,
+      workflow.memberId,
+    );
+    if (!memberIdentity) return;
+
+    const dispatchArgs: DispatchWorkflowArgs = {
+      workflowId: workflow._id,
+      triggerPayload: JSON.stringify({
+        type: "schedule",
+        cron: args.cron,
+        scheduledAt: args.scheduledAt,
+        dispatchedAt: Date.now(),
+      }),
+      userId: memberIdentity.userId,
+      activeOrganizationId: workflow.organizationId,
+      organizationRole: memberIdentity.role,
+      memberId: workflow.memberId,
+      activeTeamId: undefined,
+    };
+
+    await ctx.scheduler.runAfter(0, internal.workflows.dispatch.dispatchWorkflow, dispatchArgs);
+  },
+});
+
+const MINUTE_MS = 60_000;
+const MAX_SEARCH_MINUTES = 366 * 24 * 60;
+
+function getNextScheduledAt(cronExpr: string, fromMs: number): number | null {
+  const start = floorToMinute(fromMs) + MINUTE_MS;
+  for (let i = 0; i < MAX_SEARCH_MINUTES; i += 1) {
+    const candidate = start + i * MINUTE_MS;
+    if (matchesCron(cronExpr, candidate)) {
+      return candidate;
+    }
+  }
+  return null;
+}
+
+function matchesCron(cronExpr: string, timestampMs: number): boolean {
   const parts = cronExpr.trim().split(/\s+/);
   if (parts.length !== 5) return false;
 
-  const date = new Date(nowMs);
+  const date = new Date(timestampMs);
   const minute = date.getUTCMinutes();
   const hour = date.getUTCHours();
   const dayOfMonth = date.getUTCDate();
@@ -158,16 +175,15 @@ function matchesCronField(field: string, value: number, min: number, max: number
 }
 
 function floorToMinute(timestampMs: number): number {
-  return timestampMs - (timestampMs % 60_000);
+  return timestampMs - (timestampMs % MINUTE_MS);
 }
 
-function isSameScheduledMinute(
-  lastScheduledAt: number | undefined,
-  minuteStart: number,
-  minuteEnd: number,
-): boolean {
-  if (lastScheduledAt === undefined) {
-    return false;
+function parseScheduleTrigger(triggerJson: string): { cron: string } | null {
+  try {
+    const trigger = triggerSchema.parse(JSON.parse(triggerJson));
+    if (trigger.type !== "schedule" || !trigger.cron) return null;
+    return { cron: trigger.cron };
+  } catch {
+    return null;
   }
-  return lastScheduledAt >= minuteStart && lastScheduledAt < minuteEnd;
 }
