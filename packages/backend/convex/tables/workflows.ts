@@ -51,7 +51,7 @@ export const workflowsZodSchema = {
   trigger: z.string(), // JSON-serialized triggerSchema
   instructions: z.string(),
   allowedActions: z.array(allowedActionSchema),
-  model: z.string().optional(),
+  model: z.string(),
   inputModalities: z.array(inputModalitySchema),
   sandboxId: sandboxesWithSystemFields._id.optional(),
   updatedAt: z.number(),
