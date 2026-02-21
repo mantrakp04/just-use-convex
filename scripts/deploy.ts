@@ -161,45 +161,12 @@ const continueMode = async () => {
   console.log(`→ CONVEX_SITE_URL=${convexSiteUrl}`);
   console.log(`→ SITE_URL=${process.env.SITE_URL}`);
 
-  // 1. Set up secrets (preview generates fresh, production reuses existing)
-  if (isPreviewDeployment) {
-    const externalToken = generateSecret();
-    process.env.EXTERNAL_TOKEN = externalToken;
-    setConvexEnv("EXTERNAL_TOKEN", externalToken);
-
-    const betterAuthSecret = generateSecret();
-    setConvexEnv("BETTER_AUTH_SECRET", betterAuthSecret);
-
-    const jwks = await generateJwks();
-    setConvexEnv("JWKS", jwks);
-
-    console.log("→ Generated and set preview secrets");
-  } else {
-    const existingExternalToken = getConvexEnvValue("EXTERNAL_TOKEN");
-    if (existingExternalToken) {
-      process.env.EXTERNAL_TOKEN = existingExternalToken;
-      console.log("→ EXTERNAL_TOKEN already set");
-    } else {
-      const token = generateSecret();
-      process.env.EXTERNAL_TOKEN = token;
-      setConvexEnv("EXTERNAL_TOKEN", token);
-      console.log("→ Generated EXTERNAL_TOKEN");
-    }
-
-    if (!hasConvexEnvValue("BETTER_AUTH_SECRET")) {
-      setConvexEnv("BETTER_AUTH_SECRET", generateSecret());
-      console.log("→ Generated BETTER_AUTH_SECRET");
-    } else {
-      console.log("→ BETTER_AUTH_SECRET already set");
-    }
-
-    if (!hasConvexEnvValue("JWKS")) {
-      setConvexEnv("JWKS", await generateJwks());
-      console.log("→ Generated JWKS");
-    } else {
-      console.log("→ JWKS already set");
-    }
-  }
+  // 1. Set up secrets (idempotent for preview and production)
+  await ensureConvexEnvValue("EXTERNAL_TOKEN", async () => generateSecret(), {
+    exposeInProcessEnv: true,
+  });
+  await ensureConvexEnvValue("BETTER_AUTH_SECRET", async () => generateSecret());
+  await ensureConvexEnvValue("JWKS", generateJwks);
 
   // 2. Ensure ALCHEMY_PASSWORD is set (generate if missing)
   if (!process.env.ALCHEMY_PASSWORD) {
@@ -212,18 +179,14 @@ const continueMode = async () => {
   process.env.VITE_AGENT_URL = workerUrl;
   process.env.AGENT_URL = workerUrl;
 
-  // 4. Set agent URL in Convex
-  setConvexEnv("AGENT_URL", workerUrl);
-  console.log(`→ Set AGENT_URL=${workerUrl} in Convex env`);
-
-  // 5. Sync known backend env vars to Convex
+  // 4. Sync known backend env vars to Convex
   // Explicitly list keys + defaults to avoid syncing unrelated process.env vars
   // (skipValidation makes t3-env proxy all of process.env)
   const backendEnvDefaults: Record<string, string | undefined> = {
     DAYTONA_API_KEY: undefined,
     EXA_API_KEY: undefined,
     OPENROUTER_API_KEY: undefined,
-    AGENT_URL: undefined,
+    AGENT_URL: workerUrl,
     DAYTONA_API_URL: "https://app.daytona.io/api",
     DAYTONA_TARGET: "us",
     EXTERNAL_TOKEN: undefined,
@@ -240,7 +203,7 @@ const continueMode = async () => {
   }
   console.log("→ Synced env vars to Convex");
 
-  // 6. Build web app
+  // 5. Build web app
   console.log("→ Building web app...");
   runCommand(webViteCli, ["build"], { cwd: webCwd });
 
@@ -290,19 +253,38 @@ const main = async () => {
   }
 };
 
-const hasConvexEnvValue = (key: string): boolean => Boolean(getConvexEnvLine(key));
-
 const getConvexEnvValue = (key: string) => {
   const line = getConvexEnvLine(key);
   return line ? line.slice(`${key}=`.length) : undefined;
 };
 
 const getConvexEnvLine = (key: string) => {
-  const output = runCommandCapture(backendConvexCli, ["env", "list"], { cwd: backendCwd });
+  const args = ["env", "list"];
+  if (isPreviewDeployment) args.push("--preview-name", convexPreviewName);
+  const output = runCommandCapture(backendConvexCli, args, { cwd: backendCwd });
   return output
     .split("\n")
     .map((line) => line.trim())
     .find((line) => line.startsWith(`${key}=`));
+};
+
+const ensureConvexEnvValue = async (
+  key: string,
+  generateValue: () => Promise<string> | string,
+  options?: { exposeInProcessEnv?: boolean },
+) => {
+  const existingValue = getConvexEnvValue(key);
+  if (existingValue) {
+    if (options?.exposeInProcessEnv) process.env[key] = existingValue;
+    console.log(`→ ${key} already set`);
+    return existingValue;
+  }
+
+  const generatedValue = await generateValue();
+  setConvexEnv(key, generatedValue);
+  if (options?.exposeInProcessEnv) process.env[key] = generatedValue;
+  console.log(`→ Generated ${key}`);
+  return generatedValue;
 };
 
 function formatCommand(bin: string, args: string[]) {
