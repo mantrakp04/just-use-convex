@@ -308,8 +308,8 @@ function formatCommand(bin: string, args: string[]) {
 function getZodDefault(schema: z.ZodTypeAny): unknown {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let current: any = schema;
-  while (current?._zod?.def) {
-    const def = current._zod.def;
+  while (current?.def) {
+    const def = current.def;
     if (def.type === "default" && def.defaultValue !== undefined) {
       return typeof def.defaultValue === "function" ? def.defaultValue() : def.defaultValue;
     }
