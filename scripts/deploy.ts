@@ -200,23 +200,29 @@ const continueMode = async () => {
     }
   }
 
-  // 2. Deploy agent (now has CONVEX_URL + CONVEX_SITE_URL in env)
+  // 2. Ensure ALCHEMY_PASSWORD is set (generate if missing)
+  if (!process.env.ALCHEMY_PASSWORD) {
+    process.env.ALCHEMY_PASSWORD = generateSecret();
+    console.log("→ Generated ALCHEMY_PASSWORD");
+  }
+
+  // 3. Deploy agent (now has CONVEX_URL + CONVEX_SITE_URL + ALCHEMY_PASSWORD in env)
   const workerUrl = deployAgent();
   process.env.VITE_AGENT_URL = workerUrl;
   process.env.AGENT_URL = workerUrl;
 
-  // 3. Set agent URL in Convex
+  // 4. Set agent URL in Convex
   setConvexEnv("AGENT_URL", workerUrl);
   console.log(`→ Set AGENT_URL=${workerUrl} in Convex env`);
 
-  // 4. Sync all backend env vars to Convex
+  // 5. Sync all backend env vars to Convex
   const backendEnv = await import("@just-use-convex/env/backend");
   for (const [key, value] of Object.entries(backendEnv.env).filter(([_, v]) => !!v)) {
     setConvexEnv(key, value as string);
   }
   console.log("→ Synced env vars to Convex");
 
-  // 5. Build web app
+  // 6. Build web app
   console.log("→ Building web app...");
   runCommand(webViteCli, ["build"], { cwd: webCwd });
 
