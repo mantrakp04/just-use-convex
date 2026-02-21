@@ -14,6 +14,7 @@ type RunOptions = {
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(scriptDir, "..");
+const backendCwd = path.resolve(repoRoot, "packages/backend");
 
 const sanitizeStage = (raw = "preview") => {
   const normalized = raw
@@ -68,10 +69,6 @@ const runCommandCapture = (command: string, options: RunOptions = {}) => {
   return output;
 };
 
-const shouldRegenerateSecret = (value?: string) => !value?.trim() || value.trim() === "meow";
-const shouldRegenerate = (value?: string, force = false) =>
-  force || shouldRegenerateSecret(value);
-
 const generateSecret = () => randomBytes(32).toString("base64url");
 
 const generateJwks = async () => {
@@ -97,31 +94,67 @@ const generateJwks = async () => {
   });
 };
 
-const isPreview = deployEnv.VERCEL_ENV === "preview";
-const shouldRegenerateOnDeploy = process.argv.includes("--regen");
-const sanitizedPreviewName = sanitizeStage(deployEnv.VERCEL_GIT_COMMIT_REF);
-const convexPreviewName = deployEnv.CONVEX_PREVIEW_NAME ?? sanitizedPreviewName;
+const isPreview = process.env.VERCEL_ENV === "preview";
+const convexPreviewName = sanitizeStage(process.env.VERCEL_GIT_COMMIT_REF);
 const alchemyStage = isPreview ? `preview-${convexPreviewName}` : "prod";
+const resolvedSiteUrl = (process.env.VERCEL_BRANCH_URL
+  ? `https://${process.env.VERCEL_BRANCH_URL}`
+  : process.env.VERCEL_PROJECT_PRODUCTION_URL
+    ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
+    : undefined);
 
 const main = async () => {
   if (process.argv.includes("--continue")) {
-    const convexUrl = deployEnv.VITE_CONVEX_URL;
+    const convexEnvArgs = isPreview ? `--preview-name ${convexPreviewName}` : "";
+    const convexEnvSetCommand = `bunx convex env set${convexEnvArgs ? ` ${convexEnvArgs}` : ""}`;
+
+    const convexUrl = process.env.CONVEX_URL;
     if (!convexUrl) {
-      throw new Error("VITE_CONVEX_URL is required in --continue mode");
+      throw new Error("VITE_CONVEX_URL or CONVEX_URL is required in --continue mode");
     }
 
-    const convexSiteUrl = (deployEnv.VITE_CONVEX_SITE_URL ?? deployEnv.CONVEX_SITE_URL) ?? convexUrl.replace(
-      ".convex.cloud",
-      ".convex.site",
-    );
+    const convexSiteUrl = convexUrl.replace(".convex.cloud", ".convex.site");
 
     process.env.VITE_CONVEX_URL = convexUrl;
     process.env.CONVEX_URL = convexUrl;
     process.env.VITE_CONVEX_SITE_URL = convexSiteUrl;
     process.env.CONVEX_SITE_URL = convexSiteUrl;
-    process.env.SITE_URL = process.env.SITE_URL ?? deployEnv.SITE_URL ?? "";
-    process.env.ALCHEMY_STAGE = process.env.ALCHEMY_STAGE ?? alchemyStage;
-    process.env.CONVEX_PREVIEW_NAME = process.env.CONVEX_PREVIEW_NAME ?? convexPreviewName;
+    process.env.SITE_URL = resolvedSiteUrl;
+    process.env.ALCHEMY_STAGE = alchemyStage;
+    process.env.CONVEX_PREVIEW_NAME = convexPreviewName;
+
+    const existingExternalToken = getConvexEnvValue("EXTERNAL_TOKEN", convexEnvArgs);
+    if (existingExternalToken) {
+      process.env.EXTERNAL_TOKEN = existingExternalToken;
+      console.log("→ EXTERNAL_TOKEN already set in Convex env");
+    } else {
+      const externalToken = generateSecret();
+      process.env.EXTERNAL_TOKEN = externalToken;
+      runCommand(`${convexEnvSetCommand} EXTERNAL_TOKEN ${JSON.stringify(externalToken)}`, {
+        cwd: backendCwd,
+      });
+      console.log("→ Generated and set EXTERNAL_TOKEN");
+    }
+
+    if (!hasConvexEnvValue("BETTER_AUTH_SECRET", convexEnvArgs)) {
+      const betterAuthSecret = generateSecret();
+      runCommand(`${convexEnvSetCommand} BETTER_AUTH_SECRET ${JSON.stringify(betterAuthSecret)}`, {
+        cwd: backendCwd,
+      });
+      console.log("→ Generated and set BETTER_AUTH_SECRET");
+    } else {
+      console.log("→ BETTER_AUTH_SECRET already set in Convex env");
+    }
+
+    if (!hasConvexEnvValue("JWKS", convexEnvArgs)) {
+      const jwks = await generateJwks();
+      runCommand(`${convexEnvSetCommand} JWKS ${JSON.stringify(jwks)}`, {
+        cwd: backendCwd,
+      });
+      console.log("→ Generated and set JWKS");
+    } else {
+      console.log("→ JWKS already set in Convex env");
+    }
 
     console.log(`→ VITE_CONVEX_URL=${process.env.VITE_CONVEX_URL}`);
     console.log(`→ CONVEX_SITE_URL=${process.env.CONVEX_SITE_URL}`);
@@ -129,8 +162,7 @@ const main = async () => {
 
     console.log("→ Deploying Cloudflare agent...");
     const output = runCommandCapture("bunx alchemy deploy alchemy.run.ts", {
-      cwd: path.resolve(repoRoot, "packages/agent"),
-      env: { ALCHEMY_CI_STATE_STORE_CHECK: deployEnv.ALCHEMY_CI_STATE_STORE_CHECK ?? "false" },
+      cwd: path.resolve(repoRoot, "packages/agent")
     });
     console.log(output);
 
@@ -148,29 +180,14 @@ const main = async () => {
     process.env.AGENT_URL = workerUrl;
     console.log(`→ VITE_AGENT_URL=${process.env.VITE_AGENT_URL}`);
 
-    if (shouldRegenerateSecret(deployEnv.EXTERNAL_TOKEN)) {
-      process.env.EXTERNAL_TOKEN = generateSecret();
-      console.log("→ Generated EXTERNAL_TOKEN");
-    }
-    if (shouldRegenerate(deployEnv.BETTER_AUTH_SECRET, shouldRegenerateOnDeploy)) {
-      process.env.BETTER_AUTH_SECRET = generateSecret();
-      console.log("→ Generated BETTER_AUTH_SECRET");
-    }
-    if (shouldRegenerate(deployEnv.JWKS, shouldRegenerateOnDeploy)) {
-      process.env.JWKS = await generateJwks();
-      console.log("→ Generated JWKS");
-    }
-
     console.log("→ Setting Convex environment variables...");
-    const convexEnvArgs = isPreview ? `--preview-name ${convexPreviewName}` : "";
-    const convexEnvBaseCommand = `bunx convex env set ${convexEnvArgs}`;
 
     await Promise.all(
       Object.entries(deployEnv)
         .filter(([_, value]) => !!value)
         .map(([key, value]) =>
-          runCommand(`${convexEnvBaseCommand} ${key} ${JSON.stringify(value)}`, {
-            cwd: path.resolve(repoRoot, "packages/backend"),
+          runCommand(`${convexEnvSetCommand} ${key} ${JSON.stringify(value)}`, {
+            cwd: backendCwd,
           })
         )
     );
@@ -181,11 +198,11 @@ const main = async () => {
     process.exit(0);
   }
 
-  process.env.SITE_URL = deployEnv.SITE_URL ?? "";
+  process.env.SITE_URL = resolvedSiteUrl ?? "";
   process.env.ALCHEMY_STAGE = alchemyStage;
   process.env.CONVEX_PREVIEW_NAME = convexPreviewName;
 
-  console.log(`→ Environment: ${deployEnv.VERCEL_ENV ?? "unknown"}`);
+  console.log(`→ Environment: ${process.env.VERCEL_ENV}`);
   console.log(`→ SITE_URL=${process.env.SITE_URL}`);
   console.log(`→ ALCHEMY_STAGE=${process.env.ALCHEMY_STAGE}`);
 
@@ -193,15 +210,35 @@ const main = async () => {
     console.log(`→ Deploying Convex preview: ${convexPreviewName}`);
     runCommand(
       `bunx convex deploy --preview-create ${convexPreviewName} --cmd "bun scripts/deploy.ts --continue" --cmd-url-env-var-name VITE_CONVEX_URL`,
-      { cwd: path.resolve(repoRoot, "packages/backend") },
+      { cwd: backendCwd },
     );
   } else {
     console.log("→ Deploying Convex production");
     runCommand(
       `bunx convex deploy --cmd "bun scripts/deploy.ts --continue" --cmd-url-env-var-name VITE_CONVEX_URL`,
-      { cwd: path.resolve(repoRoot, "packages/backend") },
+      { cwd: backendCwd },
     );
   }
+};
+
+const hasConvexEnvValue = (key: string, convexEnvArgs: string) =>
+  Boolean(getConvexEnvLine(key, convexEnvArgs));
+
+const getConvexEnvValue = (key: string, convexEnvArgs: string) => {
+  const line = getConvexEnvLine(key, convexEnvArgs);
+  return line ? line.slice(`${key}=`.length) : undefined;
+};
+
+const getConvexEnvLine = (key: string, convexEnvArgs: string) => {
+  const output = runCommandCapture(
+    `bunx convex env list${convexEnvArgs ? ` ${convexEnvArgs}` : ""} | grep '^${key}=' || true`,
+    { cwd: backendCwd },
+  );
+
+  return output
+    .split("\n")
+    .map((line) => line.trim())
+    .find((line) => line.startsWith(`${key}=`));
 };
 
 main().catch((error) => {

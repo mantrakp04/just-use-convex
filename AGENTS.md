@@ -230,6 +230,8 @@ File-based TanStack Router:
 - always use convex ents for convex related stuff
 - whenever implementing something for convex, analyze adjacent and relevant files for similar pattern implementation
 - whenever working with external libraries always query context7 for their relevant docs
+- `packages/env/src/deploy.ts` should only declare env vars that are expected to be configured in Vercel dashboard; do not declare derived vars there (derive in deploy script instead)
+- `EXTERNAL_TOKEN`, `BETTER_AUTH_SECRET`, and `JWKS` are auto-generated in deploy flow only when missing in Convex env (`convex env list | grep`); do not keep a `--regen` path
 - workflow execution namespace rule: `isolated` mode uses the workflow namespace (`workflow-${workflowId}`); `latestChat` mode uses the member's most recently updated chat id
 
 ## Background & Subagents
