@@ -88,14 +88,9 @@ export const Route = createRootRouteWithContext<RouterAppContext>()({
 
 function RootDocument() {
   const context = useRouteContext({ from: Route.id });
-  return (
-    <PostHogProvider apiKey={env.VITE_PUBLIC_POSTHOG_KEY} options={
-      {
-        api_host: env.VITE_PUBLIC_POSTHOG_HOST,
-        defaults: '2026-01-30',
-      }
-    }>
-      <ConvexBetterAuthProvider
+
+  const content = (
+    <ConvexBetterAuthProvider
         client={context.convexQueryClient.convexClient}
         authClient={authClient}
         initialToken={context.token}
@@ -119,6 +114,21 @@ function RootDocument() {
           </html>
         </ThemeProvider>
       </ConvexBetterAuthProvider>
-    </PostHogProvider>
   );
+
+  const posthogKey = env.VITE_PUBLIC_POSTHOG_KEY;
+  if (posthogKey) {
+    return (
+      <PostHogProvider
+        apiKey={posthogKey}
+        options={{
+          api_host: env.VITE_PUBLIC_POSTHOG_HOST,
+          defaults: "2026-01-30",
+        }}
+      >
+        {content}
+      </PostHogProvider>
+    );
+  }
+  return content;
 }
