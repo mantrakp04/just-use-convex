@@ -15,6 +15,8 @@ type RunOptions = {
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(scriptDir, "..");
 const backendCwd = path.resolve(repoRoot, "packages/backend");
+const continueScriptPath = path.resolve(repoRoot, "scripts/deploy.ts");
+const continueCommand = `bun ${JSON.stringify(continueScriptPath)} --continue`;
 
 const sanitizeStage = (raw = "preview") => {
   const normalized = raw
@@ -209,13 +211,13 @@ const main = async () => {
   if (isPreview) {
     console.log(`→ Deploying Convex preview: ${convexPreviewName}`);
     runCommand(
-      `bunx convex deploy --preview-create ${convexPreviewName} --cmd "bun scripts/deploy.ts --continue" --cmd-url-env-var-name CONVEX_URL`,
+      `bunx convex deploy --preview-create ${convexPreviewName} --cmd ${JSON.stringify(continueCommand)} --cmd-url-env-var-name CONVEX_URL`,
       { cwd: backendCwd },
     );
   } else {
     console.log("→ Deploying Convex production");
     runCommand(
-      `bunx convex deploy --cmd "bun scripts/deploy.ts --continue" --cmd-url-env-var-name CONVEX_URL`,
+      `bunx convex deploy --cmd ${JSON.stringify(continueCommand)} --cmd-url-env-var-name CONVEX_URL`,
       { cwd: backendCwd },
     );
   }
