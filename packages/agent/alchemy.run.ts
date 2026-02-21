@@ -1,5 +1,5 @@
 import alchemy from "alchemy";
-import { Worker, DurableObjectNamespace, WranglerJson, VectorizeIndex } from "alchemy/cloudflare";
+import { Worker, DurableObjectNamespace, VectorizeIndex } from "alchemy/cloudflare";
 import { env } from "@just-use-convex/env/agent";
 
 const stage = process.env.ALCHEMY_STAGE ?? "dev";
@@ -59,32 +59,3 @@ await app.finalize();
 if (worker.url) {
   console.log(`ALCHEMY_WORKER_URL=${worker.url}`);
 }
-
-await WranglerJson({
-  worker: worker,
-  path: "./wrangler.json",
-  transform: {
-    wrangler: (spec) => {
-      delete spec.containers;
-      if (spec.durable_objects?.bindings) {
-        spec.durable_objects.bindings = spec.durable_objects.bindings.filter(
-          (binding) => binding.name !== "Sandbox" && binding.class_name !== "Sandbox"
-        );
-      }
-      if (spec.migrations) {
-        for (const migration of spec.migrations) {
-          if (migration.new_sqlite_classes?.includes("AgentWorker")) {
-            migration.new_sqlite_classes = migration.new_sqlite_classes.filter((c: string) => c !== "AgentWorker");
-          }
-          if (migration.new_classes?.includes("Sandbox")) {
-            migration.new_classes = migration.new_classes.filter((c: string) => c !== "Sandbox");
-          }
-          if (migration.new_sqlite_classes?.includes("Sandbox")) {
-            migration.new_sqlite_classes = migration.new_sqlite_classes.filter((c: string) => c !== "Sandbox");
-          }
-        }
-      }
-      return spec;
-    },
-  },
-});
