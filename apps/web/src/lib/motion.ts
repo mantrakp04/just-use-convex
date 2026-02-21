@@ -83,7 +83,7 @@ export const transitionInfinite = (duration: number): Transition => ({
  * Reference: transform-scale-097 from Emil Kowalski animations
  */
 export const tapButton: TargetAndTransition = {
-  scale: 0.99,
+  scale: 0.995,
   boxShadow: "inset 0 2px 0 0 rgb(0 0 0 / 0.25)",
   transition: transitionInstant,
 }

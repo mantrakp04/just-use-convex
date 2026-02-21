@@ -103,9 +103,9 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, AgentArgs> {
     }
 
     this.daytona = new Daytona({
-      apiKey: this.env.DAYTONA_API_KEY ?? agentDefaults.DAYTONA_API_KEY,
-      apiUrl: this.env.DAYTONA_API_URL ?? agentDefaults.DAYTONA_API_URL,
-      target: this.env.DAYTONA_TARGET ?? agentDefaults.DAYTONA_TARGET,
+      apiKey: agentDefaults.DAYTONA_API_KEY,
+      apiUrl: agentDefaults.DAYTONA_API_URL,
+      target: agentDefaults.DAYTONA_TARGET,
     });
     if (sandboxId) {
       if (!this.sandbox || this.sandbox.id !== sandboxId) {
@@ -149,7 +149,7 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, AgentArgs> {
 
     const tasks = agent.getTools().find((t) => t.name === "task");
     if (tasks) {
-      const maxBackgroundDuration = Number(this.env.MAX_BACKGROUND_DURATION_MS ?? agentDefaults.MAX_BACKGROUND_DURATION_MS);
+      const maxBackgroundDuration = Number(agentDefaults.MAX_BACKGROUND_DURATION_MS);
       patchToolWithBackgroundSupport(tasks, this.backgroundTaskStore, this.truncatedOutputStore, {
         maxDuration: 30 * 60 * 1000,
         maxBackgroundDuration: maxBackgroundDuration > 0 ? maxBackgroundDuration : undefined,
