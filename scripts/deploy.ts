@@ -4,7 +4,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
 import { cpSync, rmSync } from "node:fs";
-import { randomBytes } from "node:crypto";
+import { generateKeyPairSync, randomBytes } from "node:crypto";
 
 import { z } from "zod";
 
@@ -74,6 +74,24 @@ const runCommandCapture = (bin: string, args: string[] = [], options: RunOptions
 
 const generateSecret = () => randomBytes(32).toString("base64url");
 
+const generateJwks = async () => {
+  const { publicKey, privateKey } = generateKeyPairSync("rsa", {
+    modulusLength: 2048,
+    publicExponent: 0x10001,
+  });
+  const publicJwk = publicKey.export({ format: "jwk" }) as Record<string, unknown>;
+  const privateJwk = privateKey.export({ format: "jwk" }) as Record<string, unknown>;
+  const keyId = randomBytes(16).toString("hex");
+  return JSON.stringify([
+    {
+      alg: "RS256",
+      createdAt: Date.now(),
+      id: keyId,
+      privateKey: JSON.stringify({ ...privateJwk, alg: "RS256", kid: keyId }),
+      publicKey: JSON.stringify({ ...publicJwk, alg: "RS256", kid: keyId }),
+    },
+  ]);
+};
 
 const vercelEnv = process.env.VERCEL_ENV?.trim();
 const gitBranch = process.env.VERCEL_GIT_COMMIT_REF?.trim();
@@ -151,6 +169,7 @@ const continueMode = async () => {
     exposeInProcessEnv: true,
   });
   await ensureConvexEnvValue("BETTER_AUTH_SECRET", async () => generateSecret());
+  await ensureConvexEnvValue("JWKS", generateJwks);
 
   // 2. Ensure ALCHEMY_PASSWORD is set (generate if missing)
   if (!process.env.ALCHEMY_PASSWORD) {
