@@ -7,15 +7,8 @@ export const sharedRequiredEnv = {
   OPENROUTER_API_KEY: z.string().min(1),
 };
 
-/** Runtime-safe validation — optional so Convex evaluate_push doesn't crash */
-export const sharedRuntimeEnv = {
-  DAYTONA_API_KEY: z.string().optional(),
-  EXA_API_KEY: z.string().optional(),
-  OPENROUTER_API_KEY: z.string().optional(),
-};
-
 export const sharedEnv = {
-  ...sharedRuntimeEnv,
+  ...sharedRequiredEnv,
   AGENT_URL: z.string().default("http://localhost:1337"),
   DAYTONA_API_URL: z.url().default("https://app.daytona.io/api"),
   DAYTONA_TARGET: z.string().default("us"),

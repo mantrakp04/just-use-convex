@@ -9,6 +9,12 @@ import * as types from "./types";
 import { env } from "@just-use-convex/env/backend";
 import { Daytona, DaytonaNotFoundError, Sandbox } from "@daytonaio/sdk";
 
+const daytonaClient = new Daytona({
+  apiKey: env.DAYTONA_API_KEY,
+  apiUrl: env.DAYTONA_API_URL,
+  target: env.DAYTONA_TARGET,
+});
+
 export const provision = internalAction({
   args: types.sandboxIdArgs,
   handler: async (_ctx, args) => {
@@ -52,7 +58,6 @@ async function createChatSshAccessFunction(ctx: zActionCtx, args: z.infer<typeof
     throw new Error("This chat does not have a sandbox attached");
   }
 
-  const daytonaClient = createDaytonaClient();
   const sandbox = await daytonaClient.get(chat.sandboxId);
   await ensureSandboxStarted(sandbox);
 
@@ -74,7 +79,6 @@ async function createChatPreviewAccessFunction(ctx: zActionCtx, args: z.infer<ty
     throw new Error("This chat does not have a sandbox attached");
   }
 
-  const daytonaClient = createDaytonaClient();
   const sandbox = await daytonaClient.get(chat.sandboxId);
   await ensureSandboxStarted(sandbox);
 
@@ -96,7 +100,6 @@ async function createChatPreviewAccessFunction(ctx: zActionCtx, args: z.infer<ty
 }
 
 async function provisionSandbox(sandboxId: types.SandboxId) {
-  const daytonaClient = createDaytonaClient();
   const volumeName = sandboxId;
 
   try {
@@ -113,7 +116,6 @@ async function provisionSandbox(sandboxId: types.SandboxId) {
 }
 
 async function destroySandbox(sandboxId: types.SandboxId) {
-  const daytonaClient = createDaytonaClient();
   const volumeName = sandboxId;
 
   try {
@@ -139,14 +141,6 @@ async function destroySandbox(sandboxId: types.SandboxId) {
 
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-function createDaytonaClient() {
-  return new Daytona({
-    apiKey: env.DAYTONA_API_KEY,
-    apiUrl: env.DAYTONA_API_URL,
-    target: env.DAYTONA_TARGET,
-  });
 }
 
 async function ensureSandboxStarted(

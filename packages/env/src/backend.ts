@@ -6,9 +6,10 @@ export const env = createEnv({
   server: {
     ...sharedEnv,
     MAX_VOLUME_READY_RETRIES: z.coerce.number().int().positive().default(10),
-    JWKS: z.string().optional(),
+    JWKS: z.string(),
     SANDBOX_SNAPSHOT: z.string().default("daytona-medium"),
   },
   runtimeEnv: process.env,
   emptyStringAsUndefined: true,
+  skipValidation: !process.env.JWKS,
 });
