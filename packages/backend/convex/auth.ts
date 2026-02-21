@@ -48,7 +48,6 @@ export const createAuthOptions = (ctx: GenericCtx<DataModel>) => {
     plugins: [
       convex({
         authConfig,
-        jwks: env.JWKS,
         jwksRotateOnTokenGenerationError: true,
         jwt: {
           // Include session fields in the JWT payload so Convex can access them via getUserIdentity
