@@ -115,13 +115,13 @@ const convexPreviewName = isPullRequestDeployment
   ? `pr-${sanitizeStage(pullRequestId)}`
   : sanitizeStage(gitBranch || "preview");
 const alchemyStage = isPreviewDeployment ? "preview" : "prod";
-const resolvedSiteUrl = (process.env.VERCEL_BRANCH_URL
-  ? `https://${process.env.VERCEL_BRANCH_URL}`
-  : process.env.VERCEL_URL
-    ? `https://${process.env.VERCEL_URL}`
-    : process.env.VERCEL_PROJECT_PRODUCTION_URL
-      ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
-      : undefined);
+const resolvedSiteUrl = !isPreviewDeployment && process.env.VERCEL_PROJECT_PRODUCTION_URL
+  ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
+  : process.env.VERCEL_BRANCH_URL
+    ? `https://${process.env.VERCEL_BRANCH_URL}`
+    : process.env.VERCEL_URL
+      ? `https://${process.env.VERCEL_URL}`
+      : undefined;
 
 /**
  * Set a Convex env var. For preview, uses --preview-name to avoid
