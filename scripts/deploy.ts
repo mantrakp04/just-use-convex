@@ -119,7 +119,33 @@ const setConvexEnv = (key: string, value: string) => {
   runCommand(backendConvexCli, args, { cwd: backendCwd });
 };
 
-/** --continue: called by convex deploy --cmd */
+/** Deploy Cloudflare agent via Alchemy, returns worker URL */
+const deployAgent = () => {
+  console.log("→ Deploying Cloudflare agent...");
+  const output = runCommandCapture(agentAlchemyCli, ["deploy", "alchemy.run.ts"], {
+    cwd: agentCwd,
+    env: { ALCHEMY_CI_STATE_STORE_CHECK: "false" },
+  });
+  console.log(output);
+
+  const workerUrl = output
+    .split("\n")
+    .reverse()
+    .map((line) => line.trim())
+    .find((line) => line.startsWith("ALCHEMY_WORKER_URL="))
+    ?.replace("ALCHEMY_WORKER_URL=", "") ?? "";
+  if (!workerUrl) throw new Error("Failed to capture worker URL from alchemy deploy");
+
+  console.log(`→ ALCHEMY_WORKER_URL=${workerUrl}`);
+  return workerUrl;
+};
+
+/**
+ * --continue: called by convex deploy --cmd
+ * At this point CONVEX_URL is set by Convex CLI.
+ * We deploy agent, set env vars, build web — all inside --cmd.
+ * If any step fails, non-zero exit aborts the Convex deploy.
+ */
 const continueMode = async () => {
   const convexUrl = process.env.CONVEX_URL;
   if (!convexUrl) throw new Error("CONVEX_URL is required in --continue mode");
@@ -130,14 +156,12 @@ const continueMode = async () => {
   process.env.VITE_CONVEX_SITE_URL = convexSiteUrl;
   process.env.CONVEX_SITE_URL = convexSiteUrl;
 
-  console.log(`→ VITE_CONVEX_URL=${convexUrl}`);
-  console.log(`→ VITE_CONVEX_SITE_URL=${convexSiteUrl}`);
-  console.log(`→ VITE_AGENT_URL=${process.env.VITE_AGENT_URL}`);
+  console.log(`→ CONVEX_URL=${convexUrl}`);
+  console.log(`→ CONVEX_SITE_URL=${convexSiteUrl}`);
   console.log(`→ SITE_URL=${process.env.SITE_URL}`);
 
-  // Set all env vars on Convex (uses --preview-name for preview deploys)
+  // 1. Set up secrets (preview generates fresh, production reuses existing)
   if (isPreviewDeployment) {
-    // Generate fresh secrets for preview
     const externalToken = generateSecret();
     process.env.EXTERNAL_TOKEN = externalToken;
     setConvexEnv("EXTERNAL_TOKEN", externalToken);
@@ -150,7 +174,6 @@ const continueMode = async () => {
 
     console.log("→ Generated and set preview secrets");
   } else {
-    // Production: check existing, generate missing
     const existingExternalToken = getConvexEnvValue("EXTERNAL_TOKEN");
     if (existingExternalToken) {
       process.env.EXTERNAL_TOKEN = existingExternalToken;
@@ -177,43 +200,27 @@ const continueMode = async () => {
     }
   }
 
-  // Set agent URL
-  setConvexEnv("AGENT_URL", process.env.AGENT_URL!);
-  console.log("→ Set AGENT_URL in Convex env");
+  // 2. Deploy agent (now has CONVEX_URL + CONVEX_SITE_URL in env)
+  const workerUrl = deployAgent();
+  process.env.VITE_AGENT_URL = workerUrl;
+  process.env.AGENT_URL = workerUrl;
 
-  // Sync all backend env vars
+  // 3. Set agent URL in Convex
+  setConvexEnv("AGENT_URL", workerUrl);
+  console.log(`→ Set AGENT_URL=${workerUrl} in Convex env`);
+
+  // 4. Sync all backend env vars to Convex
   const backendEnv = await import("@just-use-convex/env/backend");
   for (const [key, value] of Object.entries(backendEnv.env).filter(([_, v]) => !!v)) {
     setConvexEnv(key, value as string);
   }
   console.log("→ Synced env vars to Convex");
 
-  // Build web app
+  // 5. Build web app
   console.log("→ Building web app...");
   runCommand(webViteCli, ["build"], { cwd: webCwd });
 
   process.exit(0);
-};
-
-/** Deploy Cloudflare agent via Alchemy, returns worker URL */
-const deployAgent = () => {
-  console.log("→ Deploying Cloudflare agent...");
-  const output = runCommandCapture(agentAlchemyCli, ["deploy", "alchemy.run.ts"], {
-    cwd: agentCwd,
-    env: { ALCHEMY_CI_STATE_STORE_CHECK: "false" },
-  });
-  console.log(output);
-
-  const workerUrl = output
-    .split("\n")
-    .reverse()
-    .map((line) => line.trim())
-    .find((line) => line.startsWith("ALCHEMY_WORKER_URL="))
-    ?.replace("ALCHEMY_WORKER_URL=", "") ?? "";
-  if (!workerUrl) throw new Error("Failed to capture worker URL from alchemy deploy");
-
-  console.log(`→ ALCHEMY_WORKER_URL=${workerUrl}`);
-  return workerUrl;
 };
 
 const main = async () => {
@@ -234,12 +241,8 @@ const main = async () => {
   console.log(`→ SITE_URL=${process.env.SITE_URL}`);
   console.log(`→ ALCHEMY_STAGE=${alchemyStage}`);
 
-  // 1. Deploy Cloudflare agent first
-  const workerUrl = deployAgent();
-  process.env.VITE_AGENT_URL = workerUrl;
-  process.env.AGENT_URL = workerUrl;
-
-  // 2. Deploy Convex (--cmd sets env vars + builds web)
+  // Deploy Convex — agent deploy + web build happen inside --cmd
+  // where CONVEX_URL is available. If anything fails, Convex aborts.
   if (isPreviewDeployment) {
     console.log(`→ Deploying Convex preview: ${convexPreviewName}`);
     runCommand(backendConvexCli, [
