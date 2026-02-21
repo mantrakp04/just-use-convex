@@ -6,6 +6,10 @@ import tsconfigPaths from "vite-tsconfig-paths";
 import { nitro } from 'nitro/vite'
 import mdx from 'fumadocs-mdx/vite';
 import * as MdxConfig from './source.config';
+import dotenv from 'dotenv';
+import { resolve } from 'node:path';
+
+dotenv.config({ path: resolve(import.meta.dirname, '../../.env') });
 
 export default defineConfig({
   plugins: [mdx(MdxConfig), tsconfigPaths(), tailwindcss(), tanstackStart(), viteReact(), nitro({ preset: 'vercel'})],

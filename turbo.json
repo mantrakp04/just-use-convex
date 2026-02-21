@@ -2,10 +2,16 @@
   "$schema": "https://turbo.build/schema.json",
   "ui": "tui",
   "globalEnv": [
+    "ALCHEMY_PASSWORD",
+    "ALCHEMY_STATE_STORE",
+    "ALCHEMY_STATE_TOKEN",
+    "CLOUDFLARE_API_TOKEN",
     "CONVEX_DEPLOY_KEY",
+    "CONVEX_URL",
+    "CONVEX_SITE_URL",
+    "SITE_URL",
     "VITE_CONVEX_URL",
     "VITE_CONVEX_SITE_URL",
-    "VITE_SITE_URL",
     "VITE_AGENT_URL"
   ],
   "tasks": {
