@@ -1,8 +1,14 @@
 import { z } from "zod";
 
-export const sharedServerEnv = {
+export const sharedRequiredEnv = {
+  DAYTONA_API_KEY: z.string().min(1),
+  EXA_API_KEY: z.string().min(1),
+  OPENROUTER_API_KEY: z.string().min(1),
+};
+
+export const sharedEnv = {
+  ...sharedRequiredEnv,
   AGENT_URL: z.string().default("http://localhost:1337"),
-  DAYTONA_API_KEY: z.string().optional(),
   DAYTONA_API_URL: z.url().default("https://app.daytona.io/api"),
   DAYTONA_TARGET: z.string().default("us"),
   EXTERNAL_TOKEN: z.string().default("meow"),
