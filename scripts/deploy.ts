@@ -5,6 +5,8 @@ import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
 import { generateKeyPairSync, randomBytes } from "node:crypto";
 
+import { z } from "zod";
+
 // @ts-ignore
 import { env as deployEnv } from "@just-use-convex/env/deploy";
 
@@ -180,26 +182,11 @@ const continueMode = async () => {
   process.env.AGENT_URL = workerUrl;
 
   // 4. Sync known backend env vars to Convex
-  // Explicitly list keys + defaults to avoid syncing unrelated process.env vars
-  // (skipValidation makes t3-env proxy all of process.env)
-  const backendEnvDefaults: Record<string, string | undefined> = {
-    DAYTONA_API_KEY: undefined,
-    EXA_API_KEY: undefined,
-    OPENROUTER_API_KEY: undefined,
-    AGENT_URL: workerUrl,
-    DAYTONA_API_URL: "https://app.daytona.io/api",
-    DAYTONA_TARGET: "us",
-    EXTERNAL_TOKEN: undefined,
-    SANDBOX_INACTIVITY_TIMEOUT_MINUTES: "2",
-    SANDBOX_VOLUME_MOUNT_PATH: "/home/daytona",
-    SITE_URL: undefined,
-    MAX_VOLUME_READY_RETRIES: "10",
-    JWKS: undefined,
-    SANDBOX_SNAPSHOT: "daytona-medium",
-  };
-  for (const [key, fallback] of Object.entries(backendEnvDefaults)) {
-    const value = process.env[key] || fallback;
-    if (value) setConvexEnv(key, value);
+  // Derive keys + defaults from the backend env schema to stay in sync
+  const { backendEnvSchema } = await import("@just-use-convex/env/backend");
+  for (const [key, schema] of Object.entries(backendEnvSchema)) {
+    const value = process.env[key] || getZodDefault(schema as z.ZodTypeAny);
+    if (value) setConvexEnv(key, String(value));
   }
   console.log("→ Synced env vars to Convex");
 
@@ -290,6 +277,20 @@ const ensureConvexEnvValue = async (
 function formatCommand(bin: string, args: string[]) {
   const formatPart = (part: string) => (part.includes(" ") ? JSON.stringify(part) : part);
   return [formatPart(bin), ...args.map(formatPart)].join(" ");
+}
+
+/** Extract the default value from a zod schema, if one exists (zod v4) */
+function getZodDefault(schema: z.ZodTypeAny): unknown {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let current: any = schema;
+  while (current?._zod?.def) {
+    const def = current._zod.def;
+    if (def.type === "default" && def.defaultValue !== undefined) {
+      return typeof def.defaultValue === "function" ? def.defaultValue() : def.defaultValue;
+    }
+    current = def.innerType ?? def.schema;
+  }
+  return undefined;
 }
 
 main()
