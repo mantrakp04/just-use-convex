@@ -3,6 +3,5 @@
   "framework": null,
   "installCommand": "bun install",
   "buildCommand": "bun scripts/deploy.ts",
-  "outputDirectory": "apps/web/.vercel/output",
   "devCommand": "cd apps/web && bun run dev"
 }
