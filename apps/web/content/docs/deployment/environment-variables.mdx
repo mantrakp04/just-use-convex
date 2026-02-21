@@ -17,7 +17,6 @@ Variables prefixed with `VITE_` are exposed to the client bundle.
 | `VITE_CONVEX_SITE_URL` | Yes | -- | Convex site URL for HTTP actions (e.g., `https://<slug>.convex.site`) |
 | `VITE_SITE_URL` | No | `http://localhost:3001` | Your frontend application URL |
 | `VITE_AGENT_URL` | No | `http://localhost:1337` | Cloudflare Workers agent URL |
-| `VITE_DEFAULT_MODEL` | No | `openai/gpt-5.2-chat` | Default AI model slug |
 
 ```bash
 # apps/web/.env
@@ -25,7 +24,6 @@ VITE_CONVEX_URL=https://your-deployment.convex.cloud
 VITE_CONVEX_SITE_URL=https://your-deployment.convex.site
 VITE_SITE_URL=https://yourapp.com
 VITE_AGENT_URL=https://your-agent.your-domain.workers.dev
-VITE_DEFAULT_MODEL=openai/gpt-5.2-chat
 ```
 
 <Callout type="error">
