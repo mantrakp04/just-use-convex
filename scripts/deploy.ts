@@ -282,8 +282,10 @@ const getConvexEnvLine = (key: string, convexEnvArgs: string) => {
 
 const resolveExistingAgentUrl = (convexEnvArgs: string) =>
   getConvexEnvValue("AGENT_URL", convexEnvArgs) ??
+  getConvexEnvValue("AGENT_URL", "") ??
   process.env.VITE_AGENT_URL ??
-  process.env.AGENT_URL;
+  process.env.AGENT_URL ??
+  deployEnv.AGENT_URL;
 
 main().catch((error) => {
   console.error(error instanceof Error ? error.message : error);
