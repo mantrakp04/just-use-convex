@@ -216,10 +216,19 @@ const continueMode = async () => {
   setConvexEnv("AGENT_URL", workerUrl);
   console.log(`→ Set AGENT_URL=${workerUrl} in Convex env`);
 
-  // 5. Sync all backend env vars to Convex
-  const backendEnv = await import("@just-use-convex/env/backend");
-  for (const [key, value] of Object.entries(backendEnv.env).filter(([_, v]) => !!v)) {
-    setConvexEnv(key, value as string);
+  // 5. Sync known backend env vars to Convex
+  // Explicitly list keys to avoid syncing unrelated process.env vars
+  // (skipValidation makes t3-env proxy all of process.env)
+  const backendEnvKeys = [
+    "DAYTONA_API_KEY", "EXA_API_KEY", "OPENROUTER_API_KEY",
+    "AGENT_URL", "DAYTONA_API_URL", "DAYTONA_TARGET",
+    "EXTERNAL_TOKEN", "SANDBOX_INACTIVITY_TIMEOUT_MINUTES",
+    "SANDBOX_VOLUME_MOUNT_PATH", "SITE_URL",
+    "MAX_VOLUME_READY_RETRIES", "JWKS", "SANDBOX_SNAPSHOT",
+  ] as const;
+  for (const key of backendEnvKeys) {
+    const value = process.env[key];
+    if (value) setConvexEnv(key, value);
   }
   console.log("→ Synced env vars to Convex");
 
