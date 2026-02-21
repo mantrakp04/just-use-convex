@@ -12,7 +12,7 @@ import { resolve } from 'node:path';
 dotenv.config({ path: resolve(import.meta.dirname, '../../.env') });
 
 export default defineConfig({
-  plugins: [mdx(MdxConfig), tsconfigPaths(), tailwindcss(), tanstackStart(), viteReact(), nitro({ preset: 'vercel'})],
+  plugins: [mdx(MdxConfig), tsconfigPaths(), tailwindcss(), tanstackStart(), viteReact(), nitro({ preset: 'vercel' })],
   server: {
     port: 3001,
   },
