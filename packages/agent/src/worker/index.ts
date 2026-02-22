@@ -8,6 +8,7 @@ import {
   createUIMessageStreamResponse,
   type StreamTextOnFinishCallback,
   type ToolSet,
+  type UIMessageStreamWriter,
   type UIMessage,
 } from "ai";
 import { PlanAgent } from "@voltagent/core";
@@ -41,7 +42,12 @@ import {
   type CallableFunctionInstance,
   type CallableServiceMethod,
   type CallableServiceMethodsMap,
+  type SteerQueueInput,
+  type SteerQueueItem,
+  type SteerQueueState,
+  type SteerQueueTarget,
   type WorkflowRuntimeDoc,
+  steerQueueInputSchema,
 } from "../agent/types";
 import {
   buildRetrievalMessage,
@@ -59,6 +65,22 @@ import {
   buildWorkflowExecutionMessages,
 } from "./helpers";
 import { createWorkerPlanAgent } from "../agent/agent";
+import {
+  createInitialSteerQueueState,
+  enqueueSteerItems,
+  getNextQueuedPostFinishItem,
+  listQueuedLiveItems,
+  markSteerItemStatus,
+  readSteerQueueState,
+  recoverInterruptedSteerQueueState,
+  removeSteerItem,
+  writeSteerQueueState,
+  setRunFlags,
+} from "./queue-state";
+
+const STEER_MEMORY_STORAGE_KEY = "steerMemoryHistory";
+const STEER_MEMORY_MAX_ITEMS = 12;
+const STEER_MEMORY_MAX_CHARS = 4_500;
 
 export class AgentWorker extends AIChatAgent<typeof worker.Env, AgentArgs> {
   private convexAdapter: ConvexAdapter | null = null;
@@ -83,16 +105,38 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, AgentArgs> {
   private didRegisterCallableFunctions = false;
   private daytona: Daytona | null = null;
   private sandbox: Sandbox | null = null;
+  private steerQueueState: SteerQueueState = createInitialSteerQueueState();
+  private activeRunWriter: UIMessageStreamWriter | null = null;
+  private isRunActive = false;
+  private isDrainingPostFinishQueue = false;
+  private pendingSteerEvents: Array<{ event: string; payload: Record<string, unknown> }> = [];
+  private steerQueueMutationChain: Promise<unknown> = Promise.resolve();
+  private pendingPrepareMessageDirectives: SteerQueueItem[] = [];
 
   private async _init(args?: AgentArgs): Promise<void> {
+    const existingState = await this.ctx.storage.get<AgentArgs>("state");
     if (args) {
-      await this.ctx.storage.put("state", args);
+      await this.ctx.storage.put("state", {
+        ...args,
+        steerQueueState: args.steerQueueState ?? existingState?.steerQueueState,
+      });
     }
     const stored = await this.ctx.storage.get<AgentArgs>("state");
     if (!stored || !stored.tokenConfig) {
       throw new Error("Agent not initialized: missing state");
     }
-    this.setState(stored);
+    const recoveredQueueState = await readSteerQueueState(this.ctx.storage, stored.steerQueueState ?? null);
+    const steerQueueState = recoverInterruptedSteerQueueState(recoveredQueueState);
+    this.steerQueueState = steerQueueState;
+    this.setState({
+      ...stored,
+      steerQueueState,
+    });
+    await this.ctx.storage.put("state", {
+      ...stored,
+      steerQueueState,
+    });
+    await writeSteerQueueState(this.ctx.storage, steerQueueState);
 
     this.convexAdapter = await createConvexAdapter(this.env.CONVEX_URL, stored.tokenConfig);
     this.chatDoc = null;
@@ -151,6 +195,7 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, AgentArgs> {
       backgroundTaskStore: this.backgroundTaskStore,
       truncatedOutputStore: this.truncatedOutputStore,
       waitUntil: this.ctx.waitUntil.bind(this.ctx),
+      getSteerQueueItemsForPrepareMessages: this._consumeSteerQueueItemsForPrepareMessages.bind(this),
     });
 
     this.planAgent = agent;
@@ -296,12 +341,19 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, AgentArgs> {
 
   override async onStateUpdate(state: AgentArgs, source: Connection | "server"): Promise<void> {
     const stored = await this.ctx.storage.get<AgentArgs>("state");
-    await this.ctx.storage.put("state", {
+    const steerQueueState = await readSteerQueueState(this.ctx.storage, stored?.steerQueueState ?? null);
+    this.steerQueueState = steerQueueState;
+    const nextState = {
+      ...(stored ?? this.state),
       ...state,
       tokenConfig: stored?.tokenConfig ?? state.tokenConfig,
-    });
+      modeConfig: stored?.modeConfig ?? state.modeConfig,
+      steerQueueState,
+    };
+    await this.ctx.storage.put("state", nextState);
+    this.setState(nextState);
     await this._patchAgent();
-    await super.onStateUpdate(state, source);
+    await super.onStateUpdate(nextState, source);
   }
 
   override async persistMessages(messages: UIMessage[]): Promise<void> {
@@ -377,6 +429,383 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, AgentArgs> {
     }
 
     return cancelBackgroundTask(this.backgroundTaskStore, input.taskId);
+  }
+
+  @callable()
+  async steerQueue(input?: SteerQueueInput) {
+    const parsed = steerQueueInputSchema.safeParse(input ?? {});
+    if (!parsed.success) {
+      throw new Error(parsed.error.message);
+    }
+
+    const directives = collectSteeringDirectives(parsed.data);
+    if (directives.length === 0) {
+      throw new Error("At least one steering directive is required");
+    }
+
+    const requestedMode = parsed.data.mode ?? "auto";
+    const targetQueue: SteerQueueTarget =
+      parsed.data.queue ??
+      (requestedMode === "live"
+        ? "live"
+        : requestedMode === "post_finish"
+          ? "post_finish"
+          : this._isChatRunActive()
+            ? "live"
+            : "post_finish");
+
+    const result = await this._withSteerQueueLock(async () => {
+      const { state, items } = enqueueSteerItems(this.steerQueueState, {
+        target: targetQueue,
+        texts: directives,
+      });
+
+      await this._setSteerQueueState(state);
+      this._emitSteerQueueEvent("enqueue", {
+        queue: targetQueue,
+        items,
+        ...(items.length === 1 ? { item: items[0] } : {}),
+      });
+
+      if (targetQueue === "live" && this._isChatRunActive()) {
+        await this._flushLiveSteerQueue();
+      } else if (targetQueue === "post_finish" && !this._isChatRunActive()) {
+        await this._flushPostFinishQueueWithoutActiveRun();
+      }
+
+      return {
+        items,
+        state: this.steerQueueState,
+      };
+    });
+
+    return result;
+  }
+
+  @callable()
+  async getSteerQueueState() {
+    this.steerQueueState = await readSteerQueueState(this.ctx.storage, this.steerQueueState);
+    return this.steerQueueState;
+  }
+
+  @callable()
+  async removeSteerQueueItem(input: { itemId: string; queue?: SteerQueueTarget }) {
+    if (!input?.itemId || input.itemId.trim().length === 0) {
+      throw new Error("itemId is required");
+    }
+
+    return await this._withSteerQueueLock(async () => {
+      const { state, removedFrom } = removeSteerItem(
+        this.steerQueueState,
+        input.itemId,
+        input.queue,
+      );
+
+      if (removedFrom.length > 0) {
+        await this._setSteerQueueState(state);
+        this._emitSteerQueueEvent("removed", {
+          itemId: input.itemId,
+          removedFrom,
+        });
+      }
+
+      return {
+        itemId: input.itemId,
+        removedFrom,
+        state: this.steerQueueState,
+      };
+    });
+  }
+
+  private async _beginChatRun(runId: string): Promise<void> {
+    if (this.state.modeConfig.mode !== "chat") {
+      return;
+    }
+    this.activeRunWriter = null;
+    this.isRunActive = true;
+    this.pendingSteerEvents = [];
+    this.pendingPrepareMessageDirectives = [];
+    await this._setSteerQueueState(setRunFlags(this.steerQueueState, {
+      isRunActive: true,
+      activeRunId: runId,
+    }));
+  }
+
+  private _attachChatRunWriter(writer: UIMessageStreamWriter): void {
+    if (this.state.modeConfig.mode !== "chat") {
+      return;
+    }
+    this.activeRunWriter = writer;
+    const eventsToFlush = this.pendingSteerEvents;
+    this.pendingSteerEvents = [];
+    this._writeSteerQueueEvent("snapshot", {});
+    for (const event of eventsToFlush) {
+      this._writeSteerQueueEvent(event.event, event.payload);
+    }
+  }
+
+  private async _endChatRun(): Promise<void> {
+    this.activeRunWriter = null;
+    this.isRunActive = false;
+    this.pendingSteerEvents = [];
+    this.pendingPrepareMessageDirectives = [];
+    await this._setSteerQueueState(setRunFlags(this.steerQueueState, {
+      isRunActive: false,
+      isLiveFlushing: false,
+      isPostFlushing: false,
+      activeRunId: null,
+    }));
+  }
+
+  private _isChatRunActive(): boolean {
+    return this.isRunActive && this.state.modeConfig.mode === "chat";
+  }
+
+  private _emitSteerQueueEvent(event: string, payload: Record<string, unknown>): void {
+    if (!this.activeRunWriter) {
+      if (this._isChatRunActive()) {
+        this.pendingSteerEvents.push({ event, payload });
+      }
+      return;
+    }
+
+    this._writeSteerQueueEvent(event, payload);
+  }
+
+  private _writeSteerQueueEvent(event: string, payload: Record<string, unknown>): void {
+    if (!this.activeRunWriter) {
+      return;
+    }
+
+    try {
+      this.activeRunWriter.write({
+        type: "data-steer-queue",
+        id: this.steerQueueState.activeRunId ?? "steer-queue",
+        data: {
+          event,
+          runId: this.steerQueueState.activeRunId,
+          ...payload,
+          snapshot: this.steerQueueState,
+          state: this.steerQueueState,
+          timestamp: Date.now(),
+        },
+      } as never);
+    } catch {
+      // Writer may already be closed by client disconnect.
+    }
+  }
+
+  private async _setSteerQueueState(nextState: SteerQueueState): Promise<void> {
+    this.steerQueueState = nextState;
+    const nextAgentState: AgentArgs = {
+      ...this.state,
+      steerQueueState: nextState,
+    };
+    this.setState(nextAgentState);
+    await Promise.all([
+      this.ctx.storage.put("state", nextAgentState),
+      writeSteerQueueState(this.ctx.storage, nextState),
+    ]);
+  }
+
+  private async _withSteerQueueLock<T>(fn: () => Promise<T>): Promise<T> {
+    const run = this.steerQueueMutationChain.then(fn, fn);
+    this.steerQueueMutationChain = run.then(() => undefined, () => undefined);
+    return run;
+  }
+
+  private async _flushLiveSteerQueue(): Promise<SteerQueueItem[]> {
+    const queuedItems = listQueuedLiveItems(this.steerQueueState);
+    if (queuedItems.length === 0) {
+      return [];
+    }
+
+    await this._setSteerQueueState(setRunFlags(this.steerQueueState, { isLiveFlushing: true }));
+    const flushed: SteerQueueItem[] = [];
+
+    try {
+      for (const item of queuedItems) {
+        await this._setSteerQueueState(markSteerItemStatus(this.steerQueueState, item.id, "injecting"));
+        const injectingItem = this.steerQueueState.liveSteerQueue.find((current) => current.id === item.id) ?? item;
+        this._emitSteerQueueEvent("injecting", { item: injectingItem });
+
+        try {
+          await this._persistSteeringMemory(injectingItem);
+          if (this._isChatRunActive()) {
+            this.pendingPrepareMessageDirectives.push(injectingItem);
+          }
+          await this._setSteerQueueState(markSteerItemStatus(this.steerQueueState, item.id, "done"));
+          const doneItem = this.steerQueueState.liveSteerQueue.find((current) => current.id === item.id);
+          if (doneItem) {
+            flushed.push(doneItem);
+            this._emitSteerQueueEvent("done", { item: doneItem });
+          }
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          await this._setSteerQueueState(markSteerItemStatus(this.steerQueueState, item.id, "failed", { error: message }));
+          const failedItem = this.steerQueueState.liveSteerQueue.find((current) => current.id === item.id) ?? injectingItem;
+          this._emitSteerQueueEvent("failed", { item: failedItem });
+        }
+      }
+    } finally {
+      await this._setSteerQueueState(setRunFlags(this.steerQueueState, { isLiveFlushing: false }));
+    }
+
+    return flushed;
+  }
+
+  private async _consumeSteerQueueItemsForPrepareMessages(): Promise<SteerQueueItem[]> {
+    if (!this._isChatRunActive()) {
+      return [];
+    }
+    const pendingItems = await this._withSteerQueueLock(async () => {
+      const items = this.pendingPrepareMessageDirectives;
+      this.pendingPrepareMessageDirectives = [];
+      return items;
+    });
+    const history = await this._readSteeringHistory();
+    return mergeSteeringItemsForPrepareMessages(pendingItems, history);
+  }
+
+  private async _flushPostFinishQueueWithoutActiveRun(): Promise<void> {
+    if (this._isChatRunActive()) {
+      return;
+    }
+
+    await this._setSteerQueueState(setRunFlags(this.steerQueueState, { isPostFlushing: true }));
+    try {
+      while (true) {
+        const item = getNextQueuedPostFinishItem(this.steerQueueState);
+        if (!item) {
+          return;
+        }
+
+        await this._setSteerQueueState(markSteerItemStatus(this.steerQueueState, item.id, "injecting"));
+        const injectingItem = this.steerQueueState.postFinishQueue.find((current) => current.id === item.id) ?? item;
+        this._emitSteerQueueEvent("injecting", { item: injectingItem });
+
+        try {
+          await this._persistSteeringMemory(injectingItem);
+          await this._setSteerQueueState(markSteerItemStatus(this.steerQueueState, item.id, "done"));
+          const doneItem = this.steerQueueState.postFinishQueue.find((current) => current.id === item.id) ?? injectingItem;
+          this._emitSteerQueueEvent("done", { item: doneItem });
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          await this._setSteerQueueState(markSteerItemStatus(this.steerQueueState, item.id, "failed", { error: message }));
+          const failedItem = this.steerQueueState.postFinishQueue.find((current) => current.id === item.id) ?? injectingItem;
+          this._emitSteerQueueEvent("failed", { item: failedItem });
+        }
+      }
+    } finally {
+      await this._setSteerQueueState(setRunFlags(this.steerQueueState, { isPostFlushing: false }));
+    }
+  }
+
+  private async _drainPostFinishSteerQueue({
+    agent,
+    modelMessages,
+    abortSignal,
+    writer,
+  }: {
+    agent: PlanAgent;
+    modelMessages: UIMessage[];
+    abortSignal?: AbortSignal;
+    writer: UIMessageStreamWriter;
+  }): Promise<void> {
+    if (this.isDrainingPostFinishQueue || this.state.modeConfig.mode !== "chat") {
+      return;
+    }
+
+    this.isDrainingPostFinishQueue = true;
+    await this._setSteerQueueState(setRunFlags(this.steerQueueState, { isPostFlushing: true }));
+    try {
+      while (!abortSignal?.aborted) {
+        await this._withSteerQueueLock(() => this._flushLiveSteerQueue());
+        const injectingItem = await this._withSteerQueueLock(async () => {
+          const nextPostItem = getNextQueuedPostFinishItem(this.steerQueueState);
+          if (!nextPostItem) {
+            return null;
+          }
+
+          await this._setSteerQueueState(markSteerItemStatus(this.steerQueueState, nextPostItem.id, "injecting"));
+          return this.steerQueueState.postFinishQueue.find((current) => current.id === nextPostItem.id) ?? nextPostItem;
+        });
+        if (!injectingItem) {
+          return;
+        }
+
+        this._emitSteerQueueEvent("injecting", { item: injectingItem });
+
+        try {
+          await this._persistSteeringMemory(injectingItem);
+          this.pendingPrepareMessageDirectives.push(injectingItem);
+
+          const queuedStream = await agent.streamText(modelMessages, {
+            abortSignal,
+          });
+          await parseStreamToUI(queuedStream.fullStream, writer);
+
+          await this._withSteerQueueLock(async () => {
+            await this._setSteerQueueState(markSteerItemStatus(this.steerQueueState, injectingItem.id, "done"));
+          });
+          const doneItem = this.steerQueueState.postFinishQueue.find((current) => current.id === injectingItem.id) ?? injectingItem;
+          this._emitSteerQueueEvent("done", { item: doneItem });
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          await this._withSteerQueueLock(async () => {
+            await this._setSteerQueueState(markSteerItemStatus(this.steerQueueState, injectingItem.id, "failed", { error: message }));
+          });
+          const failedItem = this.steerQueueState.postFinishQueue.find((current) => current.id === injectingItem.id) ?? injectingItem;
+          this._emitSteerQueueEvent("failed", { item: failedItem });
+        }
+      }
+    } finally {
+      this.isDrainingPostFinishQueue = false;
+      await this._setSteerQueueState(setRunFlags(this.steerQueueState, { isPostFlushing: false }));
+    }
+  }
+
+  private async _persistSteeringMemory(item: SteerQueueItem): Promise<void> {
+    await this._appendSteeringHistory(item.text);
+
+    if (!this.planAgent) {
+      this.planAgent = await this._prepAgent();
+    }
+
+    const memoryManager = this.planAgent?.getMemoryManager();
+    if (!memoryManager || !this.chatDoc?.memberId || !this.chatDoc?._id) {
+      return;
+    }
+
+    if (!memoryManager.hasWorkingMemorySupport()) {
+      return;
+    }
+
+    await memoryManager.updateWorkingMemory({
+      userId: this.chatDoc.memberId,
+      conversationId: this.chatDoc._id,
+      content: `Steering directive: ${item.text}`,
+    });
+  }
+
+  private async _appendSteeringHistory(text: string): Promise<void> {
+    const current = await this._readSteeringHistory();
+    const deduped = [text, ...current.filter((item) => item !== text)];
+    const next = pruneSteeringHistoryByBudget(deduped);
+    await this.ctx.storage.put(STEER_MEMORY_STORAGE_KEY, next);
+  }
+
+  private async _readSteeringHistory(): Promise<string[]> {
+    const current = await this.ctx.storage.get<string[]>(STEER_MEMORY_STORAGE_KEY);
+    if (!Array.isArray(current)) {
+      return [];
+    }
+
+    return current
+      .filter((item): item is string => typeof item === "string")
+      .map((item) => item.trim())
+      .filter((item) => item.length > 0)
+      .slice(0, STEER_MEMORY_MAX_ITEMS);
   }
 
   private async _onChatMessage(
@@ -474,13 +903,35 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, AgentArgs> {
 
       const modelMessages = messagesForAgent.toSpliced(lastUserIdx, 0, immediateSystemMessage);
 
-      const stream = await agent.streamText(modelMessages, {
-        abortSignal: options?.abortSignal,
-      });
+      const runId = `run-${crypto.randomUUID()}`;
+      await this._beginChatRun(runId);
+      let stream: Awaited<ReturnType<PlanAgent["streamText"]>>;
+      try {
+        stream = await agent.streamText(modelMessages, {
+          abortSignal: options?.abortSignal,
+        });
+      } catch (error) {
+        await this._endChatRun();
+        throw error;
+      }
 
       return createUIMessageStreamResponse({
         stream: createUIMessageStream({
-          execute: ({ writer }) => parseStreamToUI(stream.fullStream, writer),
+          execute: async ({ writer }) => {
+            this._attachChatRunWriter(writer);
+            try {
+              await parseStreamToUI(stream.fullStream, writer);
+              await this._withSteerQueueLock(() => this._flushLiveSteerQueue());
+              await this._drainPostFinishSteerQueue({
+                agent,
+                modelMessages,
+                abortSignal: options?.abortSignal,
+                writer,
+              });
+            } finally {
+              await this._endChatRun();
+            }
+          },
         }),
       });
     } catch (error) {
@@ -512,4 +963,68 @@ function resolveDurationMs(value: unknown, fallback: number): number {
     }
   }
   return fallback;
+}
+
+function collectSteeringDirectives(input: SteerQueueInput): string[] {
+  const fromSingle = [input.directive, input.text, input.content]
+    .filter((value): value is string => typeof value === "string")
+    .map((value) => value.trim())
+    .filter((value) => value.length > 0);
+  const fromMany = (input.directives ?? [])
+    .map((value) => value.trim())
+    .filter((value) => value.length > 0);
+
+  return fromSingle.concat(fromMany);
+}
+
+function mergeSteeringItemsForPrepareMessages(
+  pendingItems: SteerQueueItem[],
+  history: string[],
+): SteerQueueItem[] {
+  const now = Date.now();
+  const mergedTexts: string[] = [];
+  const seen = new Set<string>();
+
+  for (const item of pendingItems) {
+    const text = item.text.trim();
+    if (!text || seen.has(text)) continue;
+    mergedTexts.push(text);
+    seen.add(text);
+  }
+
+  for (const text of history) {
+    const normalized = text.trim();
+    if (!normalized || seen.has(normalized)) continue;
+    mergedTexts.push(normalized);
+    seen.add(normalized);
+  }
+
+  const boundedTexts = pruneSteeringHistoryByBudget(mergedTexts);
+  return boundedTexts.map((text, index) => ({
+    id: `steer-context-${now}-${index}`,
+    text,
+    source: "live",
+    status: "done",
+    createdAt: now,
+  }));
+}
+
+function pruneSteeringHistoryByBudget(items: string[]): string[] {
+  const next: string[] = [];
+  let usedChars = 0;
+
+  for (const item of items) {
+    const normalized = item.trim();
+    if (!normalized) continue;
+
+    const nextChars = usedChars + normalized.length;
+    if (nextChars > STEER_MEMORY_MAX_CHARS || next.length >= STEER_MEMORY_MAX_ITEMS) {
+      break;
+    }
+
+    next.push(normalized);
+    usedChars = nextChars;
+  }
+
+  return next;
 }
