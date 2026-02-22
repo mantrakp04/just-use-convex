@@ -195,7 +195,7 @@ async function createSubagents({
 }): Promise<Agent[]> {
   const toolkitPromises: Promise<Toolkit>[] = [];
   if (sandbox && daytona) {
-    toolkitPromises.push(createDaytonaToolkit(daytona, sandbox));
+    toolkitPromises.push(createDaytonaToolkit(sandbox, convexAdapter));
   }
   toolkitPromises.push(createWebSearchToolkit());
   if (convexAdapter) {

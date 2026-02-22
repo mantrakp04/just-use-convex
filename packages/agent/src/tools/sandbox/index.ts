@@ -1,6 +1,14 @@
 import { type InterpreterContext } from '@daytonaio/toolbox-api-client';
-import { Daytona, type Sandbox } from '@daytonaio/sdk';
+import { type Sandbox } from '@daytonaio/sdk';
 import { createTool, type Toolkit } from '@voltagent/core';
+import { api } from '@just-use-convex/backend/convex/_generated/api';
+import {
+  getAttachmentFileNameFromPath,
+  inferAttachmentContentType,
+  toHexHash,
+  uploadBytesToConvexStorage,
+} from '@just-use-convex/backend/convex/attachments/client';
+import type { ConvexAdapter } from '@just-use-convex/backend/convex/lib/convexAdapter';
 import { SandboxPtyService } from './pty';
 import {
   editSchema,
@@ -17,7 +25,10 @@ import { SandboxFsService } from './fs';
 
 const codeInterpreterContexts = new Map<string, InterpreterContext>();
 
-export async function createDaytonaToolkit(daytona: Daytona, sandbox: Sandbox): Promise<Toolkit> {
+export async function createDaytonaToolkit(
+  sandbox: Sandbox,
+  convexAdapter: ConvexAdapter | null,
+): Promise<Toolkit> {
   const list = createTool({
     name: 'list',
     description:
@@ -107,14 +118,34 @@ export async function createDaytonaToolkit(daytona: Daytona, sandbox: Sandbox): 
 
   const generate_download_url = createTool({
     name: 'generate_download_url',
-    description: 'Generate a direct download URL for a sandbox file.',
+    description: 'Upload a sandbox file into Convex attachments and return storageId with URL.',
     parameters: generateDownloadUrlSchema,
     execute: async (input) => {
-      const baseUrl = await daytona.getProxyToolboxUrl(sandbox.id, sandbox.target);
-      const url = new URL(`${baseUrl.replace(/\/$/, '')}/files/download`);
-      url.searchParams.set('path', input.path);
+      if (!convexAdapter) {
+        throw new Error('Convex adapter is required to upload attachments');
+      }
+      if (convexAdapter.getTokenType() !== 'jwt') {
+        throw new Error('Attachment upload is only supported for JWT-authenticated chats');
+      }
 
-      return { url: url.toString() };
+      const fileBytes = await sandbox.fs.downloadFile(input.path);
+      const fileName = getAttachmentFileNameFromPath(input.path);
+      const contentType = inferAttachmentContentType(fileName);
+      const uploadUrl = await convexAdapter.mutation(api.attachments.index.generateUploadUrl, {});
+      const uploadResult = await uploadBytesToConvexStorage(uploadUrl, fileBytes, contentType);
+      const hash = await toHexHash(fileBytes);
+      const attachment = await convexAdapter.mutation(api.attachments.index.createFromHash, {
+        hash,
+        storageId: uploadResult.storageId,
+        size: fileBytes.byteLength,
+        fileName,
+        contentType,
+      });
+
+      return {
+        storageId: attachment.globalAttachment.storageId,
+        url: attachment.url,
+      };
     },
   });
 

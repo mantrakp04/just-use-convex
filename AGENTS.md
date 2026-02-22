@@ -108,6 +108,7 @@ User uses casual language ("bro", "dawg", "ugh"). Keep responses terse and actio
 - **DRY the code** — reuse existing utilities
 - **Clean up after approach changes** — remove stale paths/helpers when method changes
 - **Split oversized modules** — break complex files into focused, manageable units
+- **Prefer workspace catalog dependencies** — add new deps to root `workspaces.catalog` and consume via `catalog:` when possible
 - **Ask clarifying questions** if requirements are unclear
 
 ## DON'T

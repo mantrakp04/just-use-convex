@@ -20,6 +20,7 @@
     "convex-ents": "^0.20.0",
     "convex-helpers": "^0.1.113",
     "dotenv": "catalog:",
+    "mime": "catalog:",
     "zod": "catalog:"
   },
   "devDependencies": {
