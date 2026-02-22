@@ -1,8 +1,6 @@
 import { useRef, useMemo, useEffect } from "react";
-import { Canvas, useFrame } from "@react-three/fiber";
-import { Environment, OrbitControls } from "@react-three/drei";
+import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
-import { useTheme } from "next-themes";
 
 const BOUNDS = 18;
 const STEP_LENGTH = 1.5;
@@ -59,7 +57,7 @@ class PipePath {
   }
 }
 
-function PipesEngine() {
+export function WindowsPipes() {
   const maxSegments = 10000;
   const cylinderRef = useRef<THREE.InstancedMesh>(null);
   const sphereRef = useRef<THREE.InstancedMesh>(null);
@@ -196,26 +194,5 @@ function PipesEngine() {
         <meshPhysicalMaterial roughness={0.1} metalness={0.9} clearcoat={1} clearcoatRoughness={0.1} />
       </instancedMesh>
     </group>
-  );
-}
-
-export function HeroScene() {
-  const { resolvedTheme } = useTheme();
-  const lightColor = resolvedTheme === "dark" ? "#ffffff" : "#000000";
-
-  return (
-    <div className="absolute inset-0 -z-10 bg-background overflow-hidden">
-      <Canvas camera={{ position: [0, 0, 35], fov: 50 }}>
-        <ambientLight intensity={resolvedTheme === "dark" ? 0.3 : 0.8} />
-        
-        <spotLight position={[20, 30, 20]} angle={0.4} penumbra={1} intensity={2} color={lightColor} />
-        <pointLight position={[-20, -20, -20]} intensity={1} color={lightColor} />
-        
-        <PipesEngine />
-        
-        <Environment preset={resolvedTheme === "dark" ? "night" : "city"} />
-        <OrbitControls enableZoom={false} enablePan={false} autoRotate autoRotateSpeed={0.8} />
-      </Canvas>
-    </div>
   );
 }
