@@ -55,6 +55,20 @@ export function useGithubIssuesCount() {
   });
 }
 
+export function useGithubPRsCount() {
+  return useQuery({
+    queryKey: ["github", "prs-count"],
+    queryFn: async () => {
+      const res = await fetch(
+        `https://api.github.com/search/issues?q=repo:${env.VITE_GITHUB_REPO}+type:pr+state:open&per_page=1`
+      );
+      if (!res.ok) throw new Error("Failed to fetch PRs count");
+      return (await res.json()) as GithubSearchResult;
+    },
+    staleTime: STALE_TIME,
+  });
+}
+
 export function useGithubMasterStatus() {
   return useQuery({
     queryKey: ["github", "status", "master"],
