@@ -124,23 +124,29 @@ export async function createDaytonaToolkit(
       if (!convexAdapter) {
         throw new Error('Convex adapter is required to upload attachments');
       }
-      if (convexAdapter.getTokenType() !== 'jwt') {
-        throw new Error('Attachment upload is only supported for JWT-authenticated chats');
-      }
 
       const fileBytes = await sandbox.fs.downloadFile(input.path);
       const fileName = getAttachmentFileNameFromPath(input.path);
       const contentType = inferAttachmentContentType(fileName);
-      const uploadUrl = await convexAdapter.mutation(api.attachments.index.generateUploadUrl, {});
+
+      const isExt = convexAdapter.getTokenType() === 'ext';
+      const uploadUrl = await convexAdapter.mutation(
+        isExt ? api.attachments.index.generateUploadUrlExt : api.attachments.index.generateUploadUrl,
+        {}
+      );
       const uploadResult = await uploadBytesToConvexStorage(uploadUrl, fileBytes, contentType);
       const hash = await toHexHash(fileBytes);
-      const attachment = await convexAdapter.mutation(api.attachments.index.createFromHash, {
+      const createArgs = {
         hash,
         storageId: uploadResult.storageId,
         size: fileBytes.byteLength,
         fileName,
         contentType,
-      });
+      };
+      const attachment = await convexAdapter.mutation(
+        isExt ? api.attachments.index.createFromHashExt : api.attachments.index.createFromHash,
+        createArgs
+      );
 
       return {
         storageId: attachment.globalAttachment.storageId,

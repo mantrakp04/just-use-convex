@@ -9,6 +9,7 @@
  */
 
 import type * as attachments_aggregates from "../attachments/aggregates.js";
+import type * as attachments_client from "../attachments/client.js";
 import type * as attachments_functions from "../attachments/functions.js";
 import type * as attachments_index from "../attachments/index.js";
 import type * as attachments_stats from "../attachments/stats.js";
@@ -69,6 +70,7 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   "attachments/aggregates": typeof attachments_aggregates;
+  "attachments/client": typeof attachments_client;
   "attachments/functions": typeof attachments_functions;
   "attachments/index": typeof attachments_index;
   "attachments/stats": typeof attachments_stats;

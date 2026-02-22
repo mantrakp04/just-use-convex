@@ -22,7 +22,7 @@ import {
 import { createDaytonaToolkit } from "../tools/sandbox";
 import { createWorkflowActionToolkit } from "../tools/workflow-actions";
 import { createWorkflowToolkit } from "../tools/workflows";
-import { Daytona, type Sandbox } from "@daytonaio/sdk";
+import { type Sandbox } from "@daytonaio/sdk";
 import type {
   AgentArgs,
   ChatRuntimeDoc,
@@ -37,7 +37,6 @@ type CreateWorkerPlanAgentArgs = {
   chatDoc: ChatRuntimeDoc | null;
   workflowDoc: WorkflowRuntimeDoc | null;
   convexAdapter: ConvexAdapter | null;
-  daytona: Daytona | null;
   sandbox: Sandbox | null;
   backgroundTaskStore: BackgroundTaskStore;
   truncatedOutputStore: TruncatedOutputStore;
@@ -51,7 +50,6 @@ export async function createWorkerPlanAgent({
   chatDoc,
   workflowDoc,
   convexAdapter,
-  daytona,
   sandbox,
   backgroundTaskStore,
   truncatedOutputStore,
@@ -73,7 +71,6 @@ export async function createWorkerPlanAgent({
     modeConfig,
     workflowDoc: modeConfig.mode === "workflow" ? workflowDoc : null,
     convexAdapter,
-    daytona,
     sandbox,
   });
   const systemPrompt = resolveSystemPrompt(modeConfig, chatDoc, workflowDoc);
@@ -187,14 +184,13 @@ async function createSubagents({
   modeConfig,
   workflowDoc,
   convexAdapter,
-  daytona,
   sandbox,
-}: Pick<CreateWorkerPlanAgentArgs, "modeConfig" | "workflowDoc" | "convexAdapter" | "daytona" | "sandbox"> & {
+}: Pick<CreateWorkerPlanAgentArgs, "modeConfig" | "workflowDoc" | "convexAdapter" | "sandbox"> & {
   model: string;
   reasoningEffort: AgentArgs["reasoningEffort"];
 }): Promise<Agent[]> {
   const toolkitPromises: Promise<Toolkit>[] = [];
-  if (sandbox && daytona) {
+  if (sandbox) {
     toolkitPromises.push(createDaytonaToolkit(sandbox, convexAdapter));
   }
   toolkitPromises.push(createWebSearchToolkit());
