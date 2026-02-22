@@ -27,11 +27,7 @@ export async function uploadBytesToConvexStorage(
   fileBytes: Uint8Array,
   contentType: string | undefined,
 ) {
-  const normalizedBytes = new Uint8Array(fileBytes);
-  const body = normalizedBytes.buffer.slice(
-    normalizedBytes.byteOffset,
-    normalizedBytes.byteOffset + normalizedBytes.byteLength,
-  );
+  const body = toUploadBody(fileBytes);
 
   const response = await fetch(uploadUrl, {
     method: "POST",
@@ -54,4 +50,17 @@ export async function uploadBytesToConvexStorage(
   }
 
   return { storageId: result.storageId };
+}
+
+function toUploadBody(fileBytes: Uint8Array): ArrayBuffer {
+  const { buffer, byteOffset, byteLength } = fileBytes;
+  if (buffer instanceof ArrayBuffer) {
+    if (byteOffset === 0 && byteLength === buffer.byteLength) {
+      return buffer;
+    }
+
+    return buffer.slice(byteOffset, byteOffset + byteLength);
+  }
+
+  return Uint8Array.from(fileBytes).buffer;
 }

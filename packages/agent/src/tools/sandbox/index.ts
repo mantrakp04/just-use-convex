@@ -7,7 +7,7 @@ import {
   inferAttachmentContentType,
   toHexHash,
   uploadBytesToConvexStorage,
-} from '@just-use-convex/backend/convex/attachments/client';
+} from '@just-use-convex/backend/convex/shared/attachments';
 import type { ConvexAdapter } from '@just-use-convex/backend/convex/lib/convexAdapter';
 import { SandboxPtyService } from './pty';
 import {

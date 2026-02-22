@@ -9,7 +9,6 @@
  */
 
 import type * as attachments_aggregates from "../attachments/aggregates.js";
-import type * as attachments_client from "../attachments/client.js";
 import type * as attachments_functions from "../attachments/functions.js";
 import type * as attachments_index from "../attachments/index.js";
 import type * as attachments_stats from "../attachments/stats.js";
@@ -34,6 +33,7 @@ import type * as sandboxes_nodeFunctions from "../sandboxes/nodeFunctions.js";
 import type * as sandboxes_stats from "../sandboxes/stats.js";
 import type * as sandboxes_types from "../sandboxes/types.js";
 import type * as shared_aggregates from "../shared/aggregates.js";
+import type * as shared_attachments from "../shared/attachments.js";
 import type * as shared_auth from "../shared/auth.js";
 import type * as shared_pagination from "../shared/pagination.js";
 import type * as shared_patch from "../shared/patch.js";
@@ -70,7 +70,6 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   "attachments/aggregates": typeof attachments_aggregates;
-  "attachments/client": typeof attachments_client;
   "attachments/functions": typeof attachments_functions;
   "attachments/index": typeof attachments_index;
   "attachments/stats": typeof attachments_stats;
@@ -95,6 +94,7 @@ declare const fullApi: ApiFromModules<{
   "sandboxes/stats": typeof sandboxes_stats;
   "sandboxes/types": typeof sandboxes_types;
   "shared/aggregates": typeof shared_aggregates;
+  "shared/attachments": typeof shared_attachments;
   "shared/auth": typeof shared_auth;
   "shared/pagination": typeof shared_pagination;
   "shared/patch": typeof shared_patch;
