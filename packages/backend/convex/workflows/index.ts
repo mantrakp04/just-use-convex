@@ -145,3 +145,17 @@ export const retryExecution = zMutation({
     return await functions.RetryExecution(ctx, args);
   },
 });
+
+export const recordWorkflowStepOutcomeExt = zExternalMutation({
+  args: types.RecordWorkflowStepOutcomeArgs,
+  handler: async (ctx, args): Promise<ReturnType<typeof functions.RecordWorkflowStepOutcome>> => {
+    return await functions.RecordWorkflowStepOutcome(ctx, args);
+  },
+});
+
+export const finalizeWorkflowStepsExt = zExternalMutation({
+  args: types.FinalizeWorkflowStepsArgs,
+  handler: async (ctx, args): Promise<ReturnType<typeof functions.FinalizeWorkflowSteps>> => {
+    return await functions.FinalizeWorkflowSteps(ctx, args);
+  },
+});

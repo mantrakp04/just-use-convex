@@ -24,8 +24,12 @@ import { parseStreamToUI } from "../utils/fullStreamParser";
 import {
   BackgroundTaskStore,
   TruncatedOutputStore,
+  cancelBackgroundTask,
+  getBackgroundTask,
+  listBackgroundTasks,
   patchToolWithBackgroundSupport,
 } from "../tools/utils/wrapper";
+import type { BackgroundTaskFilterStatus } from "../tools/utils/wrapper";
 import { generateTitle } from "../agent/chat-meta";
 import {
   extractMessageText,
@@ -61,6 +65,18 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, AgentArgs> {
   private planAgent: PlanAgent | null = null;
   private backgroundTaskStore = new BackgroundTaskStore(this.ctx.waitUntil.bind(this.ctx));
   private truncatedOutputStore = new TruncatedOutputStore();
+  private readonly maxToolDurationMs = resolveDurationMs(
+    agentDefaults.MAX_TOOL_DURATION_MS,
+    600_000,
+  );
+  private readonly maxBackgroundDurationMs = resolveDurationMs(
+    agentDefaults.MAX_BACKGROUND_DURATION_MS,
+    3_600_000,
+  );
+  private readonly backgroundTaskPollIntervalMs = resolveDurationMs(
+    agentDefaults.BACKGROUND_TASK_POLL_INTERVAL_MS,
+    3_000,
+  );
   private chatDoc: ChatRuntimeDoc | null = null;
   private workflowDoc: WorkflowRuntimeDoc | null = null;
   private callableFunctions: CallableFunctionInstance[] = [];
@@ -149,10 +165,9 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, AgentArgs> {
 
     const tasks = agent.getTools().find((t) => t.name === "task");
     if (tasks) {
-      const maxBackgroundDuration = Number(agentDefaults.MAX_BACKGROUND_DURATION_MS);
       patchToolWithBackgroundSupport(tasks, this.backgroundTaskStore, this.truncatedOutputStore, {
-        maxDuration: 30 * 60 * 1000,
-        maxBackgroundDuration: maxBackgroundDuration > 0 ? maxBackgroundDuration : undefined,
+        maxDuration: this.maxToolDurationMs,
+        maxBackgroundDuration: this.maxBackgroundDurationMs,
         allowAgentSetDuration: true,
         allowBackground: true,
       });
@@ -225,6 +240,11 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, AgentArgs> {
     if (!executionId || !this.convexAdapter) {
       return;
     }
+
+    await this.convexAdapter.mutation(
+      api.workflows.index.finalizeWorkflowStepsExt,
+      { executionId },
+    ).catch(() => {});
 
     await this.convexAdapter.mutation(
       api.workflows.index.updateExecutionStatusExt,
@@ -321,6 +341,44 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, AgentArgs> {
     await this.persistMessages(messages);
   }
 
+  @callable()
+  async listBackgroundTasks(input?: { status?: BackgroundTaskFilterStatus }) {
+    return listBackgroundTasks(this.backgroundTaskStore, input?.status ?? "all");
+  }
+
+  @callable()
+  async getBackgroundTask(input: {
+    taskId: string;
+    waitForCompletion?: boolean;
+    timeoutMs?: number;
+  }) {
+    if (!input?.taskId || input.taskId.trim().length === 0) {
+      throw new Error("taskId is required");
+    }
+
+    return getBackgroundTask(
+      this.backgroundTaskStore,
+      {
+        taskId: input.taskId,
+        waitForCompletion: input.waitForCompletion,
+        timeoutMs: input.timeoutMs,
+      },
+      {
+        pollIntervalMs: this.backgroundTaskPollIntervalMs,
+        defaultTimeoutMs: this.maxToolDurationMs,
+      },
+    );
+  }
+
+  @callable()
+  async cancelBackgroundTask(input: { taskId: string }) {
+    if (!input?.taskId || input.taskId.trim().length === 0) {
+      throw new Error("taskId is required");
+    }
+
+    return cancelBackgroundTask(this.backgroundTaskStore, input.taskId);
+  }
+
   private async _onChatMessage(
     _onFinish: StreamTextOnFinishCallback<ToolSet>,
     options?: OnChatMessageOptions
@@ -368,6 +426,11 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, AgentArgs> {
       if (isWorkflow && this.state.modeConfig && this.workflowDoc) {
         const modelMessages = buildWorkflowExecutionMessages();
         const result = await agent.generateText(modelMessages);
+
+        await this.convexAdapter.mutation(
+          api.workflows.index.finalizeWorkflowStepsExt,
+          { executionId: modeConfig.executionId },
+        );
 
         await this.convexAdapter.mutation(
           api.workflows.index.updateExecutionStatusExt,
@@ -436,4 +499,17 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, AgentArgs> {
   override async onChatMessage(onFinish: StreamTextOnFinishCallback<ToolSet>, options?: OnChatMessageOptions): Promise<Response> {
     return await this._onChatMessage(onFinish, options);
   }
+}
+
+function resolveDurationMs(value: unknown, fallback: number): number {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return Math.max(1, Math.floor(value));
+  }
+  if (typeof value === "string") {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed)) {
+      return Math.max(1, Math.floor(parsed));
+    }
+  }
+  return fallback;
 }

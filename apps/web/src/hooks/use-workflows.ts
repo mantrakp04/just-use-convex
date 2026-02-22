@@ -9,6 +9,7 @@ import { toast } from "sonner";
 
 export type Workflow = WorkflowWithSandbox;
 export type WorkflowExecution = FunctionReturnType<typeof api.workflows.index.listExecutions>["page"][number];
+export type HydratedWorkflowExecution = FunctionReturnType<typeof api.workflows.index.getExecution>;
 type RetryExecutionArgs = FunctionArgs<typeof api.workflows.index.retryExecution>;
 
 const INITIAL_NUM_ITEMS = 20;
@@ -113,4 +114,14 @@ export function useWorkflowExecutions(workflowId: Id<"workflows"> | undefined) {
     workflowId ? { workflowId } : "skip",
     { initialNumItems: INITIAL_NUM_ITEMS }
   );
+}
+
+export function useWorkflowExecution(executionId: Id<"workflowExecutions"> | undefined) {
+  return useQuery({
+    ...convexQuery(
+      api.workflows.index.getExecution,
+      executionId ? { _id: executionId } : "skip"
+    ),
+    enabled: !!executionId,
+  });
 }

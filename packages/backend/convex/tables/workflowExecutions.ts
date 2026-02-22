@@ -10,6 +10,10 @@ export const workflowExecutionsZodSchema = {
   organizationId: z.string(),
   memberId: z.string(),
   status: executionStatusSchema.exclude(["idle"]),
+  requiredActionsTotal: z.number(),
+  requiredActionsSuccess: z.number(),
+  requiredActionsFailure: z.number(),
+  requiredActionsStatus: z.enum(["pending", "success", "failure"]),
   triggerPayload: z.string().optional(),
   error: z.string().optional(),
   agentOutput: z.string().optional(),
@@ -35,4 +39,5 @@ const workflowExecutionsTable = WorkflowExecutions.table
   .index("organizationId_status", ["organizationId", "status", "startedAt"]);
 
 export const workflowExecutionsEnt = defineEntFromTable(workflowExecutionsTable)
-  .edge("workflow", { to: "workflows", field: "workflowId" });
+  .edge("workflow", { to: "workflows", field: "workflowId" })
+  .edges("steps", { to: "workflowSteps", ref: "workflowExecutionId" });

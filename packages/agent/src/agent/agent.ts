@@ -66,6 +66,11 @@ export async function createWorkerPlanAgent({
 
   setWaitUntil(waitUntil);
   configureVoltOpsClient(env);
+  const defaultToolTimeoutMs = normalizeDuration(env.MAX_TOOL_DURATION_MS, 600_000);
+  const backgroundTaskPollIntervalMs = normalizeDuration(
+    env.BACKGROUND_TASK_POLL_INTERVAL_MS,
+    3_000,
+  );
 
   const subagents = await createSubagents({
     model: state.model,
@@ -83,7 +88,10 @@ export async function createWorkerPlanAgent({
     systemPrompt,
     model: createAiClient(state.model, state.reasoningEffort),
     tools: [
-      createBackgroundTaskToolkit(backgroundTaskStore, truncatedOutputStore),
+      createBackgroundTaskToolkit(backgroundTaskStore, truncatedOutputStore, {
+        defaultTimeoutMs: defaultToolTimeoutMs,
+        pollIntervalMs: backgroundTaskPollIntervalMs,
+      }),
       ...(modeConfig.mode === "chat" ? [createAskUserToolkit()] : []),
     ],
     planning: false,
@@ -141,6 +149,19 @@ export async function createWorkerPlanAgent({
   ]);
 
   return agent;
+}
+
+function normalizeDuration(value: unknown, fallback: number): number {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return Math.max(1, Math.floor(value));
+  }
+  if (typeof value === "string") {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed)) {
+      return Math.max(1, Math.floor(parsed));
+    }
+  }
+  return fallback;
 }
 
 function configureVoltOpsClient(env: typeof worker.Env): void {
@@ -206,7 +227,10 @@ async function createSubagents({
     if (!convexAdapter) {
       throw new Error("No convex adapter");
     }
-    toolkitPromises.push(createWorkflowActionToolkit(workflowDoc.allowedActions, convexAdapter));
+    toolkitPromises.push(createWorkflowActionToolkit(workflowDoc.allowedActions, {
+      executionId: modeConfig.executionId,
+      convexAdapter,
+    }));
   }
 
   const toolkits = await Promise.all(toolkitPromises);

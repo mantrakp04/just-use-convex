@@ -310,7 +310,8 @@ export async function GetExecution(ctx: zQueryCtx, args: z.infer<typeof types.Ge
     "You are not authorized to view this execution",
     "You are not authorized to view this execution"
   );
-  return execution.doc();
+  const steps = await listWorkflowStepsByExecutionId(ctx, execution._id);
+  return { ...execution.doc(), steps };
 }
 
 // ═══════════════════════════════════════════════════════════════════
@@ -319,15 +320,31 @@ export async function GetExecution(ctx: zQueryCtx, args: z.infer<typeof types.Ge
 
 export async function CreateExecution(ctx: zMutationCtx, args: z.infer<typeof types.CreateExecutionArgs>) {
   const workflow = await ctx.table("workflows").getX(args.workflowId);
+  const now = Date.now();
+  const requiredActions = dedupeAllowedActions(workflow.allowedActions);
 
   const execution = await ctx.table("workflowExecutions").insert({
     workflowId: args.workflowId,
     organizationId: workflow.organizationId,
     memberId: workflow.memberId,
     status: "pending",
+    requiredActionsTotal: requiredActions.length,
+    requiredActionsSuccess: 0,
+    requiredActionsFailure: 0,
+    requiredActionsStatus: requiredActions.length === 0 ? "success" : "pending",
     triggerPayload: args.triggerPayload,
-    startedAt: Date.now(),
+    startedAt: now,
   });
+
+  await Promise.all(requiredActions.map((action) => ctx.table("workflowSteps").insert({
+    workflowExecutionId: execution,
+    action,
+    status: "pending",
+    callCount: 0,
+    successCount: 0,
+    failureCount: 0,
+    updatedAt: now,
+  })));
 
   return {
     executionId: execution,
@@ -414,6 +431,109 @@ export async function RetryExecution(ctx: zMutationCtx, args: z.infer<typeof typ
   return { ok: true };
 }
 
+export async function RecordWorkflowStepOutcome(
+  ctx: zMutationCtx,
+  args: z.infer<typeof types.RecordWorkflowStepOutcomeArgs>
+) {
+  assertPermission(
+    ctx.identity.organizationRole,
+    { workflow: ["execute"] },
+    "You are not authorized to record workflow step outcomes"
+  );
+
+  const execution = await ctx.table("workflowExecutions").getX(args.executionId);
+  assertOrganizationAccess(
+    execution.organizationId,
+    ctx.identity.activeOrganizationId,
+    "You are not authorized to record workflow step outcomes"
+  );
+  assertScopedPermission(
+    ctx.identity.organizationRole,
+    ctx.identity.memberId,
+    execution.memberId,
+    { workflow: ["execute"] },
+    { workflow: ["execute"] },
+    "You are not authorized to record workflow step outcomes",
+    "You are not authorized to record workflow step outcomes"
+  );
+
+  const step = await ctx.db
+    .query("workflowSteps")
+    .withIndex("workflowExecutionId_action", (q) => q
+      .eq("workflowExecutionId", args.executionId)
+      .eq("action", args.action)
+    )
+    .unique();
+
+  if (!step) {
+    throw new Error(`Workflow step not found for action "${args.action}"`);
+  }
+
+  const now = Date.now();
+  const nextStatus =
+    step.status === "success" || args.outcome === "success"
+      ? "success"
+      : "failure";
+  await ctx.db.patch(step._id, {
+    status: nextStatus,
+    callCount: step.callCount + 1,
+    successCount: step.successCount + (args.outcome === "success" ? 1 : 0),
+    failureCount: step.failureCount + (args.outcome === "failure" ? 1 : 0),
+    lastError: nextStatus === "failure" ? args.error : undefined,
+    failureReason: nextStatus === "failure" ? "tool_error" : undefined,
+    firstCalledAt: step.firstCalledAt ?? now,
+    lastCalledAt: now,
+    updatedAt: now,
+  });
+
+  const summary = await recomputeWorkflowStepSummary(ctx, execution._id);
+  await execution.patch(summary);
+
+  return { ok: true, ...summary };
+}
+
+export async function FinalizeWorkflowSteps(
+  ctx: zMutationCtx,
+  args: z.infer<typeof types.FinalizeWorkflowStepsArgs>
+) {
+  assertPermission(
+    ctx.identity.organizationRole,
+    { workflow: ["execute"] },
+    "You are not authorized to finalize workflow steps"
+  );
+
+  const execution = await ctx.table("workflowExecutions").getX(args.executionId);
+  assertOrganizationAccess(
+    execution.organizationId,
+    ctx.identity.activeOrganizationId,
+    "You are not authorized to finalize workflow steps"
+  );
+  assertScopedPermission(
+    ctx.identity.organizationRole,
+    ctx.identity.memberId,
+    execution.memberId,
+    { workflow: ["execute"] },
+    { workflow: ["execute"] },
+    "You are not authorized to finalize workflow steps",
+    "You are not authorized to finalize workflow steps"
+  );
+
+  const now = Date.now();
+  const steps = await listWorkflowStepsByExecutionId(ctx, args.executionId);
+  const pendingSteps = steps.filter((step) => step.status === "pending");
+
+  await Promise.all(pendingSteps.map((step) => ctx.db.patch(step._id, {
+    status: "failure",
+    failureReason: "not_called",
+    updatedAt: now,
+  })));
+
+  const summary = await recomputeWorkflowStepSummary(ctx, execution._id);
+  await execution.patch(summary);
+
+  return { ok: true, updatedSteps: pendingSteps.length, ...summary };
+}
+
 // ═══════════════════════════════════════════════════════════════════
 // HELPERS
 // ═══════════════════════════════════════════════════════════════════
@@ -425,4 +545,55 @@ function generateWebhookSecret(): string {
 
 function isTerminalExecutionStatus(status: string): boolean {
   return status === "completed" || status === "failed" || status === "cancelled";
+}
+
+function dedupeAllowedActions(actions: z.infer<typeof types.Workflow>["allowedActions"]) {
+  return [...new Set(actions)];
+}
+
+async function listWorkflowStepsByExecutionId(
+  ctx: Pick<zQueryCtx | zMutationCtx, "db">,
+  executionId: z.infer<typeof types.WorkflowExecution>["_id"]
+) {
+  return await ctx.db
+    .query("workflowSteps")
+    .withIndex("workflowExecutionId_updatedAt", (q) => q.eq("workflowExecutionId", executionId))
+    .collect();
+}
+
+async function recomputeWorkflowStepSummary(
+  ctx: Pick<zMutationCtx, "db">,
+  executionId: z.infer<typeof types.WorkflowExecution>["_id"]
+) {
+  const steps = await listWorkflowStepsByExecutionId(ctx, executionId);
+  const requiredActionsTotal = steps.length;
+  const requiredActionsSuccess = steps.filter((step) => step.status === "success").length;
+  const requiredActionsFailure = steps.filter((step) => step.status === "failure").length;
+
+  const requiredActionsStatus = deriveRequiredActionsStatus({
+    requiredActionsTotal,
+    requiredActionsSuccess,
+    requiredActionsFailure,
+  });
+
+  return {
+    requiredActionsTotal,
+    requiredActionsSuccess,
+    requiredActionsFailure,
+    requiredActionsStatus,
+  };
+}
+
+function deriveRequiredActionsStatus(summary: {
+  requiredActionsTotal: number;
+  requiredActionsSuccess: number;
+  requiredActionsFailure: number;
+}) {
+  if (summary.requiredActionsFailure > 0) {
+    return "failure" as const;
+  }
+  if (summary.requiredActionsTotal === 0 || summary.requiredActionsSuccess === summary.requiredActionsTotal) {
+    return "success" as const;
+  }
+  return "pending" as const;
 }

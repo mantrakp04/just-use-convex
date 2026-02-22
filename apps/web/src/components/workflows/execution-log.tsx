@@ -1,5 +1,10 @@
 import type { Id } from "@just-use-convex/backend/convex/_generated/dataModel";
-import { useWorkflowExecutions, useWorkflows, type WorkflowExecution } from "@/hooks/use-workflows";
+import {
+  useWorkflowExecution,
+  useWorkflowExecutions,
+  useWorkflows,
+  type WorkflowExecution,
+} from "@/hooks/use-workflows";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -69,6 +74,12 @@ function ExecutionItem({
   isRetrying: boolean;
 }) {
   const [expanded, setExpanded] = useState(false);
+  const { data: hydratedExecution, isLoading: isLoadingHydratedExecution } = useWorkflowExecution(
+    expanded ? execution._id : undefined
+  );
+  const executionSteps = hydratedExecution?.steps ?? [];
+  const executionError = hydratedExecution?.error ?? execution.error;
+  const executionOutput = hydratedExecution?.agentOutput ?? execution.agentOutput;
 
   const statusColor: Record<string, "default" | "secondary" | "destructive" | undefined> = {
     pending: "secondary",
@@ -89,6 +100,14 @@ function ExecutionItem({
           <Badge variant={badgeVariant}>
             {execution.status}
           </Badge>
+          <Badge variant={requiredActionsBadgeVariant(execution.requiredActionsStatus)}>
+            actions: {execution.requiredActionsStatus}
+          </Badge>
+          <span className="text-xs text-muted-foreground">
+            {execution.requiredActionsSuccess}/{execution.requiredActionsTotal} success
+            {" · "}
+            {execution.requiredActionsFailure} failure
+          </span>
           <span className="text-xs text-muted-foreground">
             {new Date(execution.startedAt).toLocaleString()}
           </span>
@@ -117,17 +136,61 @@ function ExecutionItem({
 
       {expanded && (
         <div className="mt-2 flex flex-col gap-2">
-          {execution.error && (
+          {isLoadingHydratedExecution && (
+            <div className="flex flex-col gap-2">
+              {Array.from({ length: 2 }).map((_, index) => (
+                <div key={index} className="h-14 bg-muted animate-pulse rounded" />
+              ))}
+            </div>
+          )}
+
+          {!isLoadingHydratedExecution && executionSteps.length > 0 && (
+            <div className="flex flex-col gap-2">
+              {executionSteps.map((step) => (
+                <div key={step._id} className="rounded border border-border bg-muted/30 p-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-sm font-medium">{step.action}</span>
+                    <Badge
+                      variant={
+                        step.status === "failure"
+                          ? "destructive"
+                          : step.status === "success"
+                            ? "default"
+                            : "secondary"
+                      }
+                    >
+                      {step.status}
+                    </Badge>
+                  </div>
+                  <div className="mt-1 text-xs text-muted-foreground">
+                    calls: {step.callCount} · success: {step.successCount} · failure: {step.failureCount}
+                  </div>
+                  {step.failureReason && (
+                    <div className="mt-1 text-xs text-destructive">
+                      failureReason: {step.failureReason}
+                    </div>
+                  )}
+                  {step.lastError && (
+                    <div className="mt-1 text-xs text-destructive/90">
+                      lastError: {step.lastError}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+
+          {executionError && (
             <div className="text-sm text-destructive bg-destructive/10 p-2 rounded">
-              {execution.error}
+              {executionError}
             </div>
           )}
-          {execution.agentOutput && (
+          {executionOutput && (
             <div className="text-sm bg-muted p-2 rounded">
-              <pre className="whitespace-pre-wrap font-sans">{execution.agentOutput}</pre>
+              <pre className="whitespace-pre-wrap font-sans">{executionOutput}</pre>
             </div>
           )}
-          {!execution.error && !execution.agentOutput && (
+          {!isLoadingHydratedExecution && executionSteps.length === 0 && !executionError && !executionOutput && (
             <p className="text-sm text-muted-foreground">No output yet.</p>
           )}
         </div>
@@ -143,4 +206,10 @@ function formatDuration(ms: number): string {
   const minutes = Math.floor(seconds / 60);
   const remainingSeconds = seconds % 60;
   return `${minutes}m ${remainingSeconds}s`;
+}
+
+function requiredActionsBadgeVariant(status: WorkflowExecution["requiredActionsStatus"]): "default" | "secondary" | "destructive" {
+  if (status === "success") return "default";
+  if (status === "failure") return "destructive";
+  return "secondary";
 }
