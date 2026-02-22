@@ -1,5 +1,5 @@
 import type { Id } from "@just-use-convex/backend/convex/_generated/dataModel";
-import { useWorkflowExecutions, type WorkflowExecution } from "@/hooks/use-workflows";
+import { useWorkflowExecutions, useWorkflows, type WorkflowExecution } from "@/hooks/use-workflows";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -11,6 +11,7 @@ interface ExecutionLogProps {
 
 export function ExecutionLog({ workflowId }: ExecutionLogProps) {
   const { results: executions, status, loadMore, isLoading } = useWorkflowExecutions(workflowId);
+  const { retryExecution, isRetryingExecution } = useWorkflows();
 
   return (
     <Card className="flex min-h-0 flex-col overflow-hidden">
@@ -37,7 +38,12 @@ export function ExecutionLog({ workflowId }: ExecutionLogProps) {
             <div className="min-h-0 flex-1 overflow-y-auto">
               <div className="flex flex-col gap-2">
                 {executions.map((execution) => (
-                  <ExecutionItem key={execution._id} execution={execution} />
+                  <ExecutionItem
+                    key={execution._id}
+                    execution={execution}
+                    onRetry={() => retryExecution({ executionId: execution._id })}
+                    isRetrying={isRetryingExecution}
+                  />
                 ))}
               </div>
             </div>
@@ -53,7 +59,15 @@ export function ExecutionLog({ workflowId }: ExecutionLogProps) {
   );
 }
 
-function ExecutionItem({ execution }: { execution: WorkflowExecution }) {
+function ExecutionItem({
+  execution,
+  onRetry,
+  isRetrying,
+}: {
+  execution: WorkflowExecution;
+  onRetry: () => Promise<void>;
+  isRetrying: boolean;
+}) {
   const [expanded, setExpanded] = useState(false);
 
   const statusColor: Record<string, "default" | "secondary" | "destructive" | undefined> = {
@@ -79,11 +93,26 @@ function ExecutionItem({ execution }: { execution: WorkflowExecution }) {
             {new Date(execution.startedAt).toLocaleString()}
           </span>
         </div>
-        {execution.completedAt && (
-          <span className="text-xs text-muted-foreground">
-            {formatDuration(execution.completedAt - execution.startedAt)}
-          </span>
-        )}
+        <div className="flex items-center gap-2" onClick={(event) => event.stopPropagation()}>
+          {execution.completedAt && (
+            <span className="text-xs text-muted-foreground">
+              {formatDuration(execution.completedAt - execution.startedAt)}
+            </span>
+          )}
+          {execution.status === "failed" && (
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={isRetrying}
+              onClick={async (event) => {
+                event.stopPropagation();
+                await onRetry();
+              }}
+            >
+              Retry
+            </Button>
+          )}
+        </div>
       </div>
 
       {expanded && (

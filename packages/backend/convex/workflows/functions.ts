@@ -380,6 +380,40 @@ export async function UpdateExecutionStatus(ctx: zMutationCtx, args: z.infer<typ
   return execution;
 }
 
+export async function RetryExecution(ctx: zMutationCtx, args: z.infer<typeof types.RetryExecutionArgs>) {
+  const execution = await ctx.table("workflowExecutions").getX(args.executionId);
+  assertOrganizationAccess(
+    execution.organizationId,
+    ctx.identity.activeOrganizationId,
+    "You are not authorized to retry this execution"
+  );
+  assertScopedPermission(
+    ctx.identity.organizationRole,
+    ctx.identity.memberId,
+    execution.memberId,
+    { workflow: ["execute"] },
+    { workflow: ["execute"] },
+    "You are not authorized to retry this execution",
+    "You are not authorized to retry this execution"
+  );
+
+  if (execution.status !== "failed") {
+    throw new Error(`Only failed workflow executions can be retried (current status: ${execution.status})`);
+  }
+
+  await ctx.scheduler.runAfter(0, internal.workflows.dispatch.dispatchWorkflow, {
+    workflowId: execution.workflowId,
+    triggerPayload: execution.triggerPayload,
+    userId: ctx.identity.userId,
+    activeOrganizationId: ctx.identity.activeOrganizationId,
+    organizationRole: ctx.identity.organizationRole,
+    memberId: ctx.identity.memberId,
+    activeTeamId: ctx.identity.activeTeamId,
+  });
+
+  return { ok: true };
+}
+
 // ═══════════════════════════════════════════════════════════════════
 // HELPERS
 // ═══════════════════════════════════════════════════════════════════

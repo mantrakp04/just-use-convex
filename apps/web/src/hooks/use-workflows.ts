@@ -3,12 +3,13 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { useConvexMutation, useConvexPaginatedQuery, convexQuery } from "@convex-dev/react-query";
 import { api } from "@just-use-convex/backend/convex/_generated/api";
 import type { Id } from "@just-use-convex/backend/convex/_generated/dataModel";
-import type { FunctionReturnType } from "convex/server";
+import type { FunctionArgs, FunctionReturnType } from "convex/server";
 import type { WorkflowWithSandbox } from "@convex/workflows/types";
 import { toast } from "sonner";
 
 export type Workflow = WorkflowWithSandbox;
 export type WorkflowExecution = FunctionReturnType<typeof api.workflows.index.listExecutions>["page"][number];
+type RetryExecutionArgs = FunctionArgs<typeof api.workflows.index.retryExecution>;
 
 const INITIAL_NUM_ITEMS = 20;
 
@@ -53,6 +54,16 @@ export function useWorkflows() {
     },
   });
 
+  const retryExecutionMutation = useMutation({
+    mutationFn: useConvexMutation(api.workflows.index.retryExecution),
+    onSuccess: () => {
+      toast.success("Execution retried");
+    },
+    onError: (error: Error) => {
+      toast.error(error.message || "Failed to retry execution");
+    },
+  });
+
   const toggleEnabled = useCallback(
     async (id: Id<"workflows">, enabled: boolean) => {
       await toggleMutation.mutateAsync({ _id: id, enabled });
@@ -60,15 +71,24 @@ export function useWorkflows() {
     [toggleMutation]
   );
 
+  const retryExecution = useCallback(
+    async (args: RetryExecutionArgs) => {
+      await retryExecutionMutation.mutateAsync(args);
+    },
+    [retryExecutionMutation]
+  );
+
   return {
     createWorkflow: createMutation.mutateAsync,
     updateWorkflow: updateMutation.mutateAsync,
     deleteWorkflow: deleteMutation.mutateAsync,
     toggleEnabled,
+    retryExecution,
     isCreating: createMutation.isPending,
     isUpdating: updateMutation.isPending,
     isDeleting: deleteMutation.isPending,
     isToggling: toggleMutation.isPending,
+    isRetryingExecution: retryExecutionMutation.isPending,
   };
 }
 

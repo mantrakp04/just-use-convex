@@ -138,3 +138,10 @@ export const updateExecutionStatusExt = zExternalMutation({
     return await functions.UpdateExecutionStatus(ctx, args);
   },
 });
+
+export const retryExecution = zMutation({
+  args: types.RetryExecutionArgs,
+  handler: async (ctx, args): Promise<ReturnType<typeof functions.RetryExecution>> => {
+    return await functions.RetryExecution(ctx, args);
+  },
+});

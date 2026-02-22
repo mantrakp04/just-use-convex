@@ -101,3 +101,7 @@ export const CreateExecutionArgs = z.object({
   workflowId: WorkflowWithSystemFields.shape._id,
   triggerPayload: z.string().optional(),
 });
+
+export const RetryExecutionArgs = z.object({
+  executionId: WorkflowExecution.shape._id,
+});
