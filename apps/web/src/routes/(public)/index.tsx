@@ -1,6 +1,7 @@
 import { useAtom } from "jotai";
 import { createFileRoute } from "@tanstack/react-router";
 import { Github } from "lucide-react";
+import { env } from "@just-use-convex/env/web";
 import { ThemePicker } from "@/components/tweakcn-theme-picker";
 import { HeroScene } from "@/components/hero-scene";
 import { Switcher } from "@/components/hero-scene/switcher";
@@ -60,7 +61,7 @@ function HomeComponent() {
                 <HoverCardTrigger
                   render={
                     <a
-                      href="https://github.com/mantrakp04/just-use-convex"
+                      href={`https://github.com/${env.VITE_GITHUB_REPO}`}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
@@ -75,7 +76,7 @@ function HomeComponent() {
                 </HoverCardContent>
               </HoverCard>
               <a
-                href="https://x.com/barre_of_lube"
+                href={`https://x.com/${env.VITE_TWITTER_HANDLE}`}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-muted-foreground hover:text-foreground transition-colors"

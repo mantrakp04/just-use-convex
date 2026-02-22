@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
+import { env } from "@just-use-convex/env/web";
 
-const REPO = "mantrakp04/just-use-convex";
 const STALE_TIME = 60000;
 
 type GithubStatus = {
@@ -33,7 +33,7 @@ export function useGithubRepo() {
   return useQuery({
     queryKey: ["github", "repo"],
     queryFn: async () => {
-      const res = await fetch(`https://api.github.com/repos/${REPO}`);
+      const res = await fetch(`https://api.github.com/repos/${env.VITE_GITHUB_REPO}`);
       if (!res.ok) throw new Error("Failed to fetch repo info");
       return (await res.json()) as GithubRepo;
     },
@@ -46,7 +46,7 @@ export function useGithubIssuesCount() {
     queryKey: ["github", "issues-count"],
     queryFn: async () => {
       const res = await fetch(
-        `https://api.github.com/search/issues?q=repo:${REPO}+type:issue+state:open&per_page=1`
+        `https://api.github.com/search/issues?q=repo:${env.VITE_GITHUB_REPO}+type:issue+state:open&per_page=1`
       );
       if (!res.ok) throw new Error("Failed to fetch issues count");
       return (await res.json()) as GithubSearchResult;
@@ -60,7 +60,7 @@ export function useGithubMasterStatus() {
     queryKey: ["github", "status", "master"],
     queryFn: async () => {
       const res = await fetch(
-        `https://api.github.com/repos/${REPO}/commits/master/status`
+        `https://api.github.com/repos/${env.VITE_GITHUB_REPO}/commits/master/status`
       );
       if (!res.ok) throw new Error("Failed to fetch master status");
       return (await res.json()) as GithubStatus;
@@ -74,7 +74,7 @@ export function useGithubPRs() {
     queryKey: ["github", "prs"],
     queryFn: async () => {
       const listRes = await fetch(
-        `https://api.github.com/repos/${REPO}/pulls?state=open&per_page=3`
+        `https://api.github.com/repos/${env.VITE_GITHUB_REPO}/pulls?state=open&per_page=3`
       );
       if (!listRes.ok) throw new Error("Failed to fetch PRs");
       const listPrs = (await listRes.json()) as Pick<GithubPR, "number">[];
@@ -82,13 +82,13 @@ export function useGithubPRs() {
       const prsWithStatus = await Promise.all(
         listPrs.map(async ({ number: prNumber }) => {
           const prRes = await fetch(
-            `https://api.github.com/repos/${REPO}/pulls/${prNumber}`
+            `https://api.github.com/repos/${env.VITE_GITHUB_REPO}/pulls/${prNumber}`
           );
           if (!prRes.ok) return null;
           const pr = (await prRes.json()) as GithubPR;
 
           const statusRes = await fetch(
-            `https://api.github.com/repos/${REPO}/commits/${pr.head.sha}/status`
+            `https://api.github.com/repos/${env.VITE_GITHUB_REPO}/commits/${pr.head.sha}/status`
           );
           const status = statusRes.ok
             ? ((await statusRes.json()) as GithubStatus)

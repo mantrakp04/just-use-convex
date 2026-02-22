@@ -10,14 +10,8 @@ import {
   CircleDotDashed,
   MessageCircle,
 } from "lucide-react";
-import {
-  useGithubRepo,
-  useGithubIssuesCount,
-  useGithubMasterStatus,
-  useGithubPRs,
-} from "@/hooks/use-github-repo";
-
-const REPO = "mantrakp04/just-use-convex";
+import { useGithubRepo, useGithubIssuesCount, useGithubMasterStatus, useGithubPRs } from "@/hooks/use-github-repo";
+import { env } from "@just-use-convex/env/web";
 
 type GithubStatusState = "pending" | "success" | "failure" | "error";
 
@@ -46,7 +40,7 @@ export function GithubHoverContent() {
   return (
     <div className="flex flex-col gap-3">
       <div className="flex items-center justify-between">
-        <a href={`https://github.com/${REPO}/tree/master`} target="_blank" rel="noreferrer" className="font-semibold text-sm hover:underline">master</a>
+        <a href={`https://github.com/${env.VITE_GITHUB_REPO}/tree/master`} target="_blank" rel="noreferrer" className="font-semibold text-sm hover:underline">master</a>
         <div className="flex items-center">
           {masterStatusQuery.isLoading ? (
             <StatusIcon state="loading" />
@@ -62,7 +56,7 @@ export function GithubHoverContent() {
         {repoQuery.isLoading ? (
           <Loader2 className="size-3 animate-spin text-muted-foreground" />
         ) : repoQuery.data ? (
-          <a href={`https://github.com/${REPO}/stargazers`} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors">
+          <a href={`https://github.com/${env.VITE_GITHUB_REPO}/stargazers`} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors">
             <Star className="size-3.5" />
             <span>{repoQuery.data.stargazers_count.toLocaleString()}</span>
           </a>
@@ -70,7 +64,7 @@ export function GithubHoverContent() {
         {issuesQuery.isLoading ? (
           <Loader2 className="size-3 animate-spin text-muted-foreground" />
         ) : issuesQuery.data ? (
-          <a href={`https://github.com/${REPO}/issues`} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors">
+          <a href={`https://github.com/${env.VITE_GITHUB_REPO}/issues`} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors">
             <CircleDotDashed className="size-3.5" />
             <span>{issuesQuery.data.total_count.toLocaleString()} open</span>
           </a>
