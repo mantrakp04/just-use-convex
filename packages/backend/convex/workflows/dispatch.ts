@@ -16,7 +16,7 @@ export const dispatchWorkflow = internalAction({
   args: dispatchWorkflowArgs,
   handler: async (ctx, args) => {
     // 1. Create execution record
-    const { executionId, namespace } = await ctx.runMutation(internal.workflows.index.createExecution, {
+    const { executionId, namespace, model, inputModalities } = await ctx.runMutation(internal.workflows.index.createExecution, {
       workflowId: args.workflowId,
       triggerPayload: args.triggerPayload,
       userId: args.userId,
@@ -32,8 +32,14 @@ export const dispatchWorkflow = internalAction({
     // instanceName = workflow namespace (isolated workflow namespace or latest chat id)
     const agentUrl = env.AGENT_URL;
     const doInstanceName = namespace;
+    const resolvedModel = model?.trim() ? model : "openai/gpt-5.2-chat";
+    const resolvedInputModalities = inputModalities && inputModalities.length > 0
+      ? inputModalities
+      : ["text"];
 
     const searchParams = new URLSearchParams({
+      model: resolvedModel,
+      inputModalities: resolvedInputModalities.join(","),
       tokenConfig: JSON.stringify({
         type: "ext",
         externalToken: env.EXTERNAL_TOKEN,

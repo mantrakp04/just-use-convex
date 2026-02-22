@@ -49,7 +49,7 @@ export const CreateArgs = z.object({
     trigger: triggerSchema,
     instructions: z.string(),
     allowedActions: z.array(allowedActionSchema),
-    model: z.string().optional(),
+    model: z.string(),
     inputModalities: z.array(inputModalitySchema).default(["text"]),
     sandboxId: sandboxesWithSystemFields._id.optional(),
   }),

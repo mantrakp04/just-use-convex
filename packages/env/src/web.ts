@@ -12,6 +12,8 @@ export const env = createEnv({
     VITE_SANDBOX_SSH_HOST: z.string().default("ssh.app.daytona.io"),
     VITE_PUBLIC_POSTHOG_KEY: z.string().optional(),
     VITE_PUBLIC_POSTHOG_HOST: z.url().default("https://us.i.posthog.com"),
+    VITE_GITHUB_REPO: z.string().default("mantrakp04/just-use-convex"),
+    VITE_TWITTER_HANDLE: z.string().default("barre_of_lube"),
   },
   runtimeEnv: (import.meta as any).env,
   emptyStringAsUndefined: true,

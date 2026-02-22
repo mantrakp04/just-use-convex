@@ -332,6 +332,8 @@ export async function CreateExecution(ctx: zMutationCtx, args: z.infer<typeof ty
   return {
     executionId: execution,
     namespace: `workflow-${workflow._id}`,
+    model: workflow.model,
+    inputModalities: workflow.inputModalities,
   };
 }
 
