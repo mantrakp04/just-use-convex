@@ -197,18 +197,11 @@ function createExecutionSession({
 
 function splitToolArgs(args: Record<string, unknown>, config: ToolCallConfig) {
   const toolArgs: Record<string, unknown> = { ...args };
-  let requestedTimeout: number | undefined;
+  const requestedTimeout = resolveRequestedTimeout(args, config.allowAgentSetDuration === true);
   let shouldRunInBackground = false;
-
-  if (config.allowAgentSetDuration) {
-    const timeout = normalizeDuration(args.timeout);
-    const timeoutMs = timeout === undefined ? normalizeDuration(args.timeoutMs) : undefined;
-    const resolvedTimeout = timeout ?? timeoutMs;
-
-    if (resolvedTimeout !== undefined) {
-      requestedTimeout = resolvedTimeout;
-      delete toolArgs.timeout;
-    }
+  if (requestedTimeout !== undefined) {
+    delete toolArgs.timeout;
+    delete toolArgs.timeoutMs;
   }
 
   if (config.allowBackground && typeof args.background === "boolean") {
@@ -224,12 +217,32 @@ function splitToolArgs(args: Record<string, unknown>, config: ToolCallConfig) {
     requestedTimeout !== undefined
       ? Math.min(requestedTimeout, maxAllowedDuration)
       : maxAllowedDuration;
-  const effectiveBackgroundTimeout = maxBackgroundDuration ?? DEFAULT_MAX_BACKGROUND_DURATION_MS;
+  const effectiveBackgroundTimeout = maxBackgroundDuration;
   const effectiveMaxOutputTokens =
     normalizeTokenCount(config.maxOutputTokens, DEFAULT_MAX_OUTPUT_TOKENS) ??
     DEFAULT_MAX_OUTPUT_TOKENS;
 
-  return { toolArgs, shouldRunInBackground, maxAllowedDuration, maxBackgroundDuration, effectiveTimeout, effectiveBackgroundTimeout, effectiveMaxOutputTokens };
+  return {
+    toolArgs,
+    shouldRunInBackground,
+    maxAllowedDuration,
+    maxBackgroundDuration,
+    effectiveTimeout,
+    effectiveBackgroundTimeout,
+    effectiveMaxOutputTokens,
+  };
+}
+
+function resolveRequestedTimeout(
+  args: Record<string, unknown>,
+  allowAgentSetDuration: boolean,
+): number | undefined {
+  if (!allowAgentSetDuration) return undefined;
+
+  const timeout = normalizeDuration(args.timeout);
+  if (timeout !== undefined) return timeout;
+
+  return normalizeDuration(args.timeoutMs);
 }
 
 function resolveToolCallId(options?: ToolExecuteOptions): string {

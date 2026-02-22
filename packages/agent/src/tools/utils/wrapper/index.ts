@@ -1,6 +1,11 @@
 // ── Store ──────────────────────────────────────────────────────────────
 export { BackgroundTaskStore, runInBackground } from "./store";
 export { TruncatedOutputStore } from "./truncation";
+export {
+  cancelBackgroundTask,
+  getBackgroundTask,
+  listBackgroundTasks,
+} from "./background-task-control";
 
 // ── Wrapping ───────────────────────────────────────────────────────────
 export { createWrappedTool, patchToolWithBackgroundSupport } from "./wrap";
@@ -13,13 +18,17 @@ export { DEFAULT_MAX_DURATION_MS, TERMINAL_STATUSES } from "./types";
 
 // ── Types ──────────────────────────────────────────────────────────────
 export type {
+  BackgroundTaskFilterStatus,
   BackgroundTask,
   BackgroundTaskResult,
   BackgroundTaskStatus,
   BackgroundTaskStoreApi,
+  BackgroundTaskToolkitConfig,
+  BackgroundTaskWaitConfig,
   BeforeFailureHook,
   BeforeFailureHookContext,
   ExecutionFactory,
+  GetBackgroundTaskInput,
   PostExecuteContext,
   PostExecuteHook,
   RunInBackgroundOptions,

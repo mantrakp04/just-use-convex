@@ -15,6 +15,8 @@ export class BackgroundTaskStore implements BackgroundTaskStoreApi {
   constructor(readonly waitUntil: (promise: Promise<unknown>) => void) {}
 
   create(toolName: string, args: Record<string, unknown>, toolCallId: string): BackgroundTask {
+    this.cleanup();
+
     const task: BackgroundTask = {
       id: this.generateId(),
       toolCallId,
@@ -30,10 +32,12 @@ export class BackgroundTaskStore implements BackgroundTaskStoreApi {
   }
 
   get(id: string): BackgroundTask | undefined {
+    this.cleanup();
     return this.tasks.get(id);
   }
 
   getAll(): BackgroundTask[] {
+    this.cleanup();
     return Array.from(this.tasks.values());
   }
 
@@ -48,6 +52,8 @@ export class BackgroundTaskStore implements BackgroundTaskStoreApi {
     previousStatus: BackgroundTaskStatus | null;
     reason?: string;
   } {
+    this.cleanup();
+
     const task = this.tasks.get(id);
     if (!task) {
       return { cancelled: false, previousStatus: null, reason: "task not found" };
