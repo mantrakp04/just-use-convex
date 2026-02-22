@@ -4,8 +4,15 @@ import * as THREE from "three";
 
 const BOUNDS = 18;
 const STEP_LENGTH = 1.5;
+const HALF_STEP_LENGTH = STEP_LENGTH / 2;
 const TUBE_RADIUS = 0.35;
 const SPHERE_RADIUS = 0.45;
+const TURN_CHANCE = 0.25;
+const MAX_PATHS = 8;
+const NEW_PIPE_CHANCE = 0.1;
+const START_ATTEMPTS = 16;
+const RESET_MARGIN = 50;
+const UP_AXIS = new THREE.Vector3(0, 1, 0);
 
 const DIRECTIONS = [
   new THREE.Vector3(1, 0, 0),
@@ -27,33 +34,59 @@ class PipePath {
   
   constructor(start: THREE.Vector3, dir: THREE.Vector3, color: number) {
     this.position = start.clone();
-    this.direction = dir.clone();
+    this.direction = dir;
     this.color = color;
   }
 
-  step() {
-    let didTurn = false;
-    // 25% chance to change direction
-    if (Math.random() < 0.25) {
-      // Pick a direction that is perpendicular to current
-      const possibleDirs = DIRECTIONS.filter(d => Math.abs(d.dot(this.direction)) < 0.1);
-      const newDir = possibleDirs[Math.floor(Math.random() * possibleDirs.length)];
-      this.direction = newDir;
-      didTurn = true;
+  step(occupiedNodes: Set<string>, nextPosScratch: THREE.Vector3) {
+    const previousDirection = this.direction;
+    const perpendicularDirections = getPerpendicularDirections(previousDirection);
+    const shouldTurn = Math.random() < TURN_CHANCE;
+
+    if (shouldTurn) {
+      if (this.tryPerpendicularMove(perpendicularDirections, occupiedNodes, nextPosScratch)) {
+        return { grew: true, didTurn: true };
+      }
+      if (this.tryMove(previousDirection, occupiedNodes, nextPosScratch)) {
+        return { grew: true, didTurn: false };
+      }
+      return { grew: false, didTurn: false };
     }
 
-    const nextPos = this.position.clone().add(this.direction.clone().multiplyScalar(STEP_LENGTH));
-    
-    if (
-      Math.abs(nextPos.x) > BOUNDS ||
-      Math.abs(nextPos.y) > BOUNDS ||
-      Math.abs(nextPos.z) > BOUNDS
-    ) {
-      return { grew: false, didTurn };
+    if (this.tryMove(previousDirection, occupiedNodes, nextPosScratch)) {
+      return { grew: true, didTurn: false };
     }
 
-    this.position = nextPos;
-    return { grew: true, didTurn };
+    if (this.tryPerpendicularMove(perpendicularDirections, occupiedNodes, nextPosScratch)) {
+      return { grew: true, didTurn: true };
+    }
+
+    return { grew: false, didTurn: false };
+  }
+
+  private tryPerpendicularMove(
+    perpendicularDirections: readonly THREE.Vector3[],
+    occupiedNodes: Set<string>,
+    nextPosScratch: THREE.Vector3
+  ) {
+    const startIndex = Math.floor(Math.random() * perpendicularDirections.length);
+    for (let offset = 0; offset < perpendicularDirections.length; offset++) {
+      const direction = perpendicularDirections[(startIndex + offset) % perpendicularDirections.length];
+      if (this.tryMove(direction, occupiedNodes, nextPosScratch)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  private tryMove(direction: THREE.Vector3, occupiedNodes: Set<string>, nextPosScratch: THREE.Vector3) {
+    nextPosScratch.copy(this.position).addScaledVector(direction, STEP_LENGTH);
+    if (isOutOfBounds(nextPosScratch) || occupiedNodes.has(getGridKey(nextPosScratch))) {
+      return false;
+    }
+    this.direction = direction;
+    this.position.copy(nextPosScratch);
+    return true;
   }
 }
 
@@ -64,17 +97,54 @@ export function WindowsPipes() {
 
   const state = useRef({
     paths: [] as PipePath[],
+    occupiedNodes: new Set<string>(),
     cylinderCount: 0,
     sphereCount: 0,
     timeSinceLastStep: 0,
-    stepInterval: 0.03, // fast generation
+    stepInterval: 0.03,
   });
 
   const dummy = useMemo(() => new THREE.Object3D(), []);
   const colorObj = useMemo(() => new THREE.Color(), []);
+  const oldPosScratch = useMemo(() => new THREE.Vector3(), []);
+  const nextPosScratch = useMemo(() => new THREE.Vector3(), []);
+  const segmentPosScratch = useMemo(() => new THREE.Vector3(), []);
 
-  // initialize
+  const addJoint = (position: THREE.Vector3, color: number) => {
+    const sphereMesh = sphereRef.current;
+    if (!sphereMesh || state.current.sphereCount >= maxSegments) {
+      return false;
+    }
+    writeInstanceTransform(sphereMesh, state.current.sphereCount, position, color, dummy, colorObj, null);
+    state.current.sphereCount++;
+    sphereMesh.count = state.current.sphereCount;
+    return true;
+  };
+
+  const addPipeSegment = (startPos: THREE.Vector3, direction: THREE.Vector3, color: number) => {
+    const cylinderMesh = cylinderRef.current;
+    if (!cylinderMesh || state.current.cylinderCount >= maxSegments) {
+      return false;
+    }
+    segmentPosScratch.copy(startPos).addScaledVector(direction, HALF_STEP_LENGTH);
+    dummy.quaternion.setFromUnitVectors(UP_AXIS, direction);
+    writeInstanceTransform(
+      cylinderMesh,
+      state.current.cylinderCount,
+      segmentPosScratch,
+      color,
+      dummy,
+      colorObj,
+      dummy.quaternion
+    );
+    state.current.cylinderCount++;
+    cylinderMesh.count = state.current.cylinderCount;
+    return true;
+  };
+
   useEffect(() => {
+    state.current.paths = [];
+    state.current.occupiedNodes.clear();
     state.current.cylinderCount = 0;
     state.current.sphereCount = 0;
     if (cylinderRef.current) cylinderRef.current.count = 0;
@@ -82,104 +152,59 @@ export function WindowsPipes() {
   }, []);
 
   useFrame((_, delta) => {
-    state.current.timeSinceLastStep += delta;
+    const sceneState = state.current;
+    sceneState.timeSinceLastStep += delta;
+    if (sceneState.timeSinceLastStep <= sceneState.stepInterval) {
+      return;
+    }
+    sceneState.timeSinceLastStep = 0;
 
-    if (state.current.timeSinceLastStep > state.current.stepInterval) {
-      state.current.timeSinceLastStep = 0;
+    let sphereDirty = false;
+    let cylinderDirty = false;
 
-      // Maybe start a new pipe
-      if (state.current.paths.length < 8 && Math.random() < 0.1) {
-        const start = new THREE.Vector3(
-          Math.floor((Math.random() - 0.5) * (BOUNDS * 2 / STEP_LENGTH)),
-          Math.floor((Math.random() - 0.5) * (BOUNDS * 2 / STEP_LENGTH)),
-          Math.floor((Math.random() - 0.5) * (BOUNDS * 2 / STEP_LENGTH))
-        ).multiplyScalar(STEP_LENGTH);
-        
-        const dir = DIRECTIONS[Math.floor(Math.random() * DIRECTIONS.length)];
+    if (sceneState.paths.length < MAX_PATHS && Math.random() < NEW_PIPE_CHANCE) {
+      const start = findFreeStartPosition(sceneState.occupiedNodes);
+      if (start) {
+        const direction = DIRECTIONS[Math.floor(Math.random() * DIRECTIONS.length)];
         const color = COLORS[Math.floor(Math.random() * COLORS.length)];
-        
-        state.current.paths.push(new PipePath(start, dir, color));
-        
-        // Add start joint
-        if (sphereRef.current && state.current.sphereCount < maxSegments) {
-          dummy.position.copy(start);
-          dummy.updateMatrix();
-          sphereRef.current.setMatrixAt(state.current.sphereCount, dummy.matrix);
-          colorObj.setHex(color);
-          sphereRef.current.setColorAt(state.current.sphereCount, colorObj);
-          state.current.sphereCount++;
-          sphereRef.current.count = state.current.sphereCount;
-          sphereRef.current.instanceMatrix.needsUpdate = true;
-          if (sphereRef.current.instanceColor) sphereRef.current.instanceColor.needsUpdate = true;
-        }
+        sceneState.paths.push(new PipePath(start, direction, color));
+        sceneState.occupiedNodes.add(getGridKey(start));
+        sphereDirty = addJoint(start, color) || sphereDirty;
+      }
+    }
+
+    for (let i = sceneState.paths.length - 1; i >= 0; i--) {
+      const path = sceneState.paths[i];
+      oldPosScratch.copy(path.position);
+      const { grew, didTurn } = path.step(sceneState.occupiedNodes, nextPosScratch);
+
+      if (!grew) {
+        sphereDirty = addJoint(oldPosScratch, path.color) || sphereDirty;
+        sceneState.paths.splice(i, 1);
+        continue;
       }
 
-      for (let i = state.current.paths.length - 1; i >= 0; i--) {
-        const path = state.current.paths[i];
-        
-        const oldPos = path.position.clone();
-        
-        const { grew, didTurn } = path.step();
-        
-        if (grew) {
-          if (didTurn) {
-             // Add joint at the turn
-             if (sphereRef.current && state.current.sphereCount < maxSegments) {
-                dummy.position.copy(oldPos);
-                dummy.updateMatrix();
-                sphereRef.current.setMatrixAt(state.current.sphereCount, dummy.matrix);
-                colorObj.setHex(path.color);
-                sphereRef.current.setColorAt(state.current.sphereCount, colorObj);
-                state.current.sphereCount++;
-                sphereRef.current.count = state.current.sphereCount;
-                sphereRef.current.instanceMatrix.needsUpdate = true;
-                if (sphereRef.current.instanceColor) sphereRef.current.instanceColor.needsUpdate = true;
-             }
-          }
-
-          // Add cylinder segment
-          if (cylinderRef.current && state.current.cylinderCount < maxSegments) {
-             const currentDir = path.direction;
-             const segPos = oldPos.clone().add(currentDir.clone().multiplyScalar(STEP_LENGTH / 2));
-             dummy.position.copy(segPos);
-             dummy.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), currentDir);
-             dummy.updateMatrix();
-             
-             cylinderRef.current.setMatrixAt(state.current.cylinderCount, dummy.matrix);
-             colorObj.setHex(path.color);
-             cylinderRef.current.setColorAt(state.current.cylinderCount, colorObj);
-             state.current.cylinderCount++;
-             cylinderRef.current.count = state.current.cylinderCount;
-             cylinderRef.current.instanceMatrix.needsUpdate = true;
-             if (cylinderRef.current.instanceColor) cylinderRef.current.instanceColor.needsUpdate = true;
-          }
-
-        } else {
-          // Hit boundary, remove pipe
-          // Add end joint for a clean cap
-          if (sphereRef.current && state.current.sphereCount < maxSegments) {
-             dummy.position.copy(oldPos);
-             dummy.updateMatrix();
-             sphereRef.current.setMatrixAt(state.current.sphereCount, dummy.matrix);
-             colorObj.setHex(path.color);
-             sphereRef.current.setColorAt(state.current.sphereCount, colorObj);
-             state.current.sphereCount++;
-             sphereRef.current.count = state.current.sphereCount;
-             sphereRef.current.instanceMatrix.needsUpdate = true;
-             if (sphereRef.current.instanceColor) sphereRef.current.instanceColor.needsUpdate = true;
-          }
-          state.current.paths.splice(i, 1);
-        }
+      sceneState.occupiedNodes.add(getGridKey(path.position));
+      if (didTurn) {
+        sphereDirty = addJoint(oldPosScratch, path.color) || sphereDirty;
       }
+      cylinderDirty = addPipeSegment(oldPosScratch, path.direction, path.color) || cylinderDirty;
+    }
 
-      // Reset when full
-      if (state.current.cylinderCount >= maxSegments - 50) {
-        state.current.cylinderCount = 0;
-        state.current.sphereCount = 0;
-        state.current.paths = [];
-        if (cylinderRef.current) cylinderRef.current.count = 0;
-        if (sphereRef.current) sphereRef.current.count = 0;
-      }
+    if (sphereDirty && sphereRef.current) {
+      markMeshDirty(sphereRef.current);
+    }
+    if (cylinderDirty && cylinderRef.current) {
+      markMeshDirty(cylinderRef.current);
+    }
+
+    if (sceneState.cylinderCount >= maxSegments - RESET_MARGIN) {
+      sceneState.cylinderCount = 0;
+      sceneState.sphereCount = 0;
+      sceneState.paths = [];
+      sceneState.occupiedNodes.clear();
+      if (cylinderRef.current) cylinderRef.current.count = 0;
+      if (sphereRef.current) sphereRef.current.count = 0;
     }
   });
 
@@ -195,4 +220,69 @@ export function WindowsPipes() {
       </instancedMesh>
     </group>
   );
+}
+
+function getGridKey(position: THREE.Vector3) {
+  const x = Math.round(position.x / STEP_LENGTH);
+  const y = Math.round(position.y / STEP_LENGTH);
+  const z = Math.round(position.z / STEP_LENGTH);
+  return `${x}:${y}:${z}`;
+}
+
+function isOutOfBounds(position: THREE.Vector3) {
+  return Math.abs(position.x) > BOUNDS || Math.abs(position.y) > BOUNDS || Math.abs(position.z) > BOUNDS;
+}
+
+function findFreeStartPosition(occupiedNodes: Set<string>) {
+  for (let attempt = 0; attempt < START_ATTEMPTS; attempt++) {
+    const candidate = new THREE.Vector3(
+      Math.floor((Math.random() - 0.5) * ((BOUNDS * 2) / STEP_LENGTH)),
+      Math.floor((Math.random() - 0.5) * ((BOUNDS * 2) / STEP_LENGTH)),
+      Math.floor((Math.random() - 0.5) * ((BOUNDS * 2) / STEP_LENGTH))
+    ).multiplyScalar(STEP_LENGTH);
+    if (!occupiedNodes.has(getGridKey(candidate))) {
+      return candidate;
+    }
+  }
+  return null;
+}
+
+function markMeshDirty(mesh: THREE.InstancedMesh) {
+  mesh.instanceMatrix.needsUpdate = true;
+  if (mesh.instanceColor) {
+    mesh.instanceColor.needsUpdate = true;
+  }
+}
+
+function writeInstanceTransform(
+  mesh: THREE.InstancedMesh,
+  index: number,
+  position: THREE.Vector3,
+  color: number,
+  dummy: THREE.Object3D,
+  colorObj: THREE.Color,
+  quaternion: THREE.Quaternion | null
+) {
+  dummy.position.copy(position);
+  if (quaternion) {
+    dummy.quaternion.copy(quaternion);
+  } else {
+    dummy.quaternion.identity();
+  }
+  dummy.updateMatrix();
+  mesh.setMatrixAt(index, dummy.matrix);
+  colorObj.setHex(color);
+  mesh.setColorAt(index, colorObj);
+}
+
+const PERPENDICULAR_DIRECTIONS = DIRECTIONS.map((currentDirection) =>
+  DIRECTIONS.filter((direction) => Math.abs(direction.dot(currentDirection)) < 0.1)
+);
+
+function getPerpendicularDirections(direction: THREE.Vector3) {
+  const directionIndex = DIRECTIONS.indexOf(direction);
+  if (directionIndex >= 0) {
+    return PERPENDICULAR_DIRECTIONS[directionIndex];
+  }
+  return DIRECTIONS.filter((candidateDirection) => Math.abs(candidateDirection.dot(direction)) < 0.1);
 }

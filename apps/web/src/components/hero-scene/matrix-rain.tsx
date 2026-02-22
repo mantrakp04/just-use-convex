@@ -23,12 +23,10 @@ export function MatrixRain() {
       canvas.width = window.innerWidth;
       canvas.height = window.innerHeight;
       const columns = Math.floor(canvas.width / FONT_SIZE);
-      // Preserve existing drops, extend or shrink array
       const newDrops = new Array(columns).fill(0);
       for (let i = 0; i < Math.min(drops.length, columns); i++) {
         newDrops[i] = drops[i];
       }
-      // Stagger initial drops randomly
       for (let i = drops.length; i < columns; i++) {
         newDrops[i] = Math.random() * -100;
       }
@@ -54,11 +52,9 @@ export function MatrixRain() {
         const x = i * FONT_SIZE;
         const y = drops[i]! * FONT_SIZE;
 
-        // Head character — brighter
         ctx.fillStyle = headColor;
         ctx.fillText(char, x, y);
 
-        // Trail character just behind — green
         if (drops[i]! > 1) {
           const trailChar = CHARS.charAt(Math.floor(Math.random() * CHARS.length));
           ctx.fillStyle = trailColor;
@@ -69,7 +65,6 @@ export function MatrixRain() {
 
         drops[i]! += DROP_SPEED;
 
-        // Reset drop to top with random delay
         if (y > canvas.height && Math.random() > 0.975) {
           drops[i] = Math.random() * -20;
         }

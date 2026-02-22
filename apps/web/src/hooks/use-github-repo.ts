@@ -15,6 +15,8 @@ type GithubPR = {
   draft: boolean;
   head: { sha: string };
   html_url: string;
+  comments: number;
+  review_comments: number;
 };
 
 type GithubRepo = {
@@ -71,25 +73,32 @@ export function useGithubPRs() {
   return useQuery({
     queryKey: ["github", "prs"],
     queryFn: async () => {
-      const res = await fetch(
+      const listRes = await fetch(
         `https://api.github.com/repos/${REPO}/pulls?state=open&per_page=3`
       );
-      if (!res.ok) throw new Error("Failed to fetch PRs");
-      const prs = (await res.json()) as GithubPR[];
+      if (!listRes.ok) throw new Error("Failed to fetch PRs");
+      const listPrs = (await listRes.json()) as Pick<GithubPR, "number">[];
 
       const prsWithStatus = await Promise.all(
-        prs.map(async (pr) => {
+        listPrs.map(async ({ number: prNumber }) => {
+          const prRes = await fetch(
+            `https://api.github.com/repos/${REPO}/pulls/${prNumber}`
+          );
+          if (!prRes.ok) return null;
+          const pr = (await prRes.json()) as GithubPR;
+
           const statusRes = await fetch(
             `https://api.github.com/repos/${REPO}/commits/${pr.head.sha}/status`
           );
           const status = statusRes.ok
             ? ((await statusRes.json()) as GithubStatus)
             : null;
+
           return { ...pr, ciStatus: status };
         })
       );
 
-      return prsWithStatus;
+      return prsWithStatus.filter((p): p is NonNullable<typeof p> => p != null);
     },
     staleTime: STALE_TIME,
   });

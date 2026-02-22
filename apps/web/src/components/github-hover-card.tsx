@@ -8,6 +8,7 @@ import {
   CircleDot,
   Star,
   CircleDotDashed,
+  MessageCircle,
 } from "lucide-react";
 import {
   useGithubRepo,
@@ -46,17 +47,13 @@ export function GithubHoverContent() {
     <div className="flex flex-col gap-3">
       <div className="flex items-center justify-between">
         <a href={`https://github.com/${REPO}/tree/master`} target="_blank" rel="noreferrer" className="font-semibold text-sm hover:underline">master</a>
-        <div className="flex items-center gap-1.5">
-          <span className="text-xs text-muted-foreground">CI/CD</span>
+        <div className="flex items-center">
           {masterStatusQuery.isLoading ? (
             <StatusIcon state="loading" />
           ) : masterStatusQuery.isError ? (
             <span className="text-xs text-red-500">Error</span>
           ) : (
-            <>
-              <StatusIcon state={masterStatusQuery.data?.state || "pending"} />
-              <span className="text-xs capitalize">{masterStatusQuery.data?.state || "Unknown"}</span>
-            </>
+            <StatusIcon state={masterStatusQuery.data?.state || "pending"} />
           )}
         </div>
       </div>
@@ -112,7 +109,14 @@ export function GithubHoverContent() {
                     {pr.title}
                   </span>
                 </div>
-                <div className="shrink-0">
+                <div className="flex shrink-0 items-center gap-1.5">
+                  <span
+                    className="flex items-center gap-0.5 text-xs text-muted-foreground"
+                    title={`${pr.comments ?? 0} comments, ${pr.review_comments ?? 0} review comments`}
+                  >
+                    <MessageCircle className="size-3.5" />
+                    {(pr.comments ?? 0) + (pr.review_comments ?? 0)}
+                  </span>
                   <StatusIcon state={pr.ciStatus?.state || "pending"} />
                 </div>
               </a>
