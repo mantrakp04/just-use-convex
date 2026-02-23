@@ -34,6 +34,7 @@ import type * as sandboxes_nodeFunctions from "../sandboxes/nodeFunctions.js";
 import type * as sandboxes_stats from "../sandboxes/stats.js";
 import type * as sandboxes_types from "../sandboxes/types.js";
 import type * as shared_aggregates from "../shared/aggregates.js";
+import type * as shared_attachments from "../shared/attachments.js";
 import type * as shared_auth from "../shared/auth.js";
 import type * as shared_pagination from "../shared/pagination.js";
 import type * as shared_patch from "../shared/patch.js";
@@ -96,6 +97,7 @@ declare const fullApi: ApiFromModules<{
   "sandboxes/stats": typeof sandboxes_stats;
   "sandboxes/types": typeof sandboxes_types;
   "shared/aggregates": typeof shared_aggregates;
+  "shared/attachments": typeof shared_attachments;
   "shared/auth": typeof shared_auth;
   "shared/pagination": typeof shared_pagination;
   "shared/patch": typeof shared_patch;

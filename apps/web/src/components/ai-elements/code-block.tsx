@@ -28,6 +28,7 @@ import {
   type ThemedToken,
 } from "shiki/core";
 import { createJavaScriptRegexEngine } from "shiki/engine/javascript";
+import { bundledLanguages } from "shiki/langs";
 
 // Shiki uses bitflags for font styles: 1=italic, 2=bold, 4=underline
 // biome-ignore lint/suspicious/noBitwiseOperators: shiki bitflag check
@@ -146,7 +147,7 @@ const getHighlighter = (
       import("@shikijs/themes/github-light"),
       import("@shikijs/themes/github-dark"),
     ],
-    langs: [import(/* @vite-ignore */ `@shikijs/langs/${language}`)],
+    langs: bundledLanguages[language] ? [bundledLanguages[language]()] : [],
     engine: createJavaScriptRegexEngine(),
   }) as Promise<HighlighterGeneric<BundledLanguage, BundledTheme>>;
 
