@@ -11,12 +11,14 @@ const BLOCKED_HOST_SUFFIXES = [".localhost", ".local"];
 const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308]);
 const URL_SAFE_METHODS = new Set(["GET", "HEAD"]);
 
+type WorkflowActionContext = {
+  executionId: Id<"workflowExecutions">;
+  convexAdapter: ConvexAdapter;
+};
+
 export async function createWorkflowActionToolkit(
   allowedActions: string[],
-  context: {
-    executionId: Id<"workflowExecutions">;
-    convexAdapter: ConvexAdapter;
-  },
+  context: WorkflowActionContext,
 ): Promise<Toolkit> {
   const sendMessage = createTool({
     name: "send_message",
@@ -137,11 +139,6 @@ export async function createWorkflowActionToolkit(
   });
 }
 
-type WorkflowActionContext = {
-  executionId: Id<"workflowExecutions">;
-  convexAdapter: ConvexAdapter;
-};
-
 async function recordWorkflowStepOutcomeFailClosed({
   context,
   action,
@@ -164,8 +161,9 @@ async function recordWorkflowStepOutcomeFailClosed({
       },
     );
   } catch (loggingError) {
-    throw new Error(
-      `Failed to record workflow step outcome for "${action}": ${toErrorMessage(loggingError)}`,
+    console.error(
+      `Failed to record workflow step outcome for "${action}":`,
+      toErrorMessage(loggingError),
     );
   }
 }
