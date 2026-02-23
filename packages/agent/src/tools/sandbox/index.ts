@@ -61,9 +61,12 @@ export async function createDaytonaToolkit(
     description: 'Write or overwrite a file in the configured Daytona sandbox.',
     parameters: writeSchema,
     execute: async (input) => {
-      await sandbox.fs.uploadFile(input.content, input.path);
+      // Must pass Buffer, not string — the SDK treats string as a local file path,
+      // which produces [object Object] in CF Workers (SERVERLESS runtime).
+      const contentBuffer = Buffer.from(input.content);
+      await sandbox.fs.uploadFile(contentBuffer, input.path);
       return {
-        bytes: Buffer.from(input.content).length,
+        bytes: contentBuffer.length,
         result: 'ok',
       };
     },
@@ -79,7 +82,7 @@ export async function createDaytonaToolkit(
       const current = fileBuffer.toString('utf8');
       const replaced = replaceInText(current, input.oldText, input.newText, input.replaceAll);
 
-      await sandbox.fs.uploadFile(replaced.result, input.path);
+      await sandbox.fs.uploadFile(Buffer.from(replaced.result), input.path);
 
       return {
         replaced: replaced.count,

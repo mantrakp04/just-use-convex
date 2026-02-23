@@ -1,7 +1,7 @@
 import mime from "mime";
 
-export async function toHexHash(bytes: Uint8Array) {
-  const hashBuffer = await crypto.subtle.digest("SHA-256", bytes.slice());
+export async function toHexHash(bytes: Uint8Array | Buffer) {
+  const hashBuffer = await crypto.subtle.digest("SHA-256", Uint8Array.from(bytes));
   return Array.from(new Uint8Array(hashBuffer))
     .map((byte) => byte.toString(16).padStart(2, "0"))
     .join("");
@@ -24,10 +24,13 @@ export function inferAttachmentContentType(fileNameOrPath: string): string | und
 
 export async function uploadBytesToConvexStorage(
   uploadUrl: string,
-  fileBytes: Uint8Array,
+  fileBytes: Buffer,
   contentType: string | undefined,
 ) {
-  const body = toUploadBody(fileBytes);
+  const normalized = Uint8Array.from(fileBytes);
+  const body = new Blob([normalized], {
+    type: contentType ?? "application/octet-stream",
+  });
 
   const response = await fetch(uploadUrl, {
     method: "POST",
@@ -52,15 +55,3 @@ export async function uploadBytesToConvexStorage(
   return { storageId: result.storageId };
 }
 
-function toUploadBody(fileBytes: Uint8Array): ArrayBuffer {
-  const { buffer, byteOffset, byteLength } = fileBytes;
-  if (buffer instanceof ArrayBuffer) {
-    if (byteOffset === 0 && byteLength === buffer.byteLength) {
-      return buffer;
-    }
-
-    return buffer.slice(byteOffset, byteOffset + byteLength);
-  }
-
-  return Uint8Array.from(fileBytes).buffer;
-}
