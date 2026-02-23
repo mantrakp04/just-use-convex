@@ -1,6 +1,10 @@
 import alchemy from "alchemy";
 import { Worker, DurableObjectNamespace, VectorizeIndex } from "alchemy/cloudflare";
 import { env } from "@just-use-convex/env/agent";
+import { createRequire } from "node:module";
+
+const require = createRequire(import.meta.url);
+const agentsPath = require.resolve("agents");
 
 const stage = process.env.ALCHEMY_STAGE ?? "dev";
 
@@ -28,6 +32,11 @@ export const worker = await Worker("agent-worker", {
   url: true,
   adopt: true,
   compatibility: "node",
+  bundle: {
+    alias: {
+      "agents": agentsPath,
+    },
+  },
   bindings: {
     agentWorker: agentWorkerNamespace,
     vectorizeChatMessages: chatMessagesIndex,

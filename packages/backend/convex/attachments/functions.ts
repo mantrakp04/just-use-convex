@@ -1,5 +1,8 @@
 import type { z } from "zod";
+import type { GenericEnt } from "convex-ents";
+import type { EntDataModelFromSchema } from "convex-ents/dist/schema";
 import type { zMutationCtx, zQueryCtx } from "../functions";
+import type schema from "../schema";
 import * as types from "./types";
 import {
   assertOrganizationAccess,
@@ -7,6 +10,9 @@ import {
   assertScopedPermission,
 } from "../shared/auth";
 import { withInvalidCursorRetry } from "../shared/pagination";
+
+type EntDataModel = EntDataModelFromSchema<typeof schema>;
+type OrgMemberAttachmentEnt = GenericEnt<EntDataModel, "orgMemberAttachments">;
 
 export async function CreateAttachmentFromHash(
   ctx: zMutationCtx,
@@ -53,10 +59,7 @@ export async function CreateAttachmentFromHash(
         .eq("globalAttachmentId", globalAttachment?._id!)
   ).unique();
 
-  const url = await ctx.storage.getUrl(globalAttachment.storageId);
-  if (!url) {
-    throw new Error("Failed to generate attachment URL");
-  }
+  const url = await getStorageUrl(ctx, globalAttachment.storageId);
 
   if (existingMemberAttachment) {
     return {
@@ -89,26 +92,8 @@ export async function GetOrgMemberAttachment(
   args: z.infer<typeof types.GetOrgMemberAttachmentArgs>
 ) {
   const attachment = await ctx.table("orgMemberAttachments").getX(args._id);
-  assertOrganizationAccess(
-    attachment.organizationId,
-    ctx.identity.activeOrganizationId,
-    "You are not authorized to view this attachment"
-  );
-  assertScopedPermission(
-    ctx.identity.organizationRole,
-    ctx.identity.memberId,
-    attachment.memberId,
-    { attachment: ["read"] },
-    { attachment: ["readAny"] },
-    "You are not authorized to view this attachment",
-    "You are not authorized to view this attachment"
-  );
-
-  const globalAttachment = await attachment.edge("globalAttachment");
-  return {
-    ...attachment.doc(),
-    globalAttachment: globalAttachment.doc(),
-  };
+  assertOwnedAttachmentAccess(ctx, attachment, "view", "read", "readAny");
+  return resolveWithUrl(ctx, attachment);
 }
 
 export async function GetGlobalAttachmentByHash(
@@ -128,20 +113,6 @@ export async function GetGlobalAttachmentByHash(
   return attachment ? attachment.doc() : null;
 }
 
-async function runListOrgMemberAttachmentsQuery(
-  ctx: zQueryCtx,
-  args: z.infer<typeof types.ListOrgMemberAttachmentsArgs>,
-  memberId: string
-) {
-  return ctx.table("orgMemberAttachments", "organizationId_memberId", (q) =>
-    q
-      .eq("organizationId", ctx.identity.activeOrganizationId)
-      .eq("memberId", memberId)
-  )
-    .order("desc")
-    .paginate(args.paginationOpts);
-}
-
 export async function ListOrgMemberAttachments(
   ctx: zQueryCtx,
   args: z.infer<typeof types.ListOrgMemberAttachmentsArgs>
@@ -159,25 +130,13 @@ export async function ListOrgMemberAttachments(
 
   const attachments = await withInvalidCursorRetry(
     args,
-    (nextArgs) => runListOrgMemberAttachmentsQuery(ctx, nextArgs, requestedMemberId),
+    (nextArgs) => runListQuery(ctx, nextArgs, requestedMemberId),
     (nextArgs) => ({ ...nextArgs, paginationOpts: { ...nextArgs.paginationOpts, cursor: null } })
-  );
-
-  const attachmentsWithGlobal = await Promise.all(
-    attachments.page.map(async (attachment) => {
-      const globalAttachment = await attachment.edge("globalAttachment");
-      const url = await ctx.storage.getUrl(globalAttachment.storageId);
-      return {
-        ...attachment.doc(),
-        globalAttachment: globalAttachment.doc(),
-        url,
-      };
-    })
   );
 
   return {
     ...attachments,
-    page: attachmentsWithGlobal,
+    page: await Promise.all(attachments.page.map((a) => resolveWithUrl(ctx, a))),
   };
 }
 
@@ -186,20 +145,7 @@ export async function DeleteOrgMemberAttachment(
   args: z.infer<typeof types.DeleteOrgMemberAttachmentArgs>
 ) {
   const attachment = await ctx.table("orgMemberAttachments").getX(args._id);
-  assertOrganizationAccess(
-    attachment.organizationId,
-    ctx.identity.activeOrganizationId,
-    "You are not authorized to delete this attachment"
-  );
-  assertScopedPermission(
-    ctx.identity.organizationRole,
-    ctx.identity.memberId,
-    attachment.memberId,
-    { attachment: ["delete"] },
-    { attachment: ["deleteAny"] },
-    "You are not authorized to delete attachments",
-    "You are not authorized to delete other members' attachments"
-  );
+  assertOwnedAttachmentAccess(ctx, attachment, "delete", "delete", "deleteAny");
 
   const globalAttachmentId = attachment.globalAttachmentId;
   await attachment.delete();
@@ -216,4 +162,58 @@ export async function DeleteOrgMemberAttachment(
   await ctx.storage.delete(globalAttachment.storageId);
   await globalAttachment.delete();
   return true;
+}
+
+// ─── Helpers ─────────────────────────────────────────────────────
+
+async function getStorageUrl(ctx: Pick<zQueryCtx, "storage">, storageId: string) {
+  const url = await ctx.storage.getUrl(storageId);
+  if (!url) throw new Error("Failed to generate attachment URL");
+  return url;
+}
+
+async function resolveWithUrl(
+  ctx: Pick<zQueryCtx, "storage">,
+  attachment: OrgMemberAttachmentEnt
+) {
+  const globalAttachment = await attachment.edge("globalAttachment");
+  const url = await getStorageUrl(ctx, globalAttachment.storageId);
+  return { ...attachment.doc(), globalAttachment: globalAttachment.doc(), url };
+}
+
+function assertOwnedAttachmentAccess(
+  ctx: Pick<zQueryCtx, "identity">,
+  attachment: { organizationId: string; memberId: string },
+  verb: string,
+  ownAction: "read" | "delete",
+  anyAction: "readAny" | "deleteAny"
+) {
+  assertOrganizationAccess(
+    attachment.organizationId,
+    ctx.identity.activeOrganizationId,
+    `You are not authorized to ${verb} this attachment`
+  );
+  assertScopedPermission(
+    ctx.identity.organizationRole,
+    ctx.identity.memberId,
+    attachment.memberId,
+    { attachment: [ownAction] },
+    { attachment: [anyAction] },
+    `You are not authorized to ${verb} attachments`,
+    `You are not authorized to ${verb} other members' attachments`
+  );
+}
+
+function runListQuery(
+  ctx: zQueryCtx,
+  args: z.infer<typeof types.ListOrgMemberAttachmentsArgs>,
+  memberId: string
+) {
+  return ctx.table("orgMemberAttachments", "organizationId_memberId", (q) =>
+    q
+      .eq("organizationId", ctx.identity.activeOrganizationId)
+      .eq("memberId", memberId)
+  )
+    .order("desc")
+    .paginate(args.paginationOpts);
 }

@@ -1,11 +1,19 @@
 import { type InterpreterContext } from '@daytonaio/toolbox-api-client';
-import { Daytona, type Sandbox } from '@daytonaio/sdk';
+import { type Sandbox } from '@daytonaio/sdk';
 import { createTool, type Toolkit } from '@voltagent/core';
+import { api } from '@just-use-convex/backend/convex/_generated/api';
+import {
+  getAttachmentFileNameFromPath,
+  inferAttachmentContentType,
+  toHexHash,
+  uploadBytesToConvexStorage,
+} from '@just-use-convex/backend/convex/shared/attachments';
+import type { ConvexAdapter } from '@just-use-convex/backend/convex/lib/convexAdapter';
 import { SandboxPtyService } from './pty';
 import {
   editSchema,
   execSchema,
-  generateDownloadUrlSchema,
+  uploadAttachmentToWorkspaceSchema,
   globSchema,
   grepSchema,
   listSchema,
@@ -17,7 +25,10 @@ import { SandboxFsService } from './fs';
 
 const codeInterpreterContexts = new Map<string, InterpreterContext>();
 
-export async function createDaytonaToolkit(daytona: Daytona, sandbox: Sandbox): Promise<Toolkit> {
+export async function createDaytonaToolkit(
+  sandbox: Sandbox,
+  convexAdapter: ConvexAdapter | null,
+): Promise<Toolkit> {
   const list = createTool({
     name: 'list',
     description:
@@ -50,9 +61,12 @@ export async function createDaytonaToolkit(daytona: Daytona, sandbox: Sandbox): 
     description: 'Write or overwrite a file in the configured Daytona sandbox.',
     parameters: writeSchema,
     execute: async (input) => {
-      await sandbox.fs.uploadFile(input.content, input.path);
+      // Must pass Buffer, not string — the SDK treats string as a local file path,
+      // which produces [object Object] in CF Workers (SERVERLESS runtime).
+      const contentBuffer = Buffer.from(input.content);
+      await sandbox.fs.uploadFile(contentBuffer, input.path);
       return {
-        bytes: Buffer.from(input.content).length,
+        bytes: contentBuffer.length,
         result: 'ok',
       };
     },
@@ -68,7 +82,7 @@ export async function createDaytonaToolkit(daytona: Daytona, sandbox: Sandbox): 
       const current = fileBuffer.toString('utf8');
       const replaced = replaceInText(current, input.oldText, input.newText, input.replaceAll);
 
-      await sandbox.fs.uploadFile(replaced.result, input.path);
+      await sandbox.fs.uploadFile(Buffer.from(replaced.result), input.path);
 
       return {
         replaced: replaced.count,
@@ -105,16 +119,40 @@ export async function createDaytonaToolkit(daytona: Daytona, sandbox: Sandbox): 
     },
   });
 
-  const generate_download_url = createTool({
-    name: 'generate_download_url',
-    description: 'Generate a direct download URL for a sandbox file.',
-    parameters: generateDownloadUrlSchema,
+  const upload_attachment_to_workspace = createTool({
+    name: 'upload_attachment_to_workspace',
+    description: 'Upload a sandbox file into Convex attachments and get a storageId. Outputs in the format [fileName](attachmentId) (the ui has special handling for this format).',
+    parameters: uploadAttachmentToWorkspaceSchema,
     execute: async (input) => {
-      const baseUrl = await daytona.getProxyToolboxUrl(sandbox.id, sandbox.target);
-      const url = new URL(`${baseUrl.replace(/\/$/, '')}/files/download`);
-      url.searchParams.set('path', input.path);
+      if (!convexAdapter) {
+        throw new Error('Convex adapter is required to upload attachments');
+      }
 
-      return { url: url.toString() };
+      const fileBytes = await sandbox.fs.downloadFile(input.path);
+      const fileName = getAttachmentFileNameFromPath(input.path);
+      const contentType = inferAttachmentContentType(fileName);
+
+      const isExt = convexAdapter.getTokenType() === 'ext';
+      const uploadUrl = await convexAdapter.mutation(
+        isExt ? api.attachments.index.generateUploadUrlExt : api.attachments.index.generateUploadUrl,
+        {}
+      );
+      const uploadResult = await uploadBytesToConvexStorage(uploadUrl, fileBytes, contentType);
+      const hash = await toHexHash(fileBytes);
+      const createArgs = {
+        hash,
+        storageId: uploadResult.storageId,
+        size: fileBytes.byteLength,
+        fileName,
+        contentType,
+      };
+      const attachment = await convexAdapter.mutation(
+        isExt ? api.attachments.index.createFromHashExt : api.attachments.index.createFromHash,
+        createArgs
+      );
+      const url = attachment.url;
+
+      return `[${attachment.orgMemberAttachment.fileName}](${url})`;
     },
   });
 
@@ -164,7 +202,7 @@ export async function createDaytonaToolkit(daytona: Daytona, sandbox: Sandbox): 
       edit,
       glob,
       grep,
-      generate_download_url,
+      upload_attachment_to_workspace,
       exec,
       stateful_code_exec,
     ],

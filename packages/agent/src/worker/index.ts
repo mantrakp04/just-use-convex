@@ -130,7 +130,6 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, AgentArgs> {
       chatDoc: this.chatDoc,
       workflowDoc: this.workflowDoc,
       convexAdapter: this.convexAdapter,
-      daytona: this.daytona,
       sandbox: this.sandbox,
       backgroundTaskStore: this.backgroundTaskStore,
       truncatedOutputStore: this.truncatedOutputStore,
@@ -274,14 +273,14 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, AgentArgs> {
     return await super.onConnect(connection, ctx);
   }
 
-  override async onStateUpdate(state: AgentArgs, source: Connection | "server"): Promise<void> {
+  override async onStateChanged(state: AgentArgs, source: Connection | "server"): Promise<void> {
     const stored = await this.ctx.storage.get<AgentArgs>("state");
     await this.ctx.storage.put("state", {
       ...state,
       tokenConfig: stored?.tokenConfig ?? state.tokenConfig,
     });
     await this._patchAgent();
-    await super.onStateUpdate(state, source);
+    await super.onStateChanged(state, source);
   }
 
   override async persistMessages(messages: UIMessage[]): Promise<void> {

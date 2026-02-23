@@ -4,6 +4,7 @@ import { api } from "@just-use-convex/backend/convex/_generated/api";
 import type { FunctionArgs, FunctionReturnType } from "convex/server";
 import { toast } from "sonner";
 import type { CreateFromBytesArgs } from "@just-use-convex/backend/convex/attachments/types";
+import { sanitizeAttachmentFileName, toHexHash } from "@just-use-convex/backend/convex/shared/attachments";
 import { z } from "zod";
 
 type ListArgs = FunctionArgs<typeof api.attachments.index.list>;
@@ -36,7 +37,7 @@ export function useAttachments() {
       const blob = new Blob([uploadArgs.fileBytes], {
         type: uploadArgs.contentType ?? "application/octet-stream",
       });
-      const safeFileName = uploadArgs.fileName.replace(/[\r\n]+/g, " ").trim();
+      const safeFileName = sanitizeAttachmentFileName(uploadArgs.fileName);
 
       const uploadUrl = await generateUploadUrlMutation.mutateAsync({});
       const uploadResult = await uploadBlobWithProgress(
@@ -90,14 +91,6 @@ export function useAttachmentsList(filters: AttachmentFilters = EMPTY_FILTERS) {
     { ...filters },
     { initialNumItems: INITIAL_NUM_ITEMS }
   );
-}
-
-async function toHexHash(bytes: Uint8Array) {
-  const data = bytes.slice();
-  const hashBuffer = await crypto.subtle.digest("SHA-256", data);
-  return Array.from(new Uint8Array(hashBuffer))
-    .map((byte) => byte.toString(16).padStart(2, "0"))
-    .join("");
 }
 
 async function uploadBlobWithProgress(
