@@ -3,6 +3,7 @@ import { api } from "@just-use-convex/backend/convex/_generated/api";
 import type { Id } from "@just-use-convex/backend/convex/_generated/dataModel";
 import { z } from "zod";
 import type { ConvexAdapter } from "@just-use-convex/backend/convex/lib/convexAdapter";
+import type { AllowedAction } from "@just-use-convex/backend/convex/workflows/types";
 
 const MAX_REDIRECTS = 5;
 const BLOCKED_HOST_EXACT = new Set(["localhost", "metadata.google.internal"]);
@@ -148,7 +149,7 @@ async function recordWorkflowStepOutcomeFailClosed({
   error,
 }: {
   context: WorkflowActionContext;
-  action: "notify" | "send_message" | "http_request";
+  action: AllowedAction;
   outcome: "success" | "failure";
   error?: string;
 }): Promise<void> {

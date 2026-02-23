@@ -149,8 +149,9 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, AgentArgs> {
     const tasks = agent.getTools().find((t) => t.name === "task");
     if (tasks) {
       const maxBackgroundDuration = Number(agentDefaults.MAX_BACKGROUND_DURATION_MS);
+      const maxToolDuration = Number(agentDefaults.MAX_TOOL_DURATION_MS);
       patchToolWithBackgroundSupport(tasks, this.backgroundTaskStore, this.truncatedOutputStore, {
-        maxDuration: 30 * 60 * 1000,
+        maxDuration: maxToolDuration > 0 ? maxToolDuration : 30 * 60 * 1000,
         maxBackgroundDuration: maxBackgroundDuration > 0 ? maxBackgroundDuration : undefined,
         allowAgentSetDuration: true,
         allowBackground: true,

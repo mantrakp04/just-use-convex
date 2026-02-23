@@ -9,6 +9,7 @@ export const env = createEnv({
     CONVEX_SITE_URL: z.string().min(1),
     CONVEX_URL: z.string().min(1),
     MAX_BACKGROUND_DURATION_MS: z.coerce.number().default(3_600_000),
+    MAX_TOOL_DURATION_MS: z.coerce.number().default(30 * 60 * 1000),
     VOLTAGENT_PUBLIC_KEY: z.string().optional(),
     VOLTAGENT_SECRET_KEY: z.string().optional(),
     OPENROUTER_API_KEY: z.string().min(1),
