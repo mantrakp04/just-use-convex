@@ -232,6 +232,7 @@ File-based TanStack Router:
 - always use convex ents for convex related stuff
 - whenever implementing something for convex, analyze adjacent and relevant files for similar pattern implementation
 - whenever working with external libraries always query context7 for their relevant docs
+- for one-sided hydration-only child tables/edges, infer org/member scope from the parent and avoid org/member columns and indexes on the child
 
 ## Background & Subagents
 

@@ -9,6 +9,7 @@
  */
 
 import type * as attachments_aggregates from "../attachments/aggregates.js";
+import type * as attachments_client from "../attachments/client.js";
 import type * as attachments_functions from "../attachments/functions.js";
 import type * as attachments_index from "../attachments/index.js";
 import type * as attachments_stats from "../attachments/stats.js";
@@ -45,6 +46,7 @@ import type * as tables_shared from "../tables/shared.js";
 import type * as tables_todoAssignedMembers from "../tables/todoAssignedMembers.js";
 import type * as tables_todos from "../tables/todos.js";
 import type * as tables_workflowExecutions from "../tables/workflowExecutions.js";
+import type * as tables_workflowSteps from "../tables/workflowSteps.js";
 import type * as tables_workflows from "../tables/workflows.js";
 import type * as todos_aggregates from "../todos/aggregates.js";
 import type * as todos_functions from "../todos/functions.js";
@@ -70,6 +72,7 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   "attachments/aggregates": typeof attachments_aggregates;
+  "attachments/client": typeof attachments_client;
   "attachments/functions": typeof attachments_functions;
   "attachments/index": typeof attachments_index;
   "attachments/stats": typeof attachments_stats;
@@ -106,6 +109,7 @@ declare const fullApi: ApiFromModules<{
   "tables/todoAssignedMembers": typeof tables_todoAssignedMembers;
   "tables/todos": typeof tables_todos;
   "tables/workflowExecutions": typeof tables_workflowExecutions;
+  "tables/workflowSteps": typeof tables_workflowSteps;
   "tables/workflows": typeof tables_workflows;
   "todos/aggregates": typeof todos_aggregates;
   "todos/functions": typeof todos_functions;

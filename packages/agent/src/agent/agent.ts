@@ -204,7 +204,10 @@ async function createSubagents({
     if (!convexAdapter) {
       throw new Error("No convex adapter");
     }
-    toolkitPromises.push(createWorkflowActionToolkit(workflowDoc.allowedActions, convexAdapter));
+    toolkitPromises.push(createWorkflowActionToolkit(workflowDoc.allowedActions, {
+      executionId: modeConfig.executionId,
+      convexAdapter,
+    }));
   }
 
   const toolkits = await Promise.all(toolkitPromises);

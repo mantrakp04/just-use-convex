@@ -1,6 +1,9 @@
 import { createTool, createToolkit, type Toolkit } from "@voltagent/core";
+import { api } from "@just-use-convex/backend/convex/_generated/api";
+import type { Id } from "@just-use-convex/backend/convex/_generated/dataModel";
 import { z } from "zod";
 import type { ConvexAdapter } from "@just-use-convex/backend/convex/lib/convexAdapter";
+import type { AllowedAction } from "@just-use-convex/backend/convex/workflows/types";
 
 const MAX_REDIRECTS = 5;
 const BLOCKED_HOST_EXACT = new Set(["localhost", "metadata.google.internal"]);
@@ -8,9 +11,14 @@ const BLOCKED_HOST_SUFFIXES = [".localhost", ".local"];
 const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308]);
 const URL_SAFE_METHODS = new Set(["GET", "HEAD"]);
 
+type WorkflowActionContext = {
+  executionId: Id<"workflowExecutions">;
+  convexAdapter: ConvexAdapter;
+};
+
 export async function createWorkflowActionToolkit(
   allowedActions: string[],
-  _convexAdapter: ConvexAdapter,
+  context: WorkflowActionContext,
 ): Promise<Toolkit> {
   const sendMessage = createTool({
     name: "send_message",
@@ -20,7 +28,23 @@ export async function createWorkflowActionToolkit(
       level: z.enum(["info", "warning", "error"]).optional().describe("Message level"),
     }),
     execute: async ({ message, level = "info" }) => {
-      return { sent: true, message, level, timestamp: Date.now() };
+      try {
+        const result = { sent: true, message, level, timestamp: Date.now() };
+        await recordWorkflowStepOutcomeFailClosed({
+          context,
+          action: "send_message",
+          outcome: "success",
+        });
+        return result;
+      } catch (error) {
+        await recordWorkflowStepOutcomeFailClosed({
+          context,
+          action: "send_message",
+          outcome: "failure",
+          error: toErrorMessage(error),
+        });
+        throw error;
+      }
     },
   });
 
@@ -34,20 +58,36 @@ export async function createWorkflowActionToolkit(
       body: z.string().optional().describe("Request body (for POST/PUT/PATCH)"),
     }),
     execute: async ({ url, method = "GET", headers, body }) => {
-      const response = await fetchWithSafeRedirects(url, {
-        method,
-        headers: headers ?? {},
-        body: ["POST", "PUT", "PATCH"].includes(method) ? body : undefined,
-      });
-      const responseText = await response.text();
-      const truncated = responseText.length > 5000
-        ? responseText.slice(0, 5000) + "\n... (truncated)"
-        : responseText;
-      return {
-        status: response.status,
-        statusText: response.statusText,
-        body: truncated,
-      };
+      try {
+        const response = await fetchWithSafeRedirects(url, {
+          method,
+          headers: headers ?? {},
+          body: ["POST", "PUT", "PATCH"].includes(method) ? body : undefined,
+        });
+        const responseText = await response.text();
+        const truncated = responseText.length > 5000
+          ? responseText.slice(0, 5000) + "\n... (truncated)"
+          : responseText;
+
+        await recordWorkflowStepOutcomeFailClosed({
+          context,
+          action: "http_request",
+          outcome: "success",
+        });
+        return {
+          status: response.status,
+          statusText: response.statusText,
+          body: truncated,
+        };
+      } catch (error) {
+        await recordWorkflowStepOutcomeFailClosed({
+          context,
+          action: "http_request",
+          outcome: "failure",
+          error: toErrorMessage(error),
+        });
+        throw error;
+      }
     },
   });
 
@@ -59,7 +99,23 @@ export async function createWorkflowActionToolkit(
       level: z.enum(["info", "warning", "error"]).optional().describe("Notification level"),
     }),
     execute: async ({ message, level = "info" }) => {
-      return { notified: true, message, level, timestamp: Date.now() };
+      try {
+        const result = { notified: true, message, level, timestamp: Date.now() };
+        await recordWorkflowStepOutcomeFailClosed({
+          context,
+          action: "notify",
+          outcome: "success",
+        });
+        return result;
+      } catch (error) {
+        await recordWorkflowStepOutcomeFailClosed({
+          context,
+          action: "notify",
+          outcome: "failure",
+          error: toErrorMessage(error),
+        });
+        throw error;
+      }
     },
   });
 
@@ -81,6 +137,39 @@ export async function createWorkflowActionToolkit(
     description: "Available actions for this workflow execution",
     tools,
   });
+}
+
+async function recordWorkflowStepOutcomeFailClosed({
+  context,
+  action,
+  outcome,
+  error,
+}: {
+  context: WorkflowActionContext;
+  action: AllowedAction;
+  outcome: "success" | "failure";
+  error?: string;
+}): Promise<void> {
+  try {
+    await context.convexAdapter.mutation(
+      api.workflows.index.recordWorkflowStepOutcomeExt,
+      {
+        executionId: context.executionId,
+        action,
+        outcome,
+        ...(error ? { error } : {}),
+      },
+    );
+  } catch (loggingError) {
+    console.error(
+      `Failed to record workflow step outcome for "${action}":`,
+      toErrorMessage(loggingError),
+    );
+  }
+}
+
+function toErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }
 
 function assertSafeHttpUrl(rawUrl: string): void {

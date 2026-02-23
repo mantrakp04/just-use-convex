@@ -9,6 +9,10 @@ import {
   inputModalitySchema,
 } from "../tables/workflows";
 import { sandboxesWithSystemFields } from "../tables/sandboxes";
+import { workflowExecutionsWithSystemFields } from "../tables/workflowExecutions";
+import { workflowStepsWithSystemFields } from "../tables/workflowSteps";
+import { paginationOptsValidator } from "convex/server";
+import { convexToZod } from "convex-helpers/server/zod4";
 
 /** Inferred from allowedActionSchema */
 export type AllowedAction = z.infer<typeof allowedActionSchema>;
@@ -18,15 +22,13 @@ export type EventType = z.infer<typeof eventSchema>;
 export type TriggerType = z.infer<typeof triggerSchema>["type"];
 /** Inferred from inputModalitySchema */
 export type InputModality = z.infer<typeof inputModalitySchema>;
-import { workflowExecutionsWithSystemFields } from "../tables/workflowExecutions";
-import { paginationOptsValidator } from "convex/server";
-import { convexToZod } from "convex-helpers/server/zod4";
 
 const zPaginationOpts = convexToZod(paginationOptsValidator);
 
 export const Workflow = z.object(workflowsZodSchema);
 export const WorkflowWithSystemFields = z.object(workflowsWithSystemFields);
 export const WorkflowExecution = z.object(workflowExecutionsWithSystemFields);
+export const WorkflowStep = z.object(workflowStepsWithSystemFields);
 
 /** Workflow list item (doc + sandbox edge). Use instead of inferring from FunctionReturnType for correct enum array types. */
 export type WorkflowWithSandbox = z.infer<typeof WorkflowWithSystemFields> & {
@@ -103,5 +105,16 @@ export const CreateExecutionArgs = z.object({
 });
 
 export const RetryExecutionArgs = z.object({
+  executionId: WorkflowExecution.shape._id,
+});
+
+export const RecordWorkflowStepOutcomeArgs = z.object({
+  executionId: WorkflowExecution.shape._id,
+  action: allowedActionSchema,
+  outcome: z.enum(["success", "failure"]),
+  error: z.string().optional(),
+});
+
+export const FinalizeWorkflowStepsArgs = z.object({
   executionId: WorkflowExecution.shape._id,
 });

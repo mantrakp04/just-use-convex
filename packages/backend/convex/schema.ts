@@ -7,6 +7,7 @@ import { globalAttachmentsEnt } from "./tables/globalAttachments";
 import { orgMemberAttachmentsEnt } from "./tables/orgMemberAttachments";
 import { workflowsEnt } from "./tables/workflows";
 import { workflowExecutionsEnt } from "./tables/workflowExecutions";
+import { workflowStepsEnt } from "./tables/workflowSteps";
 
 const schema = defineEntSchema({
   todos: todosEnt,
@@ -17,6 +18,7 @@ const schema = defineEntSchema({
   orgMemberAttachments: orgMemberAttachmentsEnt,
   workflows: workflowsEnt,
   workflowExecutions: workflowExecutionsEnt,
+  workflowSteps: workflowStepsEnt,
 });
 
 export default schema;

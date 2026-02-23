@@ -149,8 +149,9 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, AgentArgs> {
     const tasks = agent.getTools().find((t) => t.name === "task");
     if (tasks) {
       const maxBackgroundDuration = Number(agentDefaults.MAX_BACKGROUND_DURATION_MS);
+      const maxToolDuration = Number(agentDefaults.MAX_TOOL_DURATION_MS);
       patchToolWithBackgroundSupport(tasks, this.backgroundTaskStore, this.truncatedOutputStore, {
-        maxDuration: 30 * 60 * 1000,
+        maxDuration: maxToolDuration > 0 ? maxToolDuration : 30 * 60 * 1000,
         maxBackgroundDuration: maxBackgroundDuration > 0 ? maxBackgroundDuration : undefined,
         allowAgentSetDuration: true,
         allowBackground: true,
@@ -224,6 +225,11 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, AgentArgs> {
     if (!executionId || !this.convexAdapter) {
       return;
     }
+
+    await this.convexAdapter.mutation(
+      api.workflows.index.finalizeWorkflowStepsExt,
+      { executionId },
+    ).catch(() => {});
 
     await this.convexAdapter.mutation(
       api.workflows.index.updateExecutionStatusExt,
@@ -367,6 +373,11 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, AgentArgs> {
       if (isWorkflow && this.state.modeConfig && this.workflowDoc) {
         const modelMessages = buildWorkflowExecutionMessages();
         const result = await agent.generateText(modelMessages);
+
+        await this.convexAdapter.mutation(
+          api.workflows.index.finalizeWorkflowStepsExt,
+          { executionId: modeConfig.executionId },
+        );
 
         await this.convexAdapter.mutation(
           api.workflows.index.updateExecutionStatusExt,
