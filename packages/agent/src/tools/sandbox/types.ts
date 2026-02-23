@@ -104,8 +104,8 @@ export const grepSchema = z.object({
   pattern: z.string().describe('Text pattern to match'),
 });
 
-export const generateDownloadUrlSchema = z.object({
-  path: z.string().describe('Path of file to generate download URL for'),
+export const uploadAttachmentToWorkspaceSchema = z.object({
+  path: z.string().describe('Path of file to upload to workspace'),
 });
 
 export const execSchema = z.object({

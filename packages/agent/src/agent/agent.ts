@@ -95,8 +95,6 @@ export async function createWorkerPlanAgent({
             "tool-call",
             "tool-result",
             "tool-error",
-            "text-delta",
-            "reasoning-delta",
             "source",
             "error",
             "finish",

@@ -34,7 +34,7 @@ function HomeComponent() {
       <div className="fixed inset-0 z-0 h-svh w-full pointer-events-none">
         <HeroScene activeScene={activeScene} />
       </div>
-      <div className="fixed inset-0 z-[1] h-svh w-full pointer-events-none bg-background/80" />
+      <div className="fixed inset-0 z-1 h-svh w-full pointer-events-none bg-background/67" />
       
       {activeScene === "dvd" && <BouncingText text={TITLE_TEXT} />}
       {activeScene === "matrix" && <MatrixRain />}

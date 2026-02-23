@@ -13,7 +13,7 @@ import { SandboxPtyService } from './pty';
 import {
   editSchema,
   execSchema,
-  generateDownloadUrlSchema,
+  uploadAttachmentToWorkspaceSchema,
   globSchema,
   grepSchema,
   listSchema,
@@ -116,10 +116,10 @@ export async function createDaytonaToolkit(
     },
   });
 
-  const generate_download_url = createTool({
-    name: 'generate_download_url',
-    description: 'Upload a sandbox file into Convex attachments and return storageId with URL.',
-    parameters: generateDownloadUrlSchema,
+  const upload_attachment_to_workspace = createTool({
+    name: 'upload_attachment_to_workspace',
+    description: 'Upload a sandbox file into Convex attachments and get a storageId. Outputs in the format [fileName](attachmentId) (the ui has special handling for this format).',
+    parameters: uploadAttachmentToWorkspaceSchema,
     execute: async (input) => {
       if (!convexAdapter) {
         throw new Error('Convex adapter is required to upload attachments');
@@ -147,11 +147,9 @@ export async function createDaytonaToolkit(
         isExt ? api.attachments.index.createFromHashExt : api.attachments.index.createFromHash,
         createArgs
       );
+      const url = attachment.url;
 
-      return {
-        storageId: attachment.globalAttachment.storageId,
-        url: attachment.url,
-      };
+      return `[${attachment.orgMemberAttachment.fileName}](${url})`;
     },
   });
 
@@ -201,7 +199,7 @@ export async function createDaytonaToolkit(
       edit,
       glob,
       grep,
-      generate_download_url,
+      upload_attachment_to_workspace,
       exec,
       stateful_code_exec,
     ],
