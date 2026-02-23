@@ -190,7 +190,7 @@ export async function createDaytonaToolkit(
   });
 
   return {
-    name: 'daytona-filesystem-agent',
+    name: 'sandbox',
     description:
       'Use Daytona sandbox filesystem and terminal tools for file operations, command execution, and stateful Python code execution.',
     instructions: 'Use these tools to read and edit files, run commands, inspect logs, and execute stateful Python snippets.',
