@@ -5,6 +5,9 @@ export async function parseStreamToUI(
   fullStream: AsyncIterable<VoltAgentTextStreamPart>,
   writer: UIMessageStreamWriter
 ): Promise<void> {
+  const startedTextPartIds = new Set<string>();
+  const startedReasoningPartIds = new Set<string>();
+
   try {
     for await (const part of fullStream) {
       // if (
@@ -27,6 +30,7 @@ export async function parseStreamToUI(
 
       switch (part.type) {
         case 'text-start':
+          startedTextPartIds.add(part.id);
           writer.write({
             type: 'text-start',
             id: part.id,
@@ -34,6 +38,14 @@ export async function parseStreamToUI(
           });
           break;
         case 'text-delta':
+          if (!startedTextPartIds.has(part.id)) {
+            startedTextPartIds.add(part.id);
+            writer.write({
+              type: 'text-start',
+              id: part.id,
+              ...(part.providerMetadata != null ? { providerMetadata: part.providerMetadata } : {}),
+            });
+          }
           writer.write({
             type: 'text-delta',
             id: part.id,
@@ -42,6 +54,15 @@ export async function parseStreamToUI(
           });
           break;
         case 'text-end':
+          if (!startedTextPartIds.has(part.id)) {
+            startedTextPartIds.add(part.id);
+            writer.write({
+              type: 'text-start',
+              id: part.id,
+              ...(part.providerMetadata != null ? { providerMetadata: part.providerMetadata } : {}),
+            });
+          }
+          startedTextPartIds.delete(part.id);
           writer.write({
             type: 'text-end',
             id: part.id,
@@ -49,6 +70,7 @@ export async function parseStreamToUI(
           });
           break;
         case 'reasoning-start':
+          startedReasoningPartIds.add(part.id);
           writer.write({
             type: 'reasoning-start',
             id: part.id,
@@ -56,6 +78,14 @@ export async function parseStreamToUI(
           });
           break;
         case 'reasoning-delta':
+          if (!startedReasoningPartIds.has(part.id)) {
+            startedReasoningPartIds.add(part.id);
+            writer.write({
+              type: 'reasoning-start',
+              id: part.id,
+              ...(part.providerMetadata != null ? { providerMetadata: part.providerMetadata } : {}),
+            });
+          }
           writer.write({
             type: 'reasoning-delta',
             id: part.id,
@@ -64,6 +94,15 @@ export async function parseStreamToUI(
           });
           break;
         case 'reasoning-end':
+          if (!startedReasoningPartIds.has(part.id)) {
+            startedReasoningPartIds.add(part.id);
+            writer.write({
+              type: 'reasoning-start',
+              id: part.id,
+              ...(part.providerMetadata != null ? { providerMetadata: part.providerMetadata } : {}),
+            });
+          }
+          startedReasoningPartIds.delete(part.id);
           writer.write({
             type: 'reasoning-end',
             id: part.id,

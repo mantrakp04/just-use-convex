@@ -137,6 +137,10 @@ export async function createWorkerPlanAgent({
     }),
   ]);
 
+  for (const subagent of subagents) {
+    agent.addSubAgent(subagent);
+  }
+
   return agent;
 }
 
