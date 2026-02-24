@@ -1,15 +1,13 @@
 import type { Trigger } from "convex-helpers/server/triggers";
-import type { FunctionArgs, GenericMutationCtx } from "convex/server";
+import type { GenericMutationCtx } from "convex/server";
 import { internal } from "../_generated/api";
 import type { DataModel } from "../_generated/dataModel";
+import type { Doc } from "../_generated/dataModel";
 import type { EventType } from "./types";
 import { triggerSchema } from "../tables/workflows";
-import { resolveWorkflowMemberIdentity } from "./memberIdentity";
+import { buildDispatchArgs, resolveWorkflowMemberIdentity } from "./functions";
 
 type MutationCtx = GenericMutationCtx<DataModel>;
-type DispatchWorkflowBatchArgs = FunctionArgs<
-  typeof internal.workflows.dispatch.dispatchWorkflowBatch
->;
 
 type EventName = EventType;
 
@@ -81,7 +79,7 @@ export function workflowEventTrigger<T extends "chats" | "sandboxes" | "todos">(
       )
       .collect();
 
-    const dispatches: DispatchWorkflowBatchArgs["dispatches"] = [];
+    const dispatches: Array<ReturnType<typeof import("./functions").buildDispatchArgs>> = [];
 
     for (const workflow of enabledWorkflows) {
       let trigger: ReturnType<typeof triggerSchema.parse>;
@@ -110,15 +108,9 @@ export function workflowEventTrigger<T extends "chats" | "sandboxes" | "todos">(
         timestamp: Date.now(),
       });
 
-      dispatches.push({
-        workflowId: workflow._id,
-        triggerPayload,
-        userId: memberIdentity.userId,
-        activeOrganizationId: workflow.organizationId,
-        organizationRole: memberIdentity.role,
-        memberId: workflow.memberId,
-        activeTeamId: undefined,
-      });
+      dispatches.push(
+        buildDispatchArgs(workflow as Doc<"workflows">, memberIdentity, triggerPayload),
+      );
     }
 
     if (dispatches.length > 0) {

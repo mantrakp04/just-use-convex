@@ -61,7 +61,7 @@ export const dispatchWorkflow = internalAction({
       );
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      await ctx.runMutation(internal.workflows.internalMutations.failExecution, {
+      await ctx.runMutation(internal.workflows.index.failExecution, {
         executionId,
         error: `Dispatch error: ${message}`,
       });
@@ -71,7 +71,7 @@ export const dispatchWorkflow = internalAction({
     if (!response.ok) {
       const errorText = await response.text();
       const message = `Dispatch failed: ${response.status} ${errorText}`;
-      await ctx.runMutation(internal.workflows.internalMutations.failExecution, {
+      await ctx.runMutation(internal.workflows.index.failExecution, {
         executionId,
         error: message,
       });

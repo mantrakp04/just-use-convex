@@ -1,3 +1,5 @@
+import { v } from "convex/values";
+import { internalMutation, internalQuery } from "../_generated/server";
 import * as functions from "./functions";
 import * as types from "./types";
 import { zExternalMutation, zExternalQuery, zInternalMutation, zMutation, zQuery } from "../functions";
@@ -158,4 +160,21 @@ export const finalizeWorkflowStepsExt = zExternalMutation({
   handler: async (ctx, args): Promise<ReturnType<typeof functions.FinalizeWorkflowSteps>> => {
     return await functions.FinalizeWorkflowSteps(ctx, args);
   },
+});
+
+// ═══════════════════════════════════════════════════════════════════
+// INTERNAL (dispatch, scheduler, http webhook)
+// ═══════════════════════════════════════════════════════════════════
+
+export const failExecution = internalMutation({
+  args: {
+    executionId: v.id("workflowExecutions"),
+    error: v.string(),
+  },
+  handler: async (ctx, args) => functions.FailExecution(ctx, args),
+});
+
+export const getEnabledWorkflow = internalQuery({
+  args: { workflowId: v.id("workflows") },
+  handler: async (ctx, args) => functions.GetEnabledWorkflow(ctx, args),
 });

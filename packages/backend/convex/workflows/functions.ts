@@ -1,8 +1,12 @@
 import type { z } from "zod";
+import type { GenericMutationCtx, GenericQueryCtx } from "convex/server";
+import type { DataModel, Doc } from "../_generated/dataModel";
 import type { zMutationCtx, zQueryCtx } from "../functions";
+import { components } from "../_generated/api";
 import { internal } from "../_generated/api";
 import * as types from "./types";
 import { triggerSchema as TriggerSchema } from "../tables/workflows";
+import { isMemberRole } from "../shared/auth";
 import { withInvalidCursorRetry } from "../shared/pagination";
 import { buildPatchData } from "../shared/patch";
 import {
@@ -532,6 +536,88 @@ export async function FinalizeWorkflowSteps(
   await execution.patch(summary);
 
   return { ok: true, updatedSteps: pendingSteps.length, ...summary };
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// INTERNAL HELPERS (scheduler, triggers, webhook, dispatch)
+// ═══════════════════════════════════════════════════════════════════
+
+type RunQueryCtx = Pick<
+  import("convex/server").GenericActionCtx<DataModel>,
+  "runQuery"
+>;
+
+export async function resolveWorkflowMemberIdentity(
+  ctx: RunQueryCtx,
+  organizationId: string,
+  memberId: string,
+): Promise<types.WorkflowMember | null> {
+  const member = await ctx.runQuery(components.betterAuth.adapter.findOne, {
+    model: "member",
+    where: [
+      { field: "_id", operator: "eq", value: memberId },
+      { field: "organizationId", operator: "eq", value: organizationId },
+    ],
+    select: ["role", "userId"],
+  });
+
+  const role = (member as { role?: unknown } | null)?.role;
+  const userId = (member as { userId?: unknown } | null)?.userId;
+  if (typeof role !== "string" || !isMemberRole(role)) return null;
+  if (typeof userId !== "string" || userId.length === 0) return null;
+
+  return { role, userId };
+}
+
+export function buildDispatchArgs(
+  workflow: Pick<Doc<"workflows">, "_id" | "organizationId" | "memberId">,
+  memberIdentity: types.WorkflowMember,
+  triggerPayload: string,
+  options?: { activeTeamId?: string },
+) {
+  return {
+    workflowId: workflow._id,
+    triggerPayload,
+    userId: memberIdentity.userId,
+    activeOrganizationId: workflow.organizationId,
+    organizationRole: memberIdentity.role,
+    memberId: workflow.memberId,
+    activeTeamId: options?.activeTeamId,
+  };
+}
+
+type FailExecutionCtx = Pick<GenericMutationCtx<DataModel>, "db" | "scheduler">;
+
+export async function FailExecution(
+  ctx: FailExecutionCtx,
+  args: { executionId: z.infer<typeof types.WorkflowExecution>["_id"]; error: string },
+) {
+  const execution = await ctx.db.get(args.executionId);
+  if (!execution) return;
+
+  const wasTerminal = isTerminalExecutionStatus(execution.status);
+  const now = Date.now();
+  await ctx.db.patch(args.executionId, {
+    status: "failed",
+    error: args.error,
+    completedAt: now,
+  });
+
+  if (!wasTerminal) {
+    await ctx.scheduler.runAfter(0, internal.workflows.scheduler.scheduleNext, {
+      workflowId: execution.workflowId,
+      fromTimestamp: now,
+    });
+  }
+}
+
+export async function GetEnabledWorkflow(
+  ctx: Pick<GenericQueryCtx<DataModel>, "db">,
+  args: { workflowId: z.infer<typeof types.WorkflowWithSystemFields>["_id"] },
+): Promise<Doc<"workflows"> | null> {
+  const workflow = await ctx.db.get(args.workflowId);
+  if (!workflow || !("enabled" in workflow) || !workflow.enabled) return null;
+  return workflow as unknown as Doc<"workflows">;
 }
 
 // ═══════════════════════════════════════════════════════════════════

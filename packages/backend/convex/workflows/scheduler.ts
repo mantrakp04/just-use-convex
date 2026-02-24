@@ -1,13 +1,9 @@
-import type { FunctionArgs } from "convex/server";
 import { v } from "convex/values";
 import { internalMutation } from "../_generated/server";
 import { internal } from "../_generated/api";
+import type { Doc } from "../_generated/dataModel";
 import { triggerSchema } from "../tables/workflows";
-import { resolveWorkflowMemberIdentity } from "./memberIdentity";
-
-type DispatchWorkflowArgs = FunctionArgs<
-  typeof internal.workflows.dispatch.dispatchWorkflow
->;
+import { buildDispatchArgs, resolveWorkflowMemberIdentity } from "./functions";
 
 export const scheduleNext = internalMutation({
   args: {
@@ -63,22 +59,16 @@ export const executeScheduledWorkflow = internalMutation({
     );
     if (!memberIdentity) return;
 
-    const dispatchArgs: DispatchWorkflowArgs = {
-      workflowId: workflow._id,
-      triggerPayload: JSON.stringify({
-        type: "schedule",
-        cron: args.cron,
-        scheduledAt: args.scheduledAt,
-        dispatchedAt: Date.now(),
-      }),
-      userId: memberIdentity.userId,
-      activeOrganizationId: workflow.organizationId,
-      organizationRole: memberIdentity.role,
-      memberId: workflow.memberId,
-      activeTeamId: undefined,
-    };
+    const triggerPayload = JSON.stringify({
+      type: "schedule",
+      cron: args.cron,
+      scheduledAt: args.scheduledAt,
+      dispatchedAt: Date.now(),
+    });
 
-    await ctx.scheduler.runAfter(0, internal.workflows.dispatch.dispatchWorkflow, dispatchArgs);
+    await ctx.scheduler.runAfter(0, internal.workflows.dispatch.dispatchWorkflow, {
+      ...buildDispatchArgs(workflow as Doc<"workflows">, memberIdentity, triggerPayload),
+    });
   },
 });
 

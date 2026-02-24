@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { Doc } from "../_generated/dataModel";
+import type { MemberRole } from "../shared/auth";
 import {
   workflowsZodSchema,
   workflowsWithSystemFields,
@@ -34,6 +35,9 @@ export const WorkflowStep = z.object(workflowStepsWithSystemFields);
 export type WorkflowWithSandbox = z.infer<typeof WorkflowWithSystemFields> & {
   sandbox: Doc<"sandboxes"> | null;
 };
+
+/** Resolved member identity for workflow dispatch (used by scheduler, triggers, webhook) */
+export type WorkflowMember = { role: MemberRole; userId: string };
 
 // ═══════════════════════════════════════════════════════════════════
 // WORKFLOW ARGS

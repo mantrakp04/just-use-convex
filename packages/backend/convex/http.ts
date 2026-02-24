@@ -6,7 +6,7 @@ import { httpAction } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { env } from "@just-use-convex/env/backend";
 import { triggerSchema } from "./tables/workflows";
-import { resolveWorkflowMemberIdentity } from "./workflows/memberIdentity";
+import { resolveWorkflowMemberIdentity } from "./workflows/functions";
 
 const http = httpRouter();
 const SENSITIVE_WEBHOOK_HEADERS = ["x-webhook-signature", "authorization", "cookie"];
@@ -29,9 +29,9 @@ const handleWorkflowWebhook = httpAction(async (ctx, request) => {
   }
 
   // Fetch workflow to validate
-  let workflow: FunctionReturnType<typeof internal.workflows.webhookQuery.getEnabledWorkflow>;
+  let workflow: FunctionReturnType<typeof internal.workflows.index.getEnabledWorkflow>;
   try {
-    workflow = await ctx.runQuery(internal.workflows.webhookQuery.getEnabledWorkflow, {
+    workflow = await ctx.runQuery(internal.workflows.index.getEnabledWorkflow, {
       workflowId: workflowId as Id<"workflows">,
     });
   } catch {
