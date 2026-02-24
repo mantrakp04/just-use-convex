@@ -1,7 +1,7 @@
 import * as functions from "./functions";
 import * as stats from "./stats";
 import * as types from "./types";
-import { zMutation, zQuery } from "../functions";
+import { zExternalMutation, zMutation, zQuery } from "../functions";
 
 export const generateUploadUrl = zMutation({
   args: {},
@@ -10,7 +10,20 @@ export const generateUploadUrl = zMutation({
   },
 });
 
+export const generateUploadUrlExt = zExternalMutation({
+  handler: async (ctx) => {
+    return await ctx.storage.generateUploadUrl();
+  },
+});
+
 export const createFromHash = zMutation({
+  args: types.CreateFromHashArgs,
+  handler: async (ctx, args): Promise<ReturnType<typeof functions.CreateAttachmentFromHash>> => {
+    return await functions.CreateAttachmentFromHash(ctx, args);
+  },
+});
+
+export const createFromHashExt = zExternalMutation({
   args: types.CreateFromHashArgs,
   handler: async (ctx, args): Promise<ReturnType<typeof functions.CreateAttachmentFromHash>> => {
     return await functions.CreateAttachmentFromHash(ctx, args);

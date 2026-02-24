@@ -10,7 +10,8 @@ import {
   CircleDotDashed,
   MessageCircle,
 } from "lucide-react";
-import { useGithubRepo, useGithubIssuesCount, useGithubMasterStatus, useGithubPRs } from "@/hooks/use-github-repo";
+import { Badge } from "@/components/ui/badge";
+import { useGithubRepo, useGithubIssuesCount, useGithubMasterStatus, useGithubPRs, useGithubPRsCount } from "@/hooks/use-github-repo";
 import { env } from "@just-use-convex/env/web";
 
 type GithubStatusState = "pending" | "success" | "failure" | "error";
@@ -36,6 +37,7 @@ export function GithubHoverContent() {
   const issuesQuery = useGithubIssuesCount();
   const masterStatusQuery = useGithubMasterStatus();
   const prsQuery = useGithubPRs();
+  const prsCountQuery = useGithubPRsCount();
 
   return (
     <div className="flex flex-col gap-3">
@@ -74,7 +76,16 @@ export function GithubHoverContent() {
       <div className="h-px bg-border w-full" />
 
       <div className="flex flex-col gap-2">
-        <span className="text-xs font-semibold text-muted-foreground">Recent Pull Requests</span>
+        <div className="flex items-center gap-1.5">
+          <span className="text-xs font-semibold text-muted-foreground">Recent Pull Requests</span>
+          {prsCountQuery.isLoading ? (
+            <Loader2 className="size-3 animate-spin text-muted-foreground" />
+          ) : prsCountQuery.data ? (
+            <Badge variant="outline" className="h-4 min-w-4 rounded-full px-1 text-[10px]">
+              {prsCountQuery.data.total_count}
+            </Badge>
+          ) : null}
+        </div>
         {prsQuery.isLoading ? (
           <div className="flex items-center justify-center p-2">
             <Loader2 className="size-4 animate-spin text-muted-foreground" />
@@ -115,6 +126,16 @@ export function GithubHoverContent() {
                 </div>
               </a>
             ))}
+            {prsCountQuery.data && prsQuery.data && prsCountQuery.data.total_count > prsQuery.data.length ? (
+              <a
+                href={`https://github.com/${env.VITE_GITHUB_REPO}/pulls`}
+                target="_blank"
+                rel="noreferrer"
+                className="text-xs text-muted-foreground hover:text-foreground transition-colors -mx-1.5 px-1.5 py-1"
+              >
+                Show all
+              </a>
+            ) : null}
           </div>
         )}
       </div>
