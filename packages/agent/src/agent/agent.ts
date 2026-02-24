@@ -15,6 +15,7 @@ import { CHAT_SYSTEM_PROMPT, WORKFLOW_SYSTEM_PROMPT, TASK_PROMPT } from "./promp
 import { createAskUserToolkit } from "../tools/ask-user";
 import { createWebSearchToolkit } from "../tools/websearch";
 import { createBackgroundTaskToolkit } from "../tools/utils/wrapper/toolkit";
+import { normalizeDuration } from "../tools/utils/duration";
 import {
   BackgroundTaskStore,
   TruncatedOutputStore,
@@ -148,19 +149,6 @@ export async function createWorkerPlanAgent({
   }
 
   return agent;
-}
-
-function normalizeDuration(value: unknown, fallback: number): number {
-  if (typeof value === "number" && Number.isFinite(value)) {
-    return Math.max(1, Math.floor(value));
-  }
-  if (typeof value === "string") {
-    const parsed = Number(value);
-    if (Number.isFinite(parsed)) {
-      return Math.max(1, Math.floor(parsed));
-    }
-  }
-  return fallback;
 }
 
 function configureVoltOpsClient(env: typeof worker.Env): void {

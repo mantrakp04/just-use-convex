@@ -69,10 +69,12 @@ export async function createWorkflowActionToolkit(
           ? responseText.slice(0, 5000) + "\n... (truncated)"
           : responseText;
 
+        const outcome = response.ok ? "success" : "failure";
         await recordWorkflowStepOutcomeFailClosed({
           context,
           action: "http_request",
-          outcome: "success",
+          outcome,
+          ...(!response.ok ? { error: `HTTP ${response.status} ${response.statusText}` } : {}),
         });
         return {
           status: response.status,

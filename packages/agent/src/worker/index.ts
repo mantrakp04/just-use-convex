@@ -20,6 +20,7 @@ import {
 } from "@just-use-convex/backend/convex/lib/convexAdapter";
 import { env as agentDefaults } from "@just-use-convex/env/agent";
 import { createAiClient } from "../agent/client";
+import { normalizeDuration } from "../tools/utils/duration";
 import { parseStreamToUI } from "../utils/fullStreamParser";
 import {
   BackgroundTaskStore,
@@ -65,15 +66,15 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, AgentArgs> {
   private planAgent: PlanAgent | null = null;
   private backgroundTaskStore = new BackgroundTaskStore(this.ctx.waitUntil.bind(this.ctx));
   private truncatedOutputStore = new TruncatedOutputStore();
-  private readonly maxToolDurationMs = resolveDurationMs(
+  private readonly maxToolDurationMs = normalizeDuration(
     agentDefaults.MAX_TOOL_DURATION_MS,
     600_000,
   );
-  private readonly maxBackgroundDurationMs = resolveDurationMs(
+  private readonly maxBackgroundDurationMs = normalizeDuration(
     agentDefaults.MAX_BACKGROUND_DURATION_MS,
     3_600_000,
   );
-  private readonly backgroundTaskPollIntervalMs = resolveDurationMs(
+  private readonly backgroundTaskPollIntervalMs = normalizeDuration(
     agentDefaults.BACKGROUND_TASK_POLL_INTERVAL_MS,
     3_000,
   );
@@ -498,17 +499,4 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, AgentArgs> {
   override async onChatMessage(onFinish: StreamTextOnFinishCallback<ToolSet>, options?: OnChatMessageOptions): Promise<Response> {
     return await this._onChatMessage(onFinish, options);
   }
-}
-
-function resolveDurationMs(value: unknown, fallback: number): number {
-  if (typeof value === "number" && Number.isFinite(value)) {
-    return Math.max(1, Math.floor(value));
-  }
-  if (typeof value === "string") {
-    const parsed = Number(value);
-    if (Number.isFinite(parsed)) {
-      return Math.max(1, Math.floor(parsed));
-    }
-  }
-  return fallback;
 }

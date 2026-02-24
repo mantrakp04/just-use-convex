@@ -12,7 +12,8 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 import { Button } from "@/components/ui/button";
-import { useChats, useChatsList, type Chat } from "@/hooks/use-chats";
+import { useChats, useChatsList, useChat, type Chat } from "@/hooks/use-chats";
+import type { Id } from "@just-use-convex/backend/convex/_generated/dataModel";
 import { Badge } from "@/components/ui/badge";
 import { selectedSandboxIdAtom } from "@/store/sandbox";
 import { MessageSquare, Pin, ChevronDown, Loader2, Box, Plus } from "lucide-react";
@@ -88,7 +89,8 @@ export function HeaderChatsDropdown() {
   );
 
   const params = useParams({ strict: false });
-  const currentChatId = params?.chatId;
+  const currentChatId = params?.chatId as Id<"chats"> | undefined;
+  const { data: currentChat } = useChat(currentChatId);
 
   const hasPinned = pinned && pinned.length > 0;
   const hasUnpinned = unpinned && unpinned.length > 0;
@@ -103,7 +105,7 @@ export function HeaderChatsDropdown() {
         )}
       >
         <MessageSquare className="size-4 shrink-0" />
-        <span className="truncate max-w-[140px]">Chats</span>
+        <span className="truncate max-w-[140px]">{currentChat?.title ?? "Chats"}</span>
         <ChevronDown className="size-4 shrink-0 text-muted-foreground" />
       </DropdownMenuTrigger>
       <DropdownMenuContent align="center" className="w-72 p-0" sideOffset={8}>
