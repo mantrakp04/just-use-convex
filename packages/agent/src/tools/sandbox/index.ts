@@ -7,13 +7,13 @@ import {
   inferAttachmentContentType,
   toHexHash,
   uploadBytesToConvexStorage,
-} from '@just-use-convex/backend/convex/attachments/client';
+} from '@just-use-convex/backend/convex/shared/attachments';
 import type { ConvexAdapter } from '@just-use-convex/backend/convex/lib/convexAdapter';
 import { SandboxPtyService } from './pty';
 import {
   editSchema,
   execSchema,
-  generateDownloadUrlSchema,
+  uploadAttachmentToWorkspaceSchema,
   globSchema,
   grepSchema,
   listSchema,
@@ -61,9 +61,12 @@ export async function createDaytonaToolkit(
     description: 'Write or overwrite a file in the configured Daytona sandbox.',
     parameters: writeSchema,
     execute: async (input) => {
-      await sandbox.fs.uploadFile(input.content, input.path);
+      // Must pass Buffer, not string — the SDK treats string as a local file path,
+      // which produces [object Object] in CF Workers (SERVERLESS runtime).
+      const contentBuffer = Buffer.from(input.content);
+      await sandbox.fs.uploadFile(contentBuffer, input.path);
       return {
-        bytes: Buffer.from(input.content).length,
+        bytes: contentBuffer.length,
         result: 'ok',
       };
     },
@@ -79,7 +82,7 @@ export async function createDaytonaToolkit(
       const current = fileBuffer.toString('utf8');
       const replaced = replaceInText(current, input.oldText, input.newText, input.replaceAll);
 
-      await sandbox.fs.uploadFile(replaced.result, input.path);
+      await sandbox.fs.uploadFile(Buffer.from(replaced.result), input.path);
 
       return {
         replaced: replaced.count,
@@ -116,36 +119,40 @@ export async function createDaytonaToolkit(
     },
   });
 
-  const generate_download_url = createTool({
-    name: 'generate_download_url',
-    description: 'Upload a sandbox file into Convex attachments and return storageId with URL.',
-    parameters: generateDownloadUrlSchema,
+  const upload_attachment_to_workspace = createTool({
+    name: 'upload_attachment_to_workspace',
+    description: 'Upload a sandbox file into Convex attachments and get a storageId. Outputs in the format [fileName](attachmentId) (the ui has special handling for this format).',
+    parameters: uploadAttachmentToWorkspaceSchema,
     execute: async (input) => {
       if (!convexAdapter) {
         throw new Error('Convex adapter is required to upload attachments');
-      }
-      if (convexAdapter.getTokenType() !== 'jwt') {
-        throw new Error('Attachment upload is only supported for JWT-authenticated chats');
       }
 
       const fileBytes = await sandbox.fs.downloadFile(input.path);
       const fileName = getAttachmentFileNameFromPath(input.path);
       const contentType = inferAttachmentContentType(fileName);
-      const uploadUrl = await convexAdapter.mutation(api.attachments.index.generateUploadUrl, {});
+
+      const isExt = convexAdapter.getTokenType() === 'ext';
+      const uploadUrl = await convexAdapter.mutation(
+        isExt ? api.attachments.index.generateUploadUrlExt : api.attachments.index.generateUploadUrl,
+        {}
+      );
       const uploadResult = await uploadBytesToConvexStorage(uploadUrl, fileBytes, contentType);
       const hash = await toHexHash(fileBytes);
-      const attachment = await convexAdapter.mutation(api.attachments.index.createFromHash, {
+      const createArgs = {
         hash,
         storageId: uploadResult.storageId,
         size: fileBytes.byteLength,
         fileName,
         contentType,
-      });
-
-      return {
-        storageId: attachment.globalAttachment.storageId,
-        url: attachment.url,
       };
+      const attachment = await convexAdapter.mutation(
+        isExt ? api.attachments.index.createFromHashExt : api.attachments.index.createFromHash,
+        createArgs
+      );
+      const url = attachment.url;
+
+      return `[${attachment.orgMemberAttachment.fileName}](${url})`;
     },
   });
 
@@ -183,7 +190,7 @@ export async function createDaytonaToolkit(
   });
 
   return {
-    name: 'daytona-filesystem-agent',
+    name: 'sandbox',
     description:
       'Use Daytona sandbox filesystem and terminal tools for file operations, command execution, and stateful Python code execution.',
     instructions: 'Use these tools to read and edit files, run commands, inspect logs, and execute stateful Python snippets.',
@@ -195,7 +202,7 @@ export async function createDaytonaToolkit(
       edit,
       glob,
       grep,
-      generate_download_url,
+      upload_attachment_to_workspace,
       exec,
       stateful_code_exec,
     ],

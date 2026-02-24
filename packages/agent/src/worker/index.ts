@@ -21,6 +21,7 @@ import {
 } from "@just-use-convex/backend/convex/lib/convexAdapter";
 import { env as agentDefaults } from "@just-use-convex/env/agent";
 import { createAiClient } from "../agent/client";
+import { normalizeDuration } from "../tools/utils/duration";
 import { parseStreamToUI } from "../utils/fullStreamParser";
 import {
   BackgroundTaskStore,
@@ -30,7 +31,7 @@ import {
   listBackgroundTasks,
   patchToolWithBackgroundSupport,
 } from "../tools/utils/wrapper";
-import type { BackgroundTaskFilterStatus } from "../tools/utils/wrapper";
+import type { BackgroundTaskFilterStatus, GetBackgroundTaskInput } from "../tools/utils/wrapper";
 import { generateTitle } from "../agent/chat-meta";
 import {
   extractMessageText,
@@ -87,15 +88,15 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, AgentArgs> {
   private planAgent: PlanAgent | null = null;
   private backgroundTaskStore = new BackgroundTaskStore(this.ctx.waitUntil.bind(this.ctx));
   private truncatedOutputStore = new TruncatedOutputStore();
-  private readonly maxToolDurationMs = resolveDurationMs(
+  private readonly maxToolDurationMs = normalizeDuration(
     agentDefaults.MAX_TOOL_DURATION_MS,
     600_000,
   );
-  private readonly maxBackgroundDurationMs = resolveDurationMs(
+  private readonly maxBackgroundDurationMs = normalizeDuration(
     agentDefaults.MAX_BACKGROUND_DURATION_MS,
     3_600_000,
   );
-  private readonly backgroundTaskPollIntervalMs = resolveDurationMs(
+  private readonly backgroundTaskPollIntervalMs = normalizeDuration(
     agentDefaults.BACKGROUND_TASK_POLL_INTERVAL_MS,
     3_000,
   );
@@ -190,7 +191,6 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, AgentArgs> {
       chatDoc: this.chatDoc,
       workflowDoc: this.workflowDoc,
       convexAdapter: this.convexAdapter,
-      daytona: this.daytona,
       sandbox: this.sandbox,
       backgroundTaskStore: this.backgroundTaskStore,
       truncatedOutputStore: this.truncatedOutputStore,
@@ -339,7 +339,7 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, AgentArgs> {
     return await super.onConnect(connection, ctx);
   }
 
-  override async onStateUpdate(state: AgentArgs, source: Connection | "server"): Promise<void> {
+  override async onStateChanged(state: AgentArgs, source: Connection | "server"): Promise<void> {
     const stored = await this.ctx.storage.get<AgentArgs>("state");
     const steerQueueState = await readSteerQueueState(this.ctx.storage, stored?.steerQueueState ?? null);
     this.steerQueueState = steerQueueState;
@@ -353,7 +353,7 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, AgentArgs> {
     await this.ctx.storage.put("state", nextState);
     this.setState(nextState);
     await this._patchAgent();
-    await super.onStateUpdate(nextState, source);
+    await super.onStateChanged(state, source);
   }
 
   override async persistMessages(messages: UIMessage[]): Promise<void> {
@@ -399,11 +399,7 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, AgentArgs> {
   }
 
   @callable()
-  async getBackgroundTask(input: {
-    taskId: string;
-    waitForCompletion?: boolean;
-    timeoutMs?: number;
-  }) {
+  async getBackgroundTask(input: GetBackgroundTaskInput) {
     if (!input?.taskId || input.taskId.trim().length === 0) {
       throw new Error("taskId is required");
     }
@@ -950,19 +946,6 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, AgentArgs> {
   override async onChatMessage(onFinish: StreamTextOnFinishCallback<ToolSet>, options?: OnChatMessageOptions): Promise<Response> {
     return await this._onChatMessage(onFinish, options);
   }
-}
-
-function resolveDurationMs(value: unknown, fallback: number): number {
-  if (typeof value === "number" && Number.isFinite(value)) {
-    return Math.max(1, Math.floor(value));
-  }
-  if (typeof value === "string") {
-    const parsed = Number(value);
-    if (Number.isFinite(parsed)) {
-      return Math.max(1, Math.floor(parsed));
-    }
-  }
-  return fallback;
 }
 
 function collectSteeringDirectives(input: SteerQueueInput): string[] {

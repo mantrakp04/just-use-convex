@@ -1,5 +1,6 @@
 import { ToolTimeoutError } from "./timeout";
 import { TERMINAL_STATUSES } from "./types";
+import { normalizeDuration } from "../duration";
 import type {
   BackgroundTask,
   BackgroundTaskFilterStatus,
@@ -17,7 +18,7 @@ export async function getBackgroundTask(
     return buildTaskResult(getTaskOrThrow(store, input.taskId));
   }
 
-  const timeoutMs = resolveTimeoutMs(input.timeoutMs, waitConfig.defaultTimeoutMs);
+  const timeoutMs = normalizeDuration(input.timeoutMs, waitConfig.defaultTimeoutMs);
   const startTime = Date.now();
 
   while (Date.now() - startTime < timeoutMs) {
@@ -82,12 +83,6 @@ function buildTaskResult(task: BackgroundTask) {
   };
 }
 
-function resolveTimeoutMs(timeoutMs: number | undefined, defaultTimeoutMs: number): number {
-  if (typeof timeoutMs !== "number" || !Number.isFinite(timeoutMs)) {
-    return defaultTimeoutMs;
-  }
-  return Math.max(1, Math.floor(timeoutMs));
-}
 
 function throwIfAborted(signal: AbortSignal | undefined): void {
   if (!signal?.aborted) return;

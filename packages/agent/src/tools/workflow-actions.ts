@@ -3,6 +3,7 @@ import { api } from "@just-use-convex/backend/convex/_generated/api";
 import type { Id } from "@just-use-convex/backend/convex/_generated/dataModel";
 import { z } from "zod";
 import type { ConvexAdapter } from "@just-use-convex/backend/convex/lib/convexAdapter";
+import type { AllowedAction } from "@just-use-convex/backend/convex/workflows/types";
 
 const MAX_REDIRECTS = 5;
 const BLOCKED_HOST_EXACT = new Set(["localhost", "metadata.google.internal"]);
@@ -10,12 +11,14 @@ const BLOCKED_HOST_SUFFIXES = [".localhost", ".local"];
 const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308]);
 const URL_SAFE_METHODS = new Set(["GET", "HEAD"]);
 
+type WorkflowActionContext = {
+  executionId: Id<"workflowExecutions">;
+  convexAdapter: ConvexAdapter;
+};
+
 export async function createWorkflowActionToolkit(
   allowedActions: string[],
-  context: {
-    executionId: Id<"workflowExecutions">;
-    convexAdapter: ConvexAdapter;
-  },
+  context: WorkflowActionContext,
 ): Promise<Toolkit> {
   const sendMessage = createTool({
     name: "send_message",
@@ -66,10 +69,12 @@ export async function createWorkflowActionToolkit(
           ? responseText.slice(0, 5000) + "\n... (truncated)"
           : responseText;
 
+        const outcome = response.ok ? "success" : "failure";
         await recordWorkflowStepOutcomeFailClosed({
           context,
           action: "http_request",
-          outcome: "success",
+          outcome,
+          ...(!response.ok ? { error: `HTTP ${response.status} ${response.statusText}` } : {}),
         });
         return {
           status: response.status,
@@ -136,11 +141,6 @@ export async function createWorkflowActionToolkit(
   });
 }
 
-type WorkflowActionContext = {
-  executionId: Id<"workflowExecutions">;
-  convexAdapter: ConvexAdapter;
-};
-
 async function recordWorkflowStepOutcomeFailClosed({
   context,
   action,
@@ -148,7 +148,7 @@ async function recordWorkflowStepOutcomeFailClosed({
   error,
 }: {
   context: WorkflowActionContext;
-  action: "notify" | "send_message" | "http_request";
+  action: AllowedAction;
   outcome: "success" | "failure";
   error?: string;
 }): Promise<void> {
@@ -163,8 +163,9 @@ async function recordWorkflowStepOutcomeFailClosed({
       },
     );
   } catch (loggingError) {
-    throw new Error(
-      `Failed to record workflow step outcome for "${action}": ${toErrorMessage(loggingError)}`,
+    console.error(
+      `Failed to record workflow step outcome for "${action}":`,
+      toErrorMessage(loggingError),
     );
   }
 }

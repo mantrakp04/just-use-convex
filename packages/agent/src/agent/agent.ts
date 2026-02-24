@@ -15,6 +15,7 @@ import { CHAT_SYSTEM_PROMPT, WORKFLOW_SYSTEM_PROMPT, TASK_PROMPT } from "./promp
 import { createAskUserToolkit } from "../tools/ask-user";
 import { createWebSearchToolkit } from "../tools/websearch";
 import { createBackgroundTaskToolkit } from "../tools/utils/wrapper/toolkit";
+import { normalizeDuration } from "../tools/utils/duration";
 import {
   BackgroundTaskStore,
   TruncatedOutputStore,
@@ -22,7 +23,7 @@ import {
 import { createDaytonaToolkit } from "../tools/sandbox";
 import { createWorkflowActionToolkit } from "../tools/workflow-actions";
 import { createWorkflowToolkit } from "../tools/workflows";
-import { Daytona, type Sandbox } from "@daytonaio/sdk";
+import { type Sandbox } from "@daytonaio/sdk";
 import type {
   AgentArgs,
   ChatRuntimeDoc,
@@ -38,7 +39,6 @@ type CreateWorkerPlanAgentArgs = {
   chatDoc: ChatRuntimeDoc | null;
   workflowDoc: WorkflowRuntimeDoc | null;
   convexAdapter: ConvexAdapter | null;
-  daytona: Daytona | null;
   sandbox: Sandbox | null;
   backgroundTaskStore: BackgroundTaskStore;
   truncatedOutputStore: TruncatedOutputStore;
@@ -53,7 +53,6 @@ export async function createWorkerPlanAgent({
   chatDoc,
   workflowDoc,
   convexAdapter,
-  daytona,
   sandbox,
   backgroundTaskStore,
   truncatedOutputStore,
@@ -81,7 +80,6 @@ export async function createWorkerPlanAgent({
     modeConfig,
     workflowDoc: modeConfig.mode === "workflow" ? workflowDoc : null,
     convexAdapter,
-    daytona,
     sandbox,
   });
   const systemPrompt = resolveSystemPrompt(modeConfig, chatDoc, workflowDoc);
@@ -109,8 +107,6 @@ export async function createWorkerPlanAgent({
             "tool-call",
             "tool-result",
             "tool-error",
-            "text-delta",
-            "reasoning-delta",
             "source",
             "error",
             "finish",
@@ -172,20 +168,11 @@ export async function createWorkerPlanAgent({
     }),
   ]);
 
-  return agent;
-}
+  for (const subagent of subagents) {
+    agent.addSubAgent(subagent);
+  }
 
-function normalizeDuration(value: unknown, fallback: number): number {
-  if (typeof value === "number" && Number.isFinite(value)) {
-    return Math.max(1, Math.floor(value));
-  }
-  if (typeof value === "string") {
-    const parsed = Number(value);
-    if (Number.isFinite(parsed)) {
-      return Math.max(1, Math.floor(parsed));
-    }
-  }
-  return fallback;
+  return agent;
 }
 
 function configureVoltOpsClient(env: typeof worker.Env): void {
@@ -232,14 +219,13 @@ async function createSubagents({
   modeConfig,
   workflowDoc,
   convexAdapter,
-  daytona,
   sandbox,
-}: Pick<CreateWorkerPlanAgentArgs, "modeConfig" | "workflowDoc" | "convexAdapter" | "daytona" | "sandbox"> & {
+}: Pick<CreateWorkerPlanAgentArgs, "modeConfig" | "workflowDoc" | "convexAdapter" | "sandbox"> & {
   model: string;
   reasoningEffort: AgentArgs["reasoningEffort"];
 }): Promise<Agent[]> {
   const toolkitPromises: Promise<Toolkit>[] = [];
-  if (sandbox && daytona) {
+  if (sandbox) {
     toolkitPromises.push(createDaytonaToolkit(sandbox, convexAdapter));
   }
   toolkitPromises.push(createWebSearchToolkit());

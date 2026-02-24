@@ -4,7 +4,7 @@ import { api } from "@just-use-convex/backend/convex/_generated/api";
 import type { FunctionArgs, FunctionReturnType } from "convex/server";
 import { toast } from "sonner";
 import type { CreateFromBytesArgs } from "@just-use-convex/backend/convex/attachments/types";
-import { sanitizeAttachmentFileName, toHexHash } from "@just-use-convex/backend/convex/attachments/client";
+import { sanitizeAttachmentFileName, toHexHash } from "@just-use-convex/backend/convex/shared/attachments";
 import { z } from "zod";
 
 type ListArgs = FunctionArgs<typeof api.attachments.index.list>;

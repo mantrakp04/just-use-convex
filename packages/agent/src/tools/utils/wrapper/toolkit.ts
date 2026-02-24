@@ -7,6 +7,7 @@ import {
   DEFAULT_MAX_OUTPUT_TOKENS,
   OUTPUT_CHARS_PER_TOKEN,
 } from "./types";
+import { normalizeDuration } from "../duration";
 import type {
   BackgroundTaskStoreApi,
   BackgroundTaskToolkitConfig,
@@ -149,8 +150,8 @@ export function createBackgroundTaskToolkit(
   config: Partial<BackgroundTaskToolkitConfig> = {},
 ): Toolkit {
   const toolkitConfig: BackgroundTaskToolkitConfig = {
-    pollIntervalMs: resolveDuration(config.pollIntervalMs, DEFAULT_BACKGROUND_TASK_POLL_INTERVAL_MS),
-    defaultTimeoutMs: resolveDuration(config.defaultTimeoutMs, DEFAULT_MAX_DURATION_MS),
+    pollIntervalMs: normalizeDuration(config.pollIntervalMs, DEFAULT_BACKGROUND_TASK_POLL_INTERVAL_MS),
+    defaultTimeoutMs: normalizeDuration(config.defaultTimeoutMs, DEFAULT_MAX_DURATION_MS),
   };
 
   return createToolkit({
@@ -164,7 +165,3 @@ export function createBackgroundTaskToolkit(
   });
 }
 
-function resolveDuration(value: number | undefined, fallback: number): number {
-  if (typeof value !== "number" || !Number.isFinite(value)) return fallback;
-  return Math.max(1, Math.floor(value));
-}

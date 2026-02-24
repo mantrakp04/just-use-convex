@@ -11,6 +11,7 @@ import type {
   WrappedExecuteFactoryOptions,
   WrappedExecuteOptions,
 } from "./types";
+import { normalizeDuration } from "../duration";
 
 // ── Public ─────────────────────────────────────────────────────────────
 
@@ -290,10 +291,6 @@ function linkAbortSignal(
   return () => sourceSignal.removeEventListener("abort", abortTarget);
 }
 
-function normalizeDuration(value: unknown, fallback?: number): number | undefined {
-  if (typeof value !== "number" || !Number.isFinite(value)) return fallback;
-  return Math.max(0, Math.floor(value));
-}
 
 function normalizeTokenCount(value: unknown, fallback?: number): number | undefined {
   if (typeof value !== "number" || !Number.isFinite(value)) return fallback;

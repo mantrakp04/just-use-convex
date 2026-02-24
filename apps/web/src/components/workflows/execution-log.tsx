@@ -6,7 +6,6 @@ import {
   type WorkflowExecution,
 } from "@/hooks/use-workflows";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useState } from "react";
 
@@ -97,12 +96,10 @@ function ExecutionItem({
     >
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <Badge variant={badgeVariant}>
-            {execution.status}
-          </Badge>
-          <Badge variant={requiredActionsBadgeVariant(execution.requiredActionsStatus)}>
-            actions: {execution.requiredActionsStatus}
-          </Badge>
+          <StatusDot
+            variant={badgeVariant}
+            title={execution.status}
+          />
           <span className="text-xs text-muted-foreground">
             {execution.requiredActionsSuccess}/{execution.requiredActionsTotal} success
             {" · "}
@@ -150,7 +147,7 @@ function ExecutionItem({
                 <div key={step._id} className="rounded border border-border bg-muted/30 p-2">
                   <div className="flex items-center justify-between gap-2">
                     <span className="text-sm font-medium">{step.action}</span>
-                    <Badge
+                    <StatusDot
                       variant={
                         step.status === "failure"
                           ? "destructive"
@@ -158,9 +155,8 @@ function ExecutionItem({
                             ? "default"
                             : "secondary"
                       }
-                    >
-                      {step.status}
-                    </Badge>
+                      title={step.status}
+                    />
                   </div>
                   <div className="mt-1 text-xs text-muted-foreground">
                     calls: {step.callCount} · success: {step.successCount} · failure: {step.failureCount}
@@ -199,6 +195,28 @@ function ExecutionItem({
   );
 }
 
+function StatusDot({
+  variant,
+  title,
+}: {
+  variant: "default" | "secondary" | "destructive";
+  title: string;
+}) {
+  const dotColor =
+    variant === "destructive"
+      ? "bg-destructive"
+      : variant === "default"
+        ? "bg-primary"
+        : "bg-warning";
+  return (
+    <span
+      className={`size-2 shrink-0 rounded-full ${dotColor}`}
+      title={title}
+      aria-label={title}
+    />
+  );
+}
+
 function formatDuration(ms: number): string {
   if (ms < 1000) return `${ms}ms`;
   const seconds = Math.floor(ms / 1000);
@@ -208,8 +226,3 @@ function formatDuration(ms: number): string {
   return `${minutes}m ${remainingSeconds}s`;
 }
 
-function requiredActionsBadgeVariant(status: WorkflowExecution["requiredActionsStatus"]): "default" | "secondary" | "destructive" {
-  if (status === "success") return "default";
-  if (status === "failure") return "destructive";
-  return "secondary";
-}
