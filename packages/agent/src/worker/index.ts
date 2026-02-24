@@ -699,7 +699,7 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, AgentArgs> {
 
   private async _drainPostFinishSteerQueue({
     agent,
-    modelMessages,
+    modelMessages: initialModelMessages,
     abortSignal,
     writer,
   }: {
@@ -713,6 +713,7 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, AgentArgs> {
     }
 
     this.isDrainingPostFinishQueue = true;
+    let currentModelMessages = initialModelMessages;
     await this._setSteerQueueState(setRunFlags(this.steerQueueState, { isPostFlushing: true }));
     try {
       while (!abortSignal?.aborted) {
@@ -736,10 +737,21 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, AgentArgs> {
           await this._persistSteeringMemory(injectingItem);
           this.pendingPrepareMessageDirectives.push(injectingItem);
 
-          const queuedStream = await agent.streamText(modelMessages, {
+          const queuedStream = await agent.streamText(currentModelMessages, {
             abortSignal,
           });
           await parseStreamToUI(queuedStream.fullStream, writer);
+
+          // Append the agent's response so subsequent iterations have full context
+          const responseText = await queuedStream.text;
+          currentModelMessages = [
+            ...currentModelMessages,
+            {
+              id: `post-finish-response-${crypto.randomUUID()}`,
+              role: "assistant" as const,
+              parts: [{ type: "text" as const, text: responseText ?? "" }],
+            },
+          ];
 
           await this._withSteerQueueLock(async () => {
             await this._setSteerQueueState(markSteerItemStatus(this.steerQueueState, injectingItem.id, "done"));

@@ -55,19 +55,8 @@ export function normalizeSteerQueueState(value: unknown): SteerQueueState {
     return parsed.data;
   }
 
-  if (value && typeof value === "object") {
-    const legacy = value as {
-      live?: unknown[];
-      postFinish?: unknown[];
-      updatedAt?: number;
-      liveSteerQueue?: unknown[];
-      postFinishQueue?: unknown[];
-      isRunActive?: boolean;
-      isLiveFlushing?: boolean;
-      isPostFlushing?: boolean;
-      activeRunId?: string | null;
-      version?: number;
-    };
+  if (value && typeof value === "object" && !Array.isArray(value)) {
+    const legacy = value as Record<string, unknown>;
     const liveRaw = Array.isArray(legacy.liveSteerQueue)
       ? legacy.liveSteerQueue
       : Array.isArray(legacy.live)
@@ -86,7 +75,7 @@ export function normalizeSteerQueueState(value: unknown): SteerQueueState {
       isLiveFlushing: Boolean(legacy.isLiveFlushing),
       isPostFlushing: Boolean(legacy.isPostFlushing),
       activeRunId: typeof legacy.activeRunId === "string" ? legacy.activeRunId : null,
-      version: typeof legacy.version === "number" ? legacy.version : legacy.updatedAt ?? Date.now(),
+      version: typeof legacy.version === "number" ? legacy.version : typeof legacy.updatedAt === "number" ? legacy.updatedAt : Date.now(),
     };
   }
 
@@ -236,18 +225,8 @@ function normalizeItems(input: unknown[], source: SteerQueueTarget): SteerQueueI
 }
 
 function normalizeItem(input: unknown, source: SteerQueueTarget, index: number): SteerQueueItem | null {
-  if (!input || typeof input !== "object") return null;
-  const raw = input as {
-    id?: unknown;
-    text?: unknown;
-    directive?: unknown;
-    source?: unknown;
-    status?: unknown;
-    createdAt?: unknown;
-    error?: unknown;
-    startedAt?: unknown;
-    completedAt?: unknown;
-  };
+  if (!input || typeof input !== "object" || Array.isArray(input)) return null;
+  const raw = input as Record<string, unknown>;
   const textCandidate = typeof raw.text === "string"
     ? raw.text
     : typeof raw.directive === "string"

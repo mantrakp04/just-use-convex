@@ -694,19 +694,7 @@ function createOptimisticSteerQueueItem(input: SteerQueueInput): SteerQueueItem 
 }
 
 async function callRemoveSteerQueueItem(agent: NonNullable<AgentConnection>, itemId: string) {
-  const attempts: unknown[][] = [[{ itemId }], [{ id: itemId }], [itemId]];
-  let lastError: unknown;
-
-  for (const args of attempts) {
-    try {
-      await agent.call("removeSteerQueueItem", args);
-      return;
-    } catch (error) {
-      lastError = error;
-    }
-  }
-
-  throw lastError;
+  await agent.call("removeSteerQueueItem", [{ itemId }]);
 }
 
 function buildFallbackSteerQueueItemId(parts: QueueMessagePart[], index: number): string {
@@ -724,5 +712,5 @@ function toStringValue(value: unknown): string | undefined {
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }

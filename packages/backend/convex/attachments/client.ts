@@ -48,10 +48,11 @@ export async function uploadBytesToConvexStorage(
     );
   }
 
-  const result = (await response.json()) as { storageId?: string };
-  if (!result.storageId) {
+  const result: Record<string, unknown> = await response.json();
+  const storageId = typeof result.storageId === "string" ? result.storageId : undefined;
+  if (!storageId) {
     throw new Error("Attachment upload failed: missing storageId");
   }
 
-  return { storageId: result.storageId };
+  return { storageId };
 }
