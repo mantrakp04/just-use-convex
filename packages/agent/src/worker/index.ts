@@ -20,12 +20,17 @@ import {
 } from "@just-use-convex/backend/convex/lib/convexAdapter";
 import { env as agentDefaults } from "@just-use-convex/env/agent";
 import { createAiClient } from "../agent/client";
+import { normalizeDuration } from "../tools/utils/duration";
 import { parseStreamToUI } from "../utils/fullStreamParser";
 import {
   BackgroundTaskStore,
   TruncatedOutputStore,
+  cancelBackgroundTask,
+  getBackgroundTask,
+  listBackgroundTasks,
   patchToolWithBackgroundSupport,
 } from "../tools/utils/wrapper";
+import type { BackgroundTaskFilterStatus, GetBackgroundTaskInput } from "../tools/utils/wrapper";
 import { generateTitle } from "../agent/chat-meta";
 import {
   extractMessageText,
@@ -61,6 +66,18 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, AgentArgs> {
   private planAgent: PlanAgent | null = null;
   private backgroundTaskStore = new BackgroundTaskStore(this.ctx.waitUntil.bind(this.ctx));
   private truncatedOutputStore = new TruncatedOutputStore();
+  private readonly maxToolDurationMs = normalizeDuration(
+    agentDefaults.MAX_TOOL_DURATION_MS,
+    600_000,
+  );
+  private readonly maxBackgroundDurationMs = normalizeDuration(
+    agentDefaults.MAX_BACKGROUND_DURATION_MS,
+    3_600_000,
+  );
+  private readonly backgroundTaskPollIntervalMs = normalizeDuration(
+    agentDefaults.BACKGROUND_TASK_POLL_INTERVAL_MS,
+    3_000,
+  );
   private chatDoc: ChatRuntimeDoc | null = null;
   private workflowDoc: WorkflowRuntimeDoc | null = null;
   private callableFunctions: CallableFunctionInstance[] = [];
@@ -148,11 +165,9 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, AgentArgs> {
 
     const tasks = agent.getTools().find((t) => t.name === "task");
     if (tasks) {
-      const maxBackgroundDuration = Number(agentDefaults.MAX_BACKGROUND_DURATION_MS);
-      const maxToolDuration = Number(agentDefaults.MAX_TOOL_DURATION_MS);
       patchToolWithBackgroundSupport(tasks, this.backgroundTaskStore, this.truncatedOutputStore, {
-        maxDuration: maxToolDuration > 0 ? maxToolDuration : 30 * 60 * 1000,
-        maxBackgroundDuration: maxBackgroundDuration > 0 ? maxBackgroundDuration : undefined,
+        maxDuration: this.maxToolDurationMs,
+        maxBackgroundDuration: this.maxBackgroundDurationMs,
         allowAgentSetDuration: true,
         allowBackground: true,
       });
@@ -324,6 +339,40 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, AgentArgs> {
     }
 
     await this.persistMessages(messages);
+  }
+
+  @callable()
+  async listBackgroundTasks(input?: { status?: BackgroundTaskFilterStatus }) {
+    return listBackgroundTasks(this.backgroundTaskStore, input?.status ?? "all");
+  }
+
+  @callable()
+  async getBackgroundTask(input: GetBackgroundTaskInput) {
+    if (!input?.taskId || input.taskId.trim().length === 0) {
+      throw new Error("taskId is required");
+    }
+
+    return getBackgroundTask(
+      this.backgroundTaskStore,
+      {
+        taskId: input.taskId,
+        waitForCompletion: input.waitForCompletion,
+        timeoutMs: input.timeoutMs,
+      },
+      {
+        pollIntervalMs: this.backgroundTaskPollIntervalMs,
+        defaultTimeoutMs: this.maxToolDurationMs,
+      },
+    );
+  }
+
+  @callable()
+  async cancelBackgroundTask(input: { taskId: string }) {
+    if (!input?.taskId || input.taskId.trim().length === 0) {
+      throw new Error("taskId is required");
+    }
+
+    return cancelBackgroundTask(this.backgroundTaskStore, input.taskId);
   }
 
   private async _onChatMessage(

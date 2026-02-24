@@ -52,7 +52,9 @@ export const worker = await Worker("agent-worker", {
     DAYTONA_TARGET: env.DAYTONA_TARGET,
     DAYTONA_API_KEY: alchemy.secret(env.DAYTONA_API_KEY),
     DAYTONA_API_URL: alchemy.secret(env.DAYTONA_API_URL),
+    MAX_TOOL_DURATION_MS: String(env.MAX_TOOL_DURATION_MS),
     MAX_BACKGROUND_DURATION_MS: String(env.MAX_BACKGROUND_DURATION_MS),
+    BACKGROUND_TASK_POLL_INTERVAL_MS: String(env.BACKGROUND_TASK_POLL_INTERVAL_MS),
   },
   observability: {
     logs: {

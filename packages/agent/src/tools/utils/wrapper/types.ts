@@ -3,11 +3,12 @@ import type { ZodObject, ZodRawShape } from "zod";
 
 // ── Constants ──────────────────────────────────────────────────────────
 
-export const DEFAULT_MAX_DURATION_MS = 30 * 60 * 1000;
+export const DEFAULT_MAX_DURATION_MS = 10 * 60 * 1000;
 export const DEFAULT_MAX_BACKGROUND_DURATION_MS = 60 * 60 * 1000; // 1 hour
 export const DEFAULT_MAX_OUTPUT_TOKENS = 32_000;
 export const DEFAULT_TASK_RETENTION_MS = 60 * 60 * 1000;
 export const OUTPUT_CHARS_PER_TOKEN = 4;
+export const DEFAULT_BACKGROUND_TASK_POLL_INTERVAL_MS = 3_000;
 
 export const TERMINAL_STATUSES: readonly BackgroundTaskStatus[] = [
   "completed",
@@ -40,6 +41,22 @@ export type BackgroundTask = {
 export type BackgroundTaskResult = {
   backgroundTaskId: string;
 };
+
+export type BackgroundTaskFilterStatus = BackgroundTaskStatus | "all";
+
+export type GetBackgroundTaskInput = {
+  taskId: string;
+  waitForCompletion?: boolean;
+  timeoutMs?: number;
+};
+
+export type BackgroundTaskWaitConfig = {
+  pollIntervalMs: number;
+  defaultTimeoutMs: number;
+  abortSignal?: AbortSignal;
+};
+
+export type BackgroundTaskToolkitConfig = Omit<BackgroundTaskWaitConfig, "abortSignal">;
 
 export interface BackgroundTaskStoreApi {
   waitUntil: (promise: Promise<unknown>) => void;

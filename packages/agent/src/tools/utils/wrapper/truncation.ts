@@ -12,16 +12,19 @@ export class TruncatedOutputStore implements TruncatedOutputStoreApi {
   private idCounter = 0;
 
   store(content: string, meta: { toolCallId: string; toolName: string }): string {
+    this.cleanup();
     const id = `out_${Date.now()}_${++this.idCounter}`;
     this.outputs.set(id, { id, content, ...meta, createdAt: Date.now() });
     return id;
   }
 
   get(id: string): TruncatedOutput | undefined {
+    this.cleanup();
     return this.outputs.get(id);
   }
 
   getAll(): TruncatedOutput[] {
+    this.cleanup();
     return Array.from(this.outputs.values());
   }
 

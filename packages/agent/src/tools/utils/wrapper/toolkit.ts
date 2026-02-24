@@ -1,14 +1,17 @@
 import { createTool, createToolkit, type Toolkit } from "@voltagent/core";
 import { z } from "zod";
+import { cancelBackgroundTask, getBackgroundTask, listBackgroundTasks } from "./background-task-control";
 import {
+  DEFAULT_BACKGROUND_TASK_POLL_INTERVAL_MS,
+  DEFAULT_MAX_DURATION_MS,
   DEFAULT_MAX_OUTPUT_TOKENS,
   OUTPUT_CHARS_PER_TOKEN,
-  TERMINAL_STATUSES,
 } from "./types";
+import { normalizeDuration } from "../duration";
 import type {
-  BackgroundTask,
   BackgroundTaskStoreApi,
-  TruncatedOutputStoreApi
+  BackgroundTaskToolkitConfig,
+  TruncatedOutputStoreApi,
 } from "./types";
 
 const BACKGROUND_TASK_INSTRUCTIONS = `You have access to background task management tools for monitoring and controlling long-running operations.
@@ -23,7 +26,7 @@ When a tool is executed with \`background: true\`, it runs asynchronously and re
 
 ## Truncated Outputs
 
-When a tool output exceeds the token limit, it is truncated and stored. The truncated result includes an \`_outputId\`. Use:
+When a tool output exceeds the token limit, it is truncated and stored. The truncated result includes an \`outputId\`. Use:
 
 - **read_output**: Read the full content by output ID, supports offset/limit for pagination
 
@@ -32,72 +35,45 @@ When a tool output exceeds the token limit, it is truncated and stored. The trun
 1. Start a tool in background: \`{ "background": true, ... }\`
 2. Get the returned \`backgroundTaskId\`
 3. Use \`get_background_task\` to poll progress or wait for completion
-4. If a result is truncated, use \`read_output\` with the \`_outputId\` to read the full content
+4. If a result is truncated, use \`read_output\` with the \`outputId\` to read the full content
 5. Cancel if needed with \`cancel_background_task\`
 `;
 
-function createBackgroundTaskTools(store: BackgroundTaskStoreApi) {
-  const buildTaskResult = (task: BackgroundTask) => ({
-    taskId: task.id,
-    status: task.status,
-    ...(task.status === "completed" && { result: task.result }),
-    ...(task.status === "failed" && { error: task.error }),
-  });
-
+function createBackgroundTaskTools(
+  store: BackgroundTaskStoreApi,
+  config: BackgroundTaskToolkitConfig,
+) {
   const getBackgroundTaskTool = createTool({
     name: "get_background_task",
     description: `Get the status and result of a background task.
 
 Use this to check the progress of a task running in the background.
-Returns the task status and result if completed.`,
+Returns the task status and result if completed.
+Set waitForCompletion=true to wait until completion or timeout.`,
     parameters: z.object({
       taskId: z.string().describe("The background task ID"),
       waitForCompletion: z
         .boolean()
         .default(false)
         .describe("Wait for task completion before returning (default: false)"),
-      pollIntervalMs: z
-        .number()
-        .default(1000)
-        .describe("Poll interval when waiting, in ms (default: 1000)"),
       timeoutMs: z
         .number()
-        .default(300000)
-        .describe("Max wait time when waiting, in ms (default: 300000 = 5 min)"),
+        .positive()
+        .default(config.defaultTimeoutMs)
+        .describe(`Max wait time when waiting, in ms (default: ${config.defaultTimeoutMs})`),
     }),
-    execute: async ({ taskId, waitForCompletion, pollIntervalMs, timeoutMs }, opts) => {
+    execute: async ({ taskId, waitForCompletion, timeoutMs }, opts) => {
       const abortSignal = opts?.toolContext?.abortSignal ?? opts?.abortController?.signal;
 
-      if (waitForCompletion) {
-        const startTime = Date.now();
-
-        while (Date.now() - startTime < timeoutMs) {
-          if (abortSignal?.aborted) {
-            return { taskId, status: "wait_aborted", message: "Wait was aborted" };
-          }
-
-          const task = store.get(taskId);
-          if (!task) return { error: `Task not found: ${taskId}` };
-          if (TERMINAL_STATUSES.includes(task.status)) return buildTaskResult(task);
-
-          await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
-        }
-
-        const latestTask = store.get(taskId);
-        if (!latestTask) return { error: `Task not found: ${taskId}` };
-        if (TERMINAL_STATUSES.includes(latestTask.status)) return buildTaskResult(latestTask);
-
-        return {
-          taskId,
-          status: "wait_timeout",
-          taskStatus: latestTask.status,
-          message: `Task did not complete within ${timeoutMs}ms`,
-        };
-      }
-
-      const task = store.get(taskId);
-      if (!task) return { error: `Task not found: ${taskId}` };
-      return buildTaskResult(task);
+      return getBackgroundTask(
+        store,
+        { taskId, waitForCompletion, timeoutMs },
+        {
+          pollIntervalMs: config.pollIntervalMs,
+          defaultTimeoutMs: config.defaultTimeoutMs,
+          abortSignal,
+        },
+      );
     },
   });
 
@@ -109,11 +85,7 @@ Attempts to abort the task execution. Only works for tasks that are still runnin
     parameters: z.object({
       taskId: z.string().describe("The background task ID to cancel"),
     }),
-    execute: async ({ taskId }) => {
-      const { cancelled, previousStatus, reason } = store.cancel(taskId);
-      if (previousStatus === null) return { error: `Task not found: ${taskId}` };
-      return { taskId, cancelled, ...(reason ? { reason } : {}) };
-    },
+    execute: async ({ taskId }) => cancelBackgroundTask(store, taskId),
   });
 
   const listBackgroundTasksTool = createTool({
@@ -128,13 +100,7 @@ Useful for checking what tasks are running or have completed.`,
         .default("all")
         .describe("Filter by status (default: all)"),
     }),
-    execute: async ({ status }) => {
-      let tasks = store.getAll();
-      if (status !== "all") {
-        tasks = tasks.filter((task) => task.status === status);
-      }
-      return { tasks: tasks.map((task) => ({ id: task.id, status: task.status })) };
-    },
+    execute: async ({ status }) => listBackgroundTasks(store, status),
   });
 
   return [getBackgroundTaskTool, cancelBackgroundTaskTool, listBackgroundTasksTool];
@@ -147,10 +113,10 @@ function createReadOutputTool(store: TruncatedOutputStoreApi) {
     name: "read_output",
     description: `Read the full content of a truncated tool output.
 
-When a tool result is truncated, it includes an _outputId. Use this tool to read the full content.
+When a tool result is truncated, it includes an outputId. Use this tool to read the full content.
 Supports offset and limit for paginating large outputs.`,
     parameters: z.object({
-      outputId: z.string().describe("The output ID from a truncated result (_outputId field)"),
+      outputId: z.string().describe("The output ID from a truncated result (outputId field)"),
       offset: z
         .number()
         .nonnegative()
@@ -181,11 +147,21 @@ Supports offset and limit for paginating large outputs.`,
 export function createBackgroundTaskToolkit(
   backgroundStore: BackgroundTaskStoreApi,
   outputStore: TruncatedOutputStoreApi,
+  config: Partial<BackgroundTaskToolkitConfig> = {},
 ): Toolkit {
+  const toolkitConfig: BackgroundTaskToolkitConfig = {
+    pollIntervalMs: normalizeDuration(config.pollIntervalMs, DEFAULT_BACKGROUND_TASK_POLL_INTERVAL_MS),
+    defaultTimeoutMs: normalizeDuration(config.defaultTimeoutMs, DEFAULT_MAX_DURATION_MS),
+  };
+
   return createToolkit({
     name: "background_tasks",
     description: "Tools for managing background task execution, monitoring progress, retrieving results, and reading truncated outputs",
     instructions: BACKGROUND_TASK_INSTRUCTIONS,
-    tools: [...createBackgroundTaskTools(backgroundStore), createReadOutputTool(outputStore)],
+    tools: [
+      ...createBackgroundTaskTools(backgroundStore, toolkitConfig),
+      createReadOutputTool(outputStore),
+    ],
   });
 }
+
