@@ -20,10 +20,12 @@ import {
   extractTodosFromMessage,
   findLastAssistantMessageIndex,
   useChat,
+  useSteerQueue,
 } from "@/hooks/use-chat";
 import { useChat as useConvexChat } from "@/hooks/use-chats";
 import { AskUserDisplay } from "@/components/chat/ask-user-display";
 import { ChatSandboxWorkspace } from "@/components/chat/chat-sandbox-workspace";
+import { SteerQueueDisplay } from "@/components/chat/steer-queue-display";
 import { useChatSandbox } from "@/hooks/use-sandbox";
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
 import { useHeader } from "@/hooks/use-header";
@@ -98,6 +100,7 @@ function ChatPage() {
 
   const activeAskUserState =
     lastAssistantAskUserState?.state === "approval-requested" ? lastAssistantAskUserState : null;
+  const steerQueueState = useSteerQueue(messages, agent);
 
   // Sync sandbox.isOpen with panel collapse/expand via imperative API
   useEffect(() => {
@@ -207,6 +210,14 @@ function ChatPage() {
       </Conversation>
 
       <div className="w-full px-3 @xl/chat-column:mx-auto @xl/chat-column:w-4xl @xl/chat-column:px-0">
+        <SteerQueueDisplay
+          items={steerQueueState.items}
+          pendingRemovalIds={steerQueueState.pendingRemovalIds}
+          isRefreshing={steerQueueState.isRefreshing}
+          isSteering={steerQueueState.isSteering}
+          onRemoveItem={(itemId) => void steerQueueState.removeSteerQueueItem(itemId)}
+          onSteer={(text) => steerQueueState.steerQueue({ text, mode: "auto" })}
+        />
         {activeAskUserState ? (
           <AskUserDisplay
             input={activeAskUserState.input}

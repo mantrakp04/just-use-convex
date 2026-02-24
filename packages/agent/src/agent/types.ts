@@ -14,6 +14,7 @@ export const agentArgsSchema = z.object({
   ),
   tokenConfig: jsonPreprocess(z.custom<TokenConfig>()),
   modeConfig: jsonPreprocess(z.custom<ModeConfig>()),
+  steerQueueState: z.custom<SteerQueueState>().optional(),
 });
 
 export type AgentArgs = z.infer<typeof agentArgsSchema>;
@@ -38,3 +39,45 @@ export type WorkflowRuntimeDoc = Doc<"workflows"> & { sandbox?: Doc<"sandboxes">
 export type CallableFunctionInstance = object;
 export type CallableServiceMethodsMap = Record<string, (...args: unknown[]) => unknown>;
 export type CallableServiceMethod = keyof CallableServiceMethodsMap;
+
+export const steerQueueTargetSchema = z.enum(["live", "post_finish"]);
+export type SteerQueueTarget = z.infer<typeof steerQueueTargetSchema>;
+
+export const steerQueueStatusSchema = z.enum(["queued", "injecting", "done", "failed"]);
+export type SteerQueueStatus = z.infer<typeof steerQueueStatusSchema>;
+
+export const steerQueueItemSchema = z.object({
+  id: z.string(),
+  text: z.string(),
+  source: steerQueueTargetSchema,
+  status: steerQueueStatusSchema,
+  createdAt: z.number(),
+  error: z.string().optional(),
+  startedAt: z.number().optional(),
+  completedAt: z.number().optional(),
+});
+export type SteerQueueItem = z.infer<typeof steerQueueItemSchema>;
+
+export const steerQueueStateSchema = z.object({
+  liveSteerQueue: z.array(steerQueueItemSchema),
+  postFinishQueue: z.array(steerQueueItemSchema),
+  isRunActive: z.boolean(),
+  isLiveFlushing: z.boolean(),
+  isPostFlushing: z.boolean(),
+  activeRunId: z.string().nullable(),
+  version: z.number(),
+});
+export type SteerQueueState = z.infer<typeof steerQueueStateSchema>;
+
+export const steerQueueModeSchema = z.enum(["auto", "live", "post_finish"]);
+export type SteerQueueMode = z.infer<typeof steerQueueModeSchema>;
+
+export const steerQueueInputSchema = z.object({
+  directive: z.string().optional(),
+  text: z.string().optional(),
+  content: z.string().optional(),
+  directives: z.array(z.string()).optional(),
+  mode: steerQueueModeSchema.optional(),
+  queue: steerQueueTargetSchema.optional(),
+});
+export type SteerQueueInput = z.infer<typeof steerQueueInputSchema>;

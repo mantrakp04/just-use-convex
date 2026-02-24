@@ -223,6 +223,7 @@ File-based TanStack Router:
 - always run the typecheck at the end and iterate over it until finished
 - do not shy away from refactoring bad patterns, be proactive
 - avoid defining new types; infer and derive from existing types/packages (use `Pick`/`Omit` and TS utility types)
+- never introduce `any`, `as` casts, or explicit type annotations when TypeScript can infer from existing package/types
 - keep shared/custom types centralized in `types.ts` files (avoid inline object type blocks in implementation files)
 - when adding runtime validation, define/export the schema in `types.ts` and infer the type from it; import both instead of local guards/schemas
 - if you change server-side code, always verify affected client-side usage (and vice versa)

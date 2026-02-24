@@ -3,7 +3,7 @@ import { api } from "@just-use-convex/backend/convex/_generated/api";
 import type { Id } from "@just-use-convex/backend/convex/_generated/dataModel";
 import { z } from "zod";
 import type { ConvexAdapter } from "@just-use-convex/backend/convex/lib/convexAdapter";
-import type { AllowedAction } from "@just-use-convex/backend/convex/workflows/types";
+import type { AllowedAction, RecordWorkflowStepOutcomeArgs } from "@just-use-convex/backend/convex/workflows/types";
 
 const MAX_REDIRECTS = 5;
 const BLOCKED_HOST_EXACT = new Set(["localhost", "metadata.google.internal"]);
@@ -11,14 +11,9 @@ const BLOCKED_HOST_SUFFIXES = [".localhost", ".local"];
 const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308]);
 const URL_SAFE_METHODS = new Set(["GET", "HEAD"]);
 
-type WorkflowActionContext = {
-  executionId: Id<"workflowExecutions">;
-  convexAdapter: ConvexAdapter;
-};
-
 export async function createWorkflowActionToolkit(
   allowedActions: string[],
-  context: WorkflowActionContext,
+  context: { executionId: Id<"workflowExecutions">; convexAdapter: ConvexAdapter },
 ): Promise<Toolkit> {
   const sendMessage = createTool({
     name: "send_message",
@@ -28,23 +23,13 @@ export async function createWorkflowActionToolkit(
       level: z.enum(["info", "warning", "error"]).optional().describe("Message level"),
     }),
     execute: async ({ message, level = "info" }) => {
-      try {
-        const result = { sent: true, message, level, timestamp: Date.now() };
-        await recordWorkflowStepOutcomeFailClosed({
-          context,
-          action: "send_message",
-          outcome: "success",
-        });
-        return result;
-      } catch (error) {
-        await recordWorkflowStepOutcomeFailClosed({
-          context,
-          action: "send_message",
-          outcome: "failure",
-          error: toErrorMessage(error),
-        });
-        throw error;
-      }
+      const result = { sent: true, message, level, timestamp: Date.now() };
+      await recordWorkflowStepOutcomeFailClosed({
+        context,
+        action: "send_message",
+        outcome: "success",
+      });
+      return result;
     },
   });
 
@@ -101,23 +86,13 @@ export async function createWorkflowActionToolkit(
       level: z.enum(["info", "warning", "error"]).optional().describe("Notification level"),
     }),
     execute: async ({ message, level = "info" }) => {
-      try {
-        const result = { notified: true, message, level, timestamp: Date.now() };
-        await recordWorkflowStepOutcomeFailClosed({
-          context,
-          action: "notify",
-          outcome: "success",
-        });
-        return result;
-      } catch (error) {
-        await recordWorkflowStepOutcomeFailClosed({
-          context,
-          action: "notify",
-          outcome: "failure",
-          error: toErrorMessage(error),
-        });
-        throw error;
-      }
+      const result = { notified: true, message, level, timestamp: Date.now() };
+      await recordWorkflowStepOutcomeFailClosed({
+        context,
+        action: "notify",
+        outcome: "success",
+      });
+      return result;
     },
   });
 
@@ -141,6 +116,9 @@ export async function createWorkflowActionToolkit(
   });
 }
 
+type WorkflowActionContext = Parameters<typeof createWorkflowActionToolkit>[1];
+type StepOutcome = import("zod").infer<typeof RecordWorkflowStepOutcomeArgs>["outcome"];
+
 async function recordWorkflowStepOutcomeFailClosed({
   context,
   action,
@@ -149,7 +127,7 @@ async function recordWorkflowStepOutcomeFailClosed({
 }: {
   context: WorkflowActionContext;
   action: AllowedAction;
-  outcome: "success" | "failure";
+  outcome: StepOutcome;
   error?: string;
 }): Promise<void> {
   try {

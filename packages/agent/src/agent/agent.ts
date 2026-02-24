@@ -28,6 +28,7 @@ import type {
   AgentArgs,
   ChatRuntimeDoc,
   ModeConfig,
+  SteerQueueItem,
   WorkflowRuntimeDoc,
 } from "./types";
 
@@ -42,6 +43,7 @@ type CreateWorkerPlanAgentArgs = {
   backgroundTaskStore: BackgroundTaskStore;
   truncatedOutputStore: TruncatedOutputStore;
   waitUntil: (promise: Promise<unknown>) => void;
+  getSteerQueueItemsForPrepareMessages: () => Promise<SteerQueueItem[]>;
 };
 
 export async function createWorkerPlanAgent({
@@ -55,6 +57,7 @@ export async function createWorkerPlanAgent({
   backgroundTaskStore,
   truncatedOutputStore,
   waitUntil,
+  getSteerQueueItemsForPrepareMessages,
 }: CreateWorkerPlanAgentArgs): Promise<PlanAgent> {
   if (modeConfig.mode === "chat" && !chatDoc) {
     throw new Error("Agent not initialized: missing chat context");
@@ -109,6 +112,27 @@ export async function createWorkerPlanAgent({
             "finish",
           ],
         },
+      },
+    },
+    hooks: {
+      onPrepareMessages: async ({ messages }) => {
+        const steeringItems = await getSteerQueueItemsForPrepareMessages();
+        if (steeringItems.length === 0) {
+          return {};
+        }
+
+        return {
+          messages: [{
+            id: `steer-directive-${crypto.randomUUID()}`,
+            role: "system",
+            parts: [
+              {
+                type: "text",
+                text: buildSteeringDirectiveMessage(steeringItems),
+              },
+            ],
+          }, ...messages],
+        };
       },
     },
     subagents,
@@ -227,4 +251,12 @@ async function createSubagents({
     instructions: toolkit.instructions ?? "",
     tools: toolkit.tools,
   }));
+}
+
+function buildSteeringDirectiveMessage(items: SteerQueueItem[]): string {
+  const lines = items.map((item, index) => `${index + 1}. ${item.text}`);
+  return [
+    "Runtime steering context (additive guidance, do not ignore unless unsafe):",
+    ...lines,
+  ].join("\n");
 }
