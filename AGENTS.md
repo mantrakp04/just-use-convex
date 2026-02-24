@@ -268,3 +268,32 @@ File-based TanStack Router:
 - `emilkowal-animations` — animation timing/easing
 - `vercel-react-best-practices` — re-render optimization
 - `flow` — structured execution flows for auth/review/refactor/shadcn-to-motion migrations
+
+## Cursor Cloud specific instructions
+
+### Runtime
+- **Bun v1.3.6** is the required runtime (declared in `package.json` `packageManager` field). The update script installs it automatically.
+- After `bun install`, all workspace packages are linked. No extra bootstrap step needed.
+
+### Services overview
+
+| Service | Command | Notes |
+|---------|---------|-------|
+| **Frontend (Vite)** | `bun run dev:web` | Serves on `http://localhost:3001`. Reads `.env` from repo root (`envDir: '../../'` in vite.config.ts). |
+| **Backend (Convex)** | `bun run dev:server` | Hosted service — requires real `CONVEX_URL` from a Convex project. First-time setup: `bun run dev:setup`. |
+| **Agent (Alchemy)** | `cd packages/agent && bunx alchemy dev alchemy.run.ts` | Requires Cloudflare account + `ALCHEMY_PASSWORD`. |
+| **All together** | `bun run dev` | Runs all three via Turborepo. |
+
+### Environment variables
+- Copy `.env.example` to `.env` at root and fill in real values. See `packages/env/src/` for validation schemas.
+- Frontend requires `VITE_CONVEX_URL` and `VITE_CONVEX_SITE_URL` (must be valid Convex deployment URLs, not arbitrary placeholders — the Convex SDK parses the deployment name from the subdomain).
+- Backend env validation is skipped when `JWKS` is unset. Agent env validation is skipped when `CONVEX_URL` is unset.
+
+### Type checking
+- `bun run check-types` runs `tsc --noEmit` across all workspaces via Turborepo. This is the project's lint/check equivalent — there is no separate ESLint config.
+
+### Gotchas
+- The Convex SDK rejects arbitrary placeholder URLs — the subdomain must look like a valid deployment name (e.g. `happy-animal-123`).
+- Vite reads env from the monorepo root (not `apps/web/`), configured via `envDir: '../../'` in `apps/web/vite.config.ts`.
+- No automated test suite exists yet (no test runner configured). Type checking (`bun run check-types`) is the primary CI gate.
+- The `finish.wav` notification in AGENTS.md's "On Finish" section requires `paplay` and audio hardware — it will fail silently in headless/cloud environments.
