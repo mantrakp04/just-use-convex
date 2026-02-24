@@ -30,7 +30,7 @@ import {
   listBackgroundTasks,
   patchToolWithBackgroundSupport,
 } from "../tools/utils/wrapper";
-import type { BackgroundTaskFilterStatus } from "../tools/utils/wrapper";
+import type { BackgroundTaskFilterStatus, GetBackgroundTaskInput } from "../tools/utils/wrapper";
 import { generateTitle } from "../agent/chat-meta";
 import {
   extractMessageText,
@@ -347,11 +347,7 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, AgentArgs> {
   }
 
   @callable()
-  async getBackgroundTask(input: {
-    taskId: string;
-    waitForCompletion?: boolean;
-    timeoutMs?: number;
-  }) {
+  async getBackgroundTask(input: GetBackgroundTaskInput) {
     if (!input?.taskId || input.taskId.trim().length === 0) {
       throw new Error("taskId is required");
     }
