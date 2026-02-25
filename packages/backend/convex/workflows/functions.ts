@@ -1,6 +1,7 @@
 import type { z } from "zod";
 import type { GenericMutationCtx, GenericQueryCtx } from "convex/server";
 import type { DataModel, Doc } from "../_generated/dataModel";
+import type { Doc as BetterAuthDoc } from "../betterAuth/_generated/dataModel";
 import type { zMutationCtx, zQueryCtx } from "../functions";
 import { components } from "../_generated/api";
 import { internal } from "../_generated/api";
@@ -552,7 +553,7 @@ export async function resolveWorkflowMemberIdentity(
   organizationId: string,
   memberId: string,
 ): Promise<types.WorkflowMember | null> {
-  const member = await ctx.runQuery(components.betterAuth.adapter.findOne, {
+  const member: Pick<BetterAuthDoc<"member">, "role" | "userId"> | null = await ctx.runQuery(components.betterAuth.adapter.findOne, {
     model: "member",
     where: [
       { field: "_id", operator: "eq", value: memberId },
@@ -561,8 +562,8 @@ export async function resolveWorkflowMemberIdentity(
     select: ["role", "userId"],
   });
 
-  const role = (member as { role?: unknown } | null)?.role;
-  const userId = (member as { userId?: unknown } | null)?.userId;
+  const role = member?.role;
+  const userId = member?.userId;
   if (typeof role !== "string" || !isMemberRole(role)) return null;
   if (typeof userId !== "string" || userId.length === 0) return null;
 
@@ -616,8 +617,8 @@ export async function GetEnabledWorkflow(
   args: { workflowId: z.infer<typeof types.WorkflowWithSystemFields>["_id"] },
 ): Promise<Doc<"workflows"> | null> {
   const workflow = await ctx.db.get(args.workflowId);
-  if (!workflow || !("enabled" in workflow) || !workflow.enabled) return null;
-  return workflow as unknown as Doc<"workflows">;
+  if (!workflow || !workflow.enabled) return null;
+  return workflow;
 }
 
 // ═══════════════════════════════════════════════════════════════════
