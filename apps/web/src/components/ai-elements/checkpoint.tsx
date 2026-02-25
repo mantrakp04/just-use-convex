@@ -46,7 +46,6 @@ export type CheckpointTriggerProps = ComponentProps<typeof Button> & {
 
 export const CheckpointTrigger = ({
   children,
-  className,
   variant = "ghost",
   size = "sm",
   tooltip,

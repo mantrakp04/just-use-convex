@@ -7,6 +7,7 @@
     "dev": "bunx alchemy dev alchemy.run.ts --env-file ../../.env",
     "deploy": "bunx alchemy deploy alchemy.run.ts --env-file ../../.env",
     "destroy": "bunx alchemy destroy alchemy.run.ts --env-file ../../.env",
+    "lint": "bunx eslint .",
     "check-types": "tsc --noEmit",
     "build": "tsc --noEmit"
   },
@@ -32,6 +33,7 @@
     "zod-to-json-schema": "^3.25.1"
   },
   "devDependencies": {
+    "eslint": "catalog:",
     "@just-use-convex/backend": "workspace:*",
     "@just-use-convex/env": "workspace:*",
     "@cloudflare/workers-types": "^4.20260214.0",

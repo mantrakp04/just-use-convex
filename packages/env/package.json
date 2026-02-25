@@ -2,6 +2,9 @@
   "name": "@just-use-convex/env",
   "version": "0.0.0",
   "private": true,
+  "scripts": {
+    "lint": "bunx eslint ."
+  },
   "type": "module",
   "exports": {
     "./web": "./src/web.ts",
@@ -15,6 +18,7 @@
     "zod": "catalog:"
   },
   "devDependencies": {
+    "eslint": "catalog:",
     "@just-use-convex/config": "workspace:*",
     "typescript": "catalog:"
   }

@@ -87,7 +87,7 @@ export const VoiceSelector = ({
     [value, setValue, open, setOpen]
   );
 
-  const handleOpenChange = (newOpen: boolean, eventDetails?: any) => {
+  const handleOpenChange = (newOpen: boolean, eventDetails?: unknown) => {
     setOpen(newOpen);
     if (onOpenChange) {
       onOpenChange(newOpen, eventDetails);

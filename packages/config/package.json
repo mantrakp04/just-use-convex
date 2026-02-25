@@ -1,5 +1,11 @@
 {
   "name": "@just-use-convex/config",
   "version": "0.0.0",
-  "private": true
+  "private": true,
+  "devDependencies": {
+    "eslint": "catalog:"
+  },
+  "scripts": {
+    "lint": "([ -n \"$(find . -maxdepth 3 -type f \\( -name '*.js' -o -name '*.jsx' -o -name '*.ts' -o -name '*.tsx' -o -name '*.mjs' -o -name '*.cjs' -o -name '*.cts' -o -name '*.mts' \\) -print -quit)\" ] && (if [ \"$0\" = \"--fix\" ]; then bunx eslint . --fix; else bunx eslint .; fi)); :"
+  }
 }

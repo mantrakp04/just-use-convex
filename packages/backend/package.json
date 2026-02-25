@@ -8,6 +8,7 @@
     "dev": "convex dev",
     "dev:setup": "convex dev --configure --until-success",
     "build": "tsc --noEmit --project convex",
+    "lint": "bunx eslint convex",
     "check-types": "tsc --noEmit --project convex"
   },
   "dependencies": {
@@ -24,6 +25,7 @@
     "zod": "catalog:"
   },
   "devDependencies": {
+    "eslint": "catalog:",
     "@just-use-convex/env": "workspace:*",
     "@just-use-convex/config": "workspace:*",
     "@types/node": "^24.10.13",

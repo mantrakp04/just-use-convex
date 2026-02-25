@@ -127,7 +127,7 @@ export const ToolInput = ({ className, input, ...props }: ToolInputProps) => {
     if (stringified !== undefined && stringified !== null) {
       jsonString = stringified;
     }
-  } catch (error) {
+  } catch {
     // If JSON serialization fails, fall back to string representation
     const str = String(input);
     if (str && str !== "[object Object]") {
