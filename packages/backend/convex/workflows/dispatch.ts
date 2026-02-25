@@ -5,6 +5,8 @@ import { internal } from "../_generated/api";
 import { v } from "convex/values";
 import { env } from "@just-use-convex/env/backend";
 import { baseIdentity } from "../functions";
+import type { GenericActionCtx } from "convex/server";
+import type { DataModel, Id } from "../_generated/dataModel";
 
 const dispatchWorkflowArgs = {
   workflowId: v.id("workflows"),
@@ -32,25 +34,13 @@ export const dispatchWorkflow = internalAction({
     // instanceName = workflow namespace (isolated workflow namespace or latest chat id)
     const agentUrl = env.AGENT_URL;
     const doInstanceName = namespace;
-    const resolvedModel = model?.trim() ? model : "openai/gpt-5.2-chat";
-    const resolvedInputModalities = inputModalities && inputModalities.length > 0
-      ? inputModalities
-      : ["text"];
-
-    const searchParams = new URLSearchParams({
-      model: resolvedModel,
-      inputModalities: resolvedInputModalities.join(","),
-      tokenConfig: JSON.stringify({
-        type: "ext",
-        externalToken: env.EXTERNAL_TOKEN,
-        identifier: { type: "memberId", value: args.memberId },
-      }),
-      modeConfig: JSON.stringify({
-        mode: "workflow",
-        workflow: args.workflowId,
-        executionId,
-        triggerPayload: args.triggerPayload ?? "{}",
-      }),
+    const searchParams = buildDispatchSearchParams({
+      model,
+      inputModalities,
+      memberId: args.memberId,
+      workflowId: args.workflowId,
+      executionId,
+      triggerPayload: args.triggerPayload,
     });
 
     let response: Response;
@@ -61,20 +51,14 @@ export const dispatchWorkflow = internalAction({
       );
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      await ctx.runMutation(internal.workflows.index.failExecution, {
-        executionId,
-        error: `Dispatch error: ${message}`,
-      });
+      await markDispatchFailure(ctx, executionId, `Dispatch error: ${message}`);
       throw error;
     }
 
     if (!response.ok) {
       const errorText = await response.text();
       const message = `Dispatch failed: ${response.status} ${errorText}`;
-      await ctx.runMutation(internal.workflows.index.failExecution, {
-        executionId,
-        error: message,
-      });
+      await markDispatchFailure(ctx, executionId, message);
       throw new Error(message);
     }
   },
@@ -100,3 +84,44 @@ export const dispatchWorkflowBatch = internalAction({
     }
   },
 });
+
+function buildDispatchSearchParams(args: {
+  model?: string;
+  inputModalities?: string[];
+  memberId: string;
+  workflowId: string;
+  executionId: string;
+  triggerPayload?: string;
+}) {
+  const resolvedModel = args.model?.trim() ? args.model : "openai/gpt-5.2-chat";
+  const resolvedInputModalities = args.inputModalities && args.inputModalities.length > 0
+    ? args.inputModalities
+    : ["text"];
+
+  return new URLSearchParams({
+    model: resolvedModel,
+    inputModalities: resolvedInputModalities.join(","),
+    tokenConfig: JSON.stringify({
+      type: "ext",
+      externalToken: env.EXTERNAL_TOKEN,
+      identifier: { type: "memberId", value: args.memberId },
+    }),
+    modeConfig: JSON.stringify({
+      mode: "workflow",
+      workflow: args.workflowId,
+      executionId: args.executionId,
+      triggerPayload: args.triggerPayload ?? "{}",
+    }),
+  });
+}
+
+async function markDispatchFailure(
+  ctx: Pick<GenericActionCtx<DataModel>, "runMutation">,
+  executionId: Id<"workflowExecutions">,
+  error: string,
+) {
+  await ctx.runMutation(internal.workflows.index.failExecution, {
+    executionId,
+    error,
+  });
+}

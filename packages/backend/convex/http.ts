@@ -5,8 +5,12 @@ import { authComponent, createAuth } from "./auth";
 import { httpAction } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { env } from "@just-use-convex/env/backend";
-import { triggerSchema } from "./tables/workflows";
-import { resolveWorkflowMemberIdentity } from "./workflows/functions";
+import {
+  buildDispatchArgs,
+  parseWorkflowTrigger,
+  scheduleDispatch,
+  resolveWorkflowMemberIdentity,
+} from "./workflows/helpers";
 
 const http = httpRouter();
 const SENSITIVE_WEBHOOK_HEADERS = ["x-webhook-signature", "authorization", "cookie"];
@@ -49,10 +53,8 @@ const handleWorkflowWebhook = httpAction(async (ctx, request) => {
   }
 
   // Validate webhook trigger config
-  let trigger: ReturnType<typeof triggerSchema.parse>;
-  try {
-    trigger = triggerSchema.parse(JSON.parse(workflow.trigger));
-  } catch {
+  const trigger = parseWorkflowTrigger(workflow.trigger);
+  if (!trigger) {
     return new Response(JSON.stringify({ error: "Invalid workflow trigger" }), {
       status: 500,
       headers: { "Content-Type": "application/json", ...buildCorsHeaders(request) },
@@ -113,14 +115,10 @@ const handleWorkflowWebhook = httpAction(async (ctx, request) => {
   }
 
   // Schedule dispatch
-  await ctx.scheduler.runAfter(0, internal.workflows.dispatch.dispatchWorkflow, {
-    workflowId: workflow._id,
-    triggerPayload,
-    userId: memberIdentity.userId,
-    activeOrganizationId: workflow.organizationId,
-    organizationRole: memberIdentity.role,
-    memberId: workflow.memberId,
-  });
+  await scheduleDispatch(
+    ctx,
+    buildDispatchArgs(workflow, memberIdentity, triggerPayload),
+  );
 
   return new Response(JSON.stringify({ ok: true }), {
     status: 200,

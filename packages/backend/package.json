@@ -22,6 +22,7 @@
     "convex-helpers": "^0.1.113",
     "dotenv": "catalog:",
     "mime": "catalog:",
+    "croner": "catalog:",
     "zod": "catalog:"
   },
   "devDependencies": {

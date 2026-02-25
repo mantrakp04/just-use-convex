@@ -15,6 +15,9 @@ import { workflowStepsWithSystemFields } from "../tables/workflowSteps";
 import { paginationOptsValidator } from "convex/server";
 import { convexToZod } from "convex-helpers/server/zod4";
 
+// Re-export for consumers
+export { triggerSchema as TriggerSchema } from "../tables/workflows";
+
 /** Inferred from allowedActionSchema */
 export type AllowedAction = z.infer<typeof allowedActionSchema>;
 /** Inferred from eventSchema */
@@ -31,12 +34,12 @@ export const WorkflowWithSystemFields = z.object(workflowsWithSystemFields);
 export const WorkflowExecution = z.object(workflowExecutionsWithSystemFields);
 export const WorkflowStep = z.object(workflowStepsWithSystemFields);
 
-/** Workflow list item (doc + sandbox edge). Use instead of inferring from FunctionReturnType for correct enum array types. */
+/** Workflow list item (doc + sandbox edge) */
 export type WorkflowWithSandbox = z.infer<typeof WorkflowWithSystemFields> & {
   sandbox: Doc<"sandboxes"> | null;
 };
 
-/** Resolved member identity for workflow dispatch (used by scheduler, triggers, webhook) */
+/** Resolved member identity for workflow dispatch */
 export type WorkflowMember = { role: MemberRole; userId: string };
 
 // ═══════════════════════════════════════════════════════════════════
@@ -90,9 +93,6 @@ export const ListExecutionsArgs = z.object({
 });
 
 export const GetExecutionArgs = WorkflowExecution.pick({ _id: true });
-
-// Used by agent (external)
-export const GetForExecutionArgs = WorkflowWithSystemFields.pick({ _id: true });
 
 export const UpdateExecutionStatusArgs = z.object({
   executionId: WorkflowExecution.shape._id,
