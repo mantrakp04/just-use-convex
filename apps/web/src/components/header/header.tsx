@@ -48,7 +48,7 @@ export default function Header() {
       >
         <TabsList variant="default" className="p-0">
           {links.map(({ to, icon }) => (
-            <TabsTrigger key={to} value={to} onClick={() => navigate({ to: `/${to}` })} className="px-2">
+            <TabsTrigger key={to} value={to} onClick={async () => void navigate({ to: `/${to}` })} className="px-2">
               {icon}
             </TabsTrigger>
           ))}
