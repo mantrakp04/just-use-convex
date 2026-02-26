@@ -10,7 +10,8 @@
     "./web": "./src/web.ts",
     "./backend": "./src/backend.ts",
     "./agent": "./src/agent.ts",
-    "./deploy": "./src/deploy.ts"
+    "./deploy": "./src/deploy.ts",
+    "./shared": "./src/shared.ts"
   },
   "dependencies": {
     "@t3-oss/env-core": "^0.13.10",

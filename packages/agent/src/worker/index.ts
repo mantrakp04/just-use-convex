@@ -54,7 +54,11 @@ import {
   createSandboxPtyFunctions,
 } from "../tools/sandbox";
 import { Daytona, type Sandbox } from "@daytonaio/sdk";
-import { ensureSandboxStarted, downloadFileUrlsInSandbox } from "../tools/utils/sandbox";
+import {
+  ensureSandboxReady,
+  ensureSandboxStarted,
+  downloadFileUrlsInSandbox,
+} from "../tools/utils/sandbox";
 import {
   buildInitArgsFromUrl,
 } from "./helpers";
@@ -125,9 +129,8 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, AgentArgs> {
     });
     if (sandboxId) {
       if (!this.sandbox || this.sandbox.id !== sandboxId) {
-        this.sandbox = await this.daytona.get(sandboxId);
+        this.sandbox = await ensureSandboxReady(this.daytona, sandboxId);
       }
-      await ensureSandboxStarted(this.sandbox);
     } else {
       this.sandbox = null;
     }

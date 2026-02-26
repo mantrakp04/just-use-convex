@@ -16,4 +16,10 @@ export const sharedEnv = {
   SANDBOX_INACTIVITY_TIMEOUT_MINUTES: z.coerce.number().int().positive().default(2),
   SANDBOX_VOLUME_MOUNT_PATH: z.string().default("/home/daytona"),
   SITE_URL: z.url().default("http://localhost:3001"),
+
+  SANDBOX_MAX_START_RETRIES: z.coerce.number().int().positive().default(3),
+  SANDBOX_START_RETRY_DELAY_MS: z.coerce.number().int().positive().default(1000),
+  SANDBOX_VOLUME_READY_POLL_INTERVAL_MS: z.coerce.number().int().positive().default(2000),
+  SANDBOX_SNAPSHOT: z.string().default("daytona-medium"),
+  SANDBOX_MAX_VOLUME_READY_RETRIES: z.coerce.number().int().positive().default(10),
 };
