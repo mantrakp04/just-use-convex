@@ -2,6 +2,7 @@ import { useNavigate, useLocation } from "@tanstack/react-router";
 import { useEffect, useRef } from "react";
 import { Tabs, TabsTrigger, TabsList } from "../ui/tabs";
 import { useHeader } from "@/hooks/use-header";
+import { HomeIcon, BookIcon, KanbanIcon, MessageSquareIcon, WorkflowIcon, SettingsIcon } from "lucide-react";
 
 export default function Header() {
   const navigate = useNavigate();
@@ -10,12 +11,12 @@ export default function Header() {
   const { setHeaderHeight } = useHeader();
 
   const links = [
-    { to: "", label: "Home" },
-    { to: "docs", label: "Docs" },
-    { to: "dashboard", label: "Dashboard" },
-    { to: "chats", label: "Chats" },
-    { to: "workflows", label: "Workflows" },
-    { to: "settings", label: "Settings" },
+    { to: "", label: "Home", icon: <HomeIcon /> },
+    { to: "docs", label: "Docs", icon: <BookIcon /> },
+    { to: "dashboard", label: "Dashboard", icon: <KanbanIcon /> },
+    { to: "chats", label: "Chats", icon: <MessageSquareIcon /> },
+    { to: "workflows", label: "Workflows", icon: <WorkflowIcon /> },
+    { to: "settings", label: "Settings", icon: <SettingsIcon /> },
   ] as const;
 
   const activeTab = location.pathname === "/" ? "" : Object.values(links).filter(({ to }) => to !== "").find(({ to }) =>
@@ -43,11 +44,13 @@ export default function Header() {
     <div ref={headerRef} className="relative z-50 w-fit mx-auto">
       <Tabs
         value={activeTab ?? ""}
-        className="container mx-auto w-4xl border border-border rounded-lg px-.5 overflow-x-auto no-scrollbar z-50 backdrop-blur-xs"
+        // className="container mx-auto w-4xl border border-border rounded-lg px-.5 overflow-x-auto no-scrollbar z-50 backdrop-blur-xs"
       >
-        <TabsList variant="line" className={`w-full justify-between`}>
-          {links.map(({ to, label }) => (
-            <TabsTrigger key={to} value={to} onClick={() => navigate({ to: `/${to}` })} className='cursor-pointer' >{label}</TabsTrigger>
+        <TabsList variant="default" className="p-0">
+          {links.map(({ to, icon }) => (
+            <TabsTrigger key={to} value={to} onClick={() => navigate({ to: `/${to}` })} className="px-2">
+              {icon}
+            </TabsTrigger>
           ))}
         </TabsList>
       </Tabs>

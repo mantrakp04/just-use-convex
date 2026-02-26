@@ -30,44 +30,49 @@ export default function HeaderIndex() {
   }, [setHeaderHeight]);
 
   return (
-    <motion.div
+    <div
       ref={blockRef}
-      layout
-      transition={springExpand}
-      className="relative z-50 flex flex-row mt-2 items-center gap-2 w-fit mx-auto"
+      className="relative z-50 flex items-center justify-center mt-2 w-full pointer-events-none"
     >
-      {/* Before slot - extensible for dynamic content */}
-      <AnimatePresence mode="popLayout">
-        <motion.div
-          key="header-before"
-          layout
-          initial={{ opacity: 0, width: 0 }}
-          animate={{ opacity: 1, width: "auto" }}
-          exit={{ opacity: 0, width: 0 }}
-          transition={{ ...springExpand, opacity: { duration: 0.15 } }}
-          className="ml-auto overflow-hidden"
-          >
+      <div className="relative flex items-center pointer-events-auto">
+        {/* Before slot - extensible for dynamic content */}
+        <div className="absolute right-full mr-2 flex items-center justify-end">
+          <AnimatePresence mode="popLayout">
             {isChatDetail ? (
-              <HeaderChatsDropdown />
+              <motion.div
+                key="header-before"
+                layout
+                initial={{ opacity: 0, x: 16, filter: "blur(4px)" }}
+                animate={{ opacity: 1, x: 0, filter: "blur(0px)" }}
+                exit={{ opacity: 0, x: 16, filter: "blur(4px)" }}
+                transition={{ ...springExpand, opacity: { duration: 0.15 } }}
+                className="overflow-hidden whitespace-nowrap"
+              >
+                <HeaderChatsDropdown />
+              </motion.div>
             ) : null}
-        </motion.div>
-      </AnimatePresence>
+          </AnimatePresence>
+        </div>
 
-      <Header />
+        <Header />
 
-      {/* After slot - chats dropdown when on /chats/$chatId — left-to-right */}
-      <AnimatePresence mode="popLayout">
-        <motion.div
-          key="header-after"
-          layout
-          initial={{ opacity: 0, x: -16 }}
-          animate={{ opacity: 1, x: 0 }}
-          exit={{ opacity: 0, x: -16 }}
-          transition={{ ...springExpand, opacity: { duration: 0.15 } }}
-          className="overflow-hidden"
-        >
-        </motion.div>
-      </AnimatePresence>
-    </motion.div>
+        {/* After slot - extensible for dynamic content */}
+        <div className="absolute left-full ml-2 flex items-center justify-start">
+          <AnimatePresence mode="popLayout">
+            {/* Future dynamic content */}
+            <motion.div
+              key="header-after"
+              layout
+              initial={{ opacity: 0, x: -16, filter: "blur(4px)" }}
+              animate={{ opacity: 1, x: 0, filter: "blur(0px)" }}
+              exit={{ opacity: 0, x: -16, filter: "blur(4px)" }}
+              transition={{ ...springExpand, opacity: { duration: 0.15 } }}
+              className="overflow-hidden whitespace-nowrap"
+            >
+            </motion.div>
+          </AnimatePresence>
+        </div>
+      </div>
+    </div>
   );
 }

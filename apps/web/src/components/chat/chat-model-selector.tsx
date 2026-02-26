@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { ChevronDownIcon, Star } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
+import type { ComponentProps } from "react";
 import type { OpenRouterModel } from "@/hooks/use-openrouter-models";
 import type { ChatSettings } from "./chat-input";
 import { useModelFiltering, getProviderLabel, getProviderDisplayName, getProviderLogoSlug } from "@/hooks/use-model-filtering";
@@ -30,6 +32,9 @@ export type ChatModelSelectorProps = {
   selectedModel?: OpenRouterModel;
   onSettingsChange: (settings: ChatSettings | ((prev: ChatSettings) => ChatSettings)) => void;
   hasMessages: boolean;
+  variant?: ComponentProps<typeof Button>["variant"];
+  size?: ComponentProps<typeof Button>["size"];
+  useDefaults?: boolean;
 };
 
 export function ChatModelSelector({
@@ -38,6 +43,9 @@ export function ChatModelSelector({
   selectedModel,
   onSettingsChange,
   hasMessages,
+  variant,
+  size,
+  useDefaults = false,
 }: ChatModelSelectorProps) {
   const [open, setOpen] = useState(false);
   const [, setDefaultSettings] = useAtom(defaultChatSettingsAtom);
@@ -76,13 +84,28 @@ export function ChatModelSelector({
 
   return (
     <ModelSelector open={open} onOpenChange={setOpen}>
-      <ModelSelectorTrigger className="p-1.5 rounded-md hover:bg-muted/50 cursor-pointer flex items-center gap-2">
-        <TriggerContent
-          selectedModel={selectedModel}
-          providerSlug={providerSlug}
-        />
-        <ChevronDownIcon className="size-3 text-muted-foreground/70" />
-      </ModelSelectorTrigger>
+      <ModelSelectorTrigger
+        render={
+          <Button
+            variant={useDefaults ? (variant || "outline") : "ghost"}
+            size={useDefaults ? size : "sm"}
+            className={cn(
+              "flex items-center gap-2 font-normal",
+              !useDefaults && "p-1.5 rounded-md hover:bg-muted/50 cursor-pointer h-auto py-1.5 px-1.5 justify-start text-foreground w-auto bg-transparent border-none",
+              useDefaults && "justify-between w-full"
+            )}
+          >
+            <div className="flex items-center gap-2 overflow-hidden flex-1">
+              <TriggerContent
+                selectedModel={selectedModel}
+                providerSlug={providerSlug}
+                useDefaults={useDefaults}
+              />
+            </div>
+            <ChevronDownIcon className="size-3 text-muted-foreground/70 shrink-0" />
+          </Button>
+        }
+      />
 
       <ModelSelectorContent title="Select a model" className="max-h-[28rem] h-full">
         <ModelSelectorInput placeholder="Search models..." />
@@ -130,11 +153,13 @@ export function ChatModelSelector({
 type TriggerContentProps = {
   selectedModel?: OpenRouterModel;
   providerSlug: string;
+  useDefaults?: boolean;
 };
 
 function TriggerContent({
   selectedModel,
   providerSlug,
+  useDefaults,
 }: TriggerContentProps) {
   if (!selectedModel) {
     return <span className="text-muted-foreground">Select model</span>;
@@ -143,7 +168,7 @@ function TriggerContent({
   return (
     <>
       <ModelSelectorLogo provider={providerSlug} className="size-3.5" />
-      <span className="max-w-24 truncate text-muted-foreground">
+      <span className={cn("truncate", useDefaults ? "max-w-32" : "max-w-24 text-muted-foreground")}>
         {selectedModel.short_name || selectedModel.name}
       </span>
     </>

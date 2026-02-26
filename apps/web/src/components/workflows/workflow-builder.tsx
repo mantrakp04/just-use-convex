@@ -296,21 +296,24 @@ export function WorkflowBuilder({
             />
           </div>
 
-          <div className="flex flex-col gap-2">
-            <Label>Sandbox</Label>
-            <SandboxSelector value={sandboxId} onChange={setSandboxId} />
-          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="flex flex-col gap-2">
+              <Label>Sandbox</Label>
+              <SandboxSelector value={sandboxId} onChange={setSandboxId} />
+            </div>
 
-          <div className="flex flex-col gap-2">
-            <Label>Model</Label>
-            <div className="w-fit rounded-md border border-border p-1">
+            <div className="flex flex-col gap-2">
+              <Label>Model</Label>
               <ChatModelSelector
-                groupedModels={groupedModels}
-                models={models}
-                selectedModel={selectedModel}
-                onSettingsChange={handleModelSettingsChange}
-                hasMessages
-              />
+                  groupedModels={groupedModels}
+                  models={models}
+                  selectedModel={selectedModel}
+                  onSettingsChange={handleModelSettingsChange}
+                  hasMessages
+                  useDefaults
+                  variant="outline"
+                  size="default"
+                />
             </div>
           </div>
 
