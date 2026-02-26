@@ -2,6 +2,7 @@ import type { Trigger } from "convex-helpers/server/triggers";
 import type { GenericMutationCtx } from "convex/server";
 import type { DataModel, Doc } from "../_generated/dataModel";
 import type { EventType } from "./types";
+import { tableNames } from "../lib/schemaTables";
 import {
   buildDispatchArgs,
   parseWorkflowTrigger,
@@ -11,44 +12,23 @@ import {
 
 type MutationCtx = GenericMutationCtx<DataModel>;
 
-const TABLE_EVENT_MAP: Record<string, { insert?: EventType; delete?: EventType; update?: EventType }> = {
-  chats: { insert: "on_chat_create", delete: "on_chat_delete" },
-  sandboxes: { insert: "on_sandbox_provision", delete: "on_sandbox_delete" },
-  todos: { insert: "on_todo_create" },
-};
+const OPERATIONS = ["create", "update", "delete"] as const;
+type Operation = (typeof OPERATIONS)[number];
 
-function getTodoCompleteEvent(change: { operation: string; oldDoc?: Record<string, unknown>; newDoc?: Record<string, unknown> }): EventType | null {
-  if (change.operation === "update" && change.newDoc && change.oldDoc) {
-    if (change.oldDoc.status !== "done" && change.newDoc.status === "done") {
-      return "on_todo_complete";
-    }
-  }
-  return null;
+const OP_MAP: Record<string, Operation> = { insert: "create", update: "update", delete: "delete" };
+
+function getEventForChange(tableName: string, operation: string): EventType | null {
+  const op = OP_MAP[operation];
+  if (!op || !tableNames.includes(tableName as (typeof tableNames)[number])) return null;
+  return `on_${tableName}_${op}` as EventType;
 }
 
-export function workflowEventTrigger<T extends "chats" | "sandboxes" | "todos">(
-  tableName: T,
-): Trigger<MutationCtx, DataModel, T> {
+type TableName = (typeof tableNames)[number];
+
+export function workflowEventTrigger<T extends TableName>(tableName: T): Trigger<MutationCtx, DataModel, T> {
   return async (ctx, change) => {
-    const events: EventType[] = [];
-
-    const mapping = TABLE_EVENT_MAP[tableName];
-    if (mapping) {
-      if (change.operation === "insert" && mapping.insert) events.push(mapping.insert);
-      if (change.operation === "update" && mapping.update) events.push(mapping.update);
-      if (change.operation === "delete" && mapping.delete) events.push(mapping.delete);
-    }
-
-    if (tableName === "todos") {
-      const completeEvent = getTodoCompleteEvent({
-        operation: change.operation,
-        oldDoc: asRecord(change.oldDoc),
-        newDoc: asRecord(change.newDoc),
-      });
-      if (completeEvent) events.push(completeEvent);
-    }
-
-    if (events.length === 0) return;
+    const event = getEventForChange(tableName, change.operation);
+    if (!event) return;
 
     const doc = change.operation === "delete" ? asRecord(change.oldDoc) : asRecord(change.newDoc);
     if (!doc) return;
@@ -68,7 +48,7 @@ export function workflowEventTrigger<T extends "chats" | "sandboxes" | "todos">(
 
     for (const workflow of enabledWorkflows) {
       const trigger = parseWorkflowTrigger(workflow.trigger);
-      if (!trigger || trigger.type !== "event" || !events.includes(trigger.event)) continue;
+      if (!trigger || trigger.type !== "event" || trigger.event !== event) continue;
 
       const cacheKey = `${workflow.organizationId}:${workflow.memberId}`;
       let memberIdentity = memberCache.get(cacheKey);

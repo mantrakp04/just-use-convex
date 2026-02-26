@@ -19,7 +19,7 @@
     "better-auth": "catalog:",
     "convex": "catalog:",
     "convex-ents": "^0.20.0",
-    "convex-helpers": "^0.1.113",
+    "convex-helpers": "^0.1.114",
     "dotenv": "catalog:",
     "mime": "catalog:",
     "croner": "catalog:",

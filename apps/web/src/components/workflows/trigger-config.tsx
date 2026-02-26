@@ -86,7 +86,7 @@ export function TriggerConfig({
             <SelectTrigger>
               <SelectValue />
             </SelectTrigger>
-            <SelectContent>
+            <SelectContent className="max-w-xl w-full">
               {ALL_EVENTS.map(({ value, label }) => (
                 <SelectItem key={value} value={value}>
                   {label}

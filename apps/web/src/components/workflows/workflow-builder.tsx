@@ -92,7 +92,7 @@ export function WorkflowBuilder({
     setIntervalStart(undefined);
     setAtTime("09:00");
     setCron("0 * * * *");
-    setEvent("on_todo_create");
+    setEvent("on_todos_create");
     setWebhookSecret("");
   }, [setName, setInstructions, setActions, setModel, setSandboxId, setTriggerType, setScheduleMode, setIntervalAmount, setIntervalUnit, setIntervalStart, setAtTime, setCron, setEvent]);
 
@@ -432,7 +432,7 @@ type WorkflowCronBuilderState = Pick<
 function parseWorkflowTrigger(triggerJson: string): WorkflowTriggerBuilderState {
   const defaults: WorkflowTriggerBuilderState = {
     triggerType: "event" as TriggerType,
-    event: "on_todo_create" as EventType,
+    event: "on_todos_create" as EventType,
     scheduleMode: "every" as ScheduleMode,
     intervalAmount: 30,
     intervalUnit: "minutes" as IntervalUnit,

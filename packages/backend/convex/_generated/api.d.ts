@@ -25,6 +25,7 @@ import type * as functions from "../functions.js";
 import type * as healthCheck from "../healthCheck.js";
 import type * as http from "../http.js";
 import type * as lib_convexAdapter from "../lib/convexAdapter.js";
+import type * as lib_schemaTables from "../lib/schemaTables.js";
 import type * as migrations from "../migrations.js";
 import type * as privateData from "../privateData.js";
 import type * as sandboxes_aggregates from "../sandboxes/aggregates.js";
@@ -87,6 +88,7 @@ declare const fullApi: ApiFromModules<{
   healthCheck: typeof healthCheck;
   http: typeof http;
   "lib/convexAdapter": typeof lib_convexAdapter;
+  "lib/schemaTables": typeof lib_schemaTables;
   migrations: typeof migrations;
   privateData: typeof privateData;
   "sandboxes/aggregates": typeof sandboxes_aggregates;

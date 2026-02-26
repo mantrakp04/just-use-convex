@@ -12,6 +12,7 @@ import {
 import { sandboxesWithSystemFields } from "../tables/sandboxes";
 import { workflowExecutionsWithSystemFields } from "../tables/workflowExecutions";
 import { workflowStepsWithSystemFields } from "../tables/workflowSteps";
+import { tableNames } from "../lib/schemaTables";
 import { paginationOptsValidator } from "convex/server";
 import { convexToZod } from "convex-helpers/server/zod4";
 
@@ -22,6 +23,31 @@ export { triggerSchema as TriggerSchema } from "../tables/workflows";
 export type Action = z.infer<typeof actionSchema>;
 /** Inferred from eventSchema */
 export type EventType = z.infer<typeof eventSchema>;
+
+const OPERATIONS = ["create", "update", "delete"] as const;
+const OP_LABELS: Record<(typeof OPERATIONS)[number], string> = {
+  create: "Created",
+  update: "Updated",
+  delete: "Deleted",
+};
+
+function humanizeTable(name: string): string {
+  return name
+    .replace(/([A-Z])/g, " $1")
+    .replace(/^./, (s) => s.toUpperCase())
+    .trim()
+    .split(" ")
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+    .join(" ");
+}
+
+/** Event options inferred from schema tables — for UI selectors */
+export const ALL_EVENTS: { value: EventType; label: string }[] = tableNames.flatMap((table) =>
+  OPERATIONS.map((op) => ({
+    value: `on_${table}_${op}` as EventType,
+    label: `${humanizeTable(table)} ${OP_LABELS[op]}`,
+  }))
+);
 /** Inferred from triggerSchema discriminant */
 export type TriggerType = z.infer<typeof triggerSchema>["type"];
 /** Inferred from inputModalitySchema */

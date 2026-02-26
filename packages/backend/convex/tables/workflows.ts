@@ -3,15 +3,16 @@ import { defineEntFromTable } from "convex-ents";
 import { Table } from "convex-helpers/server";
 import { convexToZodFields, zodToConvexFields } from "convex-helpers/server/zod4";
 import { sandboxesWithSystemFields } from "./sandboxes";
+import { tableNames } from "../lib/schemaTables";
 
-export const eventSchema = z.enum([
-  "on_chat_create",
-  "on_chat_delete",
-  "on_sandbox_provision",
-  "on_sandbox_delete",
-  "on_todo_create",
-  "on_todo_complete",
-]);
+const WORKFLOW_OPERATIONS = ["create", "update", "delete"] as const;
+
+/** Inferred from schema table names + create/update/delete */
+export const eventSchema = z.enum(
+  tableNames.flatMap((t) =>
+    WORKFLOW_OPERATIONS.map((op) => `on_${t}_${op}` as const)
+  ) as [string, ...string[]]
+);
 
 export const triggerTypeSchema = z.enum([
   "webhook",

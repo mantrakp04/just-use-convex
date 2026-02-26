@@ -1,12 +1,14 @@
 import { atom } from "jotai";
 import type { Id } from "@just-use-convex/backend/convex/_generated/dataModel";
-import type {
-  Action,
-  EventType,
-  TriggerType,
+import {
+  ALL_EVENTS,
+  type Action,
+  type EventType,
+  type TriggerType,
 } from "@just-use-convex/backend/convex/workflows/types";
 
 export type { Action, EventType, TriggerType };
+export { ALL_EVENTS };
 
 export type ScheduleMode = "every" | "at" | "cron";
 
@@ -16,15 +18,6 @@ export const ALL_ACTIONS: { value: Action; label: string; description: string }[
   { value: "send_message", label: "Send Message", description: "Send a workflow output message" },
   { value: "http_request", label: "HTTP Request", description: "Make an external HTTP request" },
   { value: "notify", label: "Notify", description: "Send a notification" },
-];
-
-export const ALL_EVENTS: { value: EventType; label: string }[] = [
-  { value: "on_chat_create", label: "Chat Created" },
-  { value: "on_chat_delete", label: "Chat Deleted" },
-  { value: "on_sandbox_provision", label: "Sandbox Provisioned" },
-  { value: "on_sandbox_delete", label: "Sandbox Deleted" },
-  { value: "on_todo_create", label: "Todo Created" },
-  { value: "on_todo_complete", label: "Todo Completed" },
 ];
 
 /**
@@ -141,7 +134,7 @@ export const builderIntervalUnitAtom = atom<IntervalUnit>("minutes");
 export const builderIntervalStartAtom = atom<string | undefined>(undefined);
 export const builderAtTimeAtom = atom("09:00");
 export const builderCronAtom = atom("0 * * * *");
-export const builderEventAtom = atom<EventType>("on_todo_create");
+export const builderEventAtom = atom<EventType>("on_todos_create");
 export const builderInstructionsAtom = atom("");
 export const builderActionsAtom = atom<Action[]>(["notify"]);
 export const builderModelAtom = atom<string | undefined>(undefined);
