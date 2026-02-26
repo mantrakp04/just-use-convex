@@ -79,7 +79,7 @@ export async function CreateWorkflow(ctx: zMutationCtx, args: z.infer<typeof typ
     name: args.data.name,
     ...serializeTrigger(trigger),
     instructions: args.data.instructions,
-    allowedActions: args.data.allowedActions,
+    actions: args.data.actions,
     model: args.data.model,
     inputModalities: args.data.inputModalities,
     sandboxId: args.data.sandboxId,

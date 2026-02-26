@@ -53,7 +53,7 @@ export async function GetExecution(ctx: zQueryCtx, args: z.infer<typeof types.Ge
 export async function CreateExecution(ctx: zMutationCtx, args: z.infer<typeof types.CreateExecutionArgs>) {
   const workflow = await ctx.table("workflows").getX(args.workflowId);
   const now = Date.now();
-  const requiredActions = dedupeAllowedActions(workflow.allowedActions);
+  const requiredActions = dedupeActions(workflow.actions);
 
   const execution = await ctx.table("workflowExecutions").insert({
     workflowId: args.workflowId,
@@ -230,7 +230,7 @@ function isTerminalStatus(status: string): boolean {
   return status === "completed" || status === "failed" || status === "cancelled";
 }
 
-function dedupeAllowedActions(actions: Doc<"workflows">["allowedActions"]) {
+function dedupeActions(actions: Doc<"workflows">["actions"]) {
   return [...new Set(actions)];
 }
 

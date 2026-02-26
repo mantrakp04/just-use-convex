@@ -5,7 +5,7 @@ import {
   workflowsZodSchema,
   workflowsWithSystemFields,
   triggerSchema,
-  allowedActionSchema,
+  actionSchema,
   eventSchema,
   inputModalitySchema,
 } from "../tables/workflows";
@@ -18,8 +18,8 @@ import { convexToZod } from "convex-helpers/server/zod4";
 // Re-export for consumers
 export { triggerSchema as TriggerSchema } from "../tables/workflows";
 
-/** Inferred from allowedActionSchema */
-export type AllowedAction = z.infer<typeof allowedActionSchema>;
+/** Inferred from actionSchema */
+export type Action = z.infer<typeof actionSchema>;
 /** Inferred from eventSchema */
 export type EventType = z.infer<typeof eventSchema>;
 /** Inferred from triggerSchema discriminant */
@@ -57,7 +57,7 @@ export const CreateArgs = z.object({
     name: z.string(),
     trigger: triggerSchema,
     instructions: z.string(),
-    allowedActions: z.array(allowedActionSchema),
+    actions: z.array(actionSchema),
     model: z.string(),
     inputModalities: z.array(inputModalitySchema).default(["text"]),
     sandboxId: sandboxesWithSystemFields._id.optional(),
@@ -69,7 +69,7 @@ export const UpdateArgs = WorkflowWithSystemFields.pick({ _id: true }).extend({
     name: z.string(),
     trigger: triggerSchema,
     instructions: z.string(),
-    allowedActions: z.array(allowedActionSchema),
+    actions: z.array(actionSchema),
     model: z.string().optional(),
     inputModalities: z.array(inputModalitySchema),
     sandboxId: sandboxesWithSystemFields._id.nullable().optional(),
@@ -114,7 +114,7 @@ export const RetryExecutionArgs = z.object({
 
 export const RecordWorkflowStepOutcomeArgs = z.object({
   executionId: WorkflowExecution.shape._id,
-  action: allowedActionSchema,
+  action: actionSchema,
   outcome: z.enum(["success", "failure"]),
   error: z.string().optional(),
 });

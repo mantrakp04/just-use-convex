@@ -23,7 +23,7 @@ import {
   builderAtTimeAtom,
   builderEventAtom,
   builderInstructionsAtom,
-  builderAllowedActionsAtom,
+  builderActionsAtom,
   builderModelAtom,
   builderSandboxIdAtom,
   ALL_ACTIONS,
@@ -33,7 +33,7 @@ import {
   type EventType,
   type ScheduleMode,
   type IntervalUnit,
-  type AllowedAction,
+  type Action,
 } from "@/store/workflows";
 import { defaultChatSettingsAtom } from "@/store/models";
 import { SandboxSelector } from "@/components/sandboxes/sandbox-selector";
@@ -69,7 +69,7 @@ export function WorkflowBuilder({
   const [atTime, setAtTime] = useAtom(builderAtTimeAtom);
   const [event, setEvent] = useAtom(builderEventAtom);
   const [instructions, setInstructions] = useAtom(builderInstructionsAtom);
-  const [allowedActions, setAllowedActions] = useAtom(builderAllowedActionsAtom);
+  const [actions, setActions] = useAtom(builderActionsAtom);
   const [model, setModel] = useAtom(builderModelAtom);
   const [sandboxId, setSandboxId] = useAtom(builderSandboxIdAtom);
   const [webhookSecret, setWebhookSecret] = useState("");
@@ -82,7 +82,7 @@ export function WorkflowBuilder({
   const resetForm = useCallback(() => {
     setName("");
     setInstructions("");
-    setAllowedActions(["notify"]);
+    setActions(["notify"]);
     setModel(undefined);
     setSandboxId(null);
     setTriggerType("event");
@@ -94,7 +94,7 @@ export function WorkflowBuilder({
     setCron("0 * * * *");
     setEvent("on_todo_create");
     setWebhookSecret("");
-  }, [setName, setInstructions, setAllowedActions, setModel, setSandboxId, setTriggerType, setScheduleMode, setIntervalAmount, setIntervalUnit, setIntervalStart, setAtTime, setCron, setEvent]);
+  }, [setName, setInstructions, setActions, setModel, setSandboxId, setTriggerType, setScheduleMode, setIntervalAmount, setIntervalUnit, setIntervalStart, setAtTime, setCron, setEvent]);
 
   useEffect(() => {
     if (!isEditMode || !workflow) {
@@ -105,7 +105,7 @@ export function WorkflowBuilder({
     const parsed = parseWorkflowTrigger(workflow.trigger);
     setName(workflow.name);
     setInstructions(workflow.instructions);
-    setAllowedActions(workflow.allowedActions);
+    setActions(workflow.actions);
     setModel(workflow.model);
     setSandboxId(workflow.sandboxId ?? null);
     setTriggerType(parsed.triggerType);
@@ -122,7 +122,7 @@ export function WorkflowBuilder({
     workflow,
     setName,
     setInstructions,
-    setAllowedActions,
+    setActions,
     setModel,
     setSandboxId,
     setTriggerType,
@@ -184,7 +184,7 @@ export function WorkflowBuilder({
           name: name.trim(),
           trigger,
           instructions: instructions.trim(),
-          allowedActions,
+          actions,
           model,
           inputModalities,
           sandboxId: patchedSandboxId,
@@ -196,7 +196,7 @@ export function WorkflowBuilder({
           name: name.trim(),
           trigger,
           instructions: instructions.trim(),
-          allowedActions,
+          actions,
           model: resolvedModel,
           inputModalities,
           sandboxId: sandboxId ?? undefined,
@@ -227,7 +227,7 @@ export function WorkflowBuilder({
     cron,
     event,
     instructions,
-    allowedActions,
+    actions,
     model,
     resolvedModel,
     selectedModel,
@@ -242,14 +242,14 @@ export function WorkflowBuilder({
   ]);
 
   const toggleAction = useCallback(
-    (action: AllowedAction) => {
-      setAllowedActions((prev) =>
+    (action: Action) => {
+      setActions((prev) =>
         prev.includes(action)
           ? prev.filter((a) => a !== action)
           : [...prev, action]
       );
     },
-    [setAllowedActions]
+    [setActions]
   );
 
   const handleTriggerTypeChange = useCallback((type: TriggerType) => {
@@ -345,7 +345,7 @@ export function WorkflowBuilder({
           </div>
 
           <div className="flex flex-col gap-2">
-            <Label>Allowed Actions</Label>
+            <Label>Actions</Label>
             <div className="grid grid-cols-2 gap-2">
               {ALL_ACTIONS.map(({ value, label, description: desc }) => (
                 <label
@@ -353,7 +353,7 @@ export function WorkflowBuilder({
                   className="flex items-start gap-2 p-2 rounded-lg border border-border cursor-pointer hover:bg-muted/50 transition-colors"
                 >
                   <Checkbox
-                    checked={allowedActions.includes(value)}
+                    checked={actions.includes(value)}
                     onCheckedChange={() => toggleAction(value)}
                   />
                   <div className="flex flex-col">

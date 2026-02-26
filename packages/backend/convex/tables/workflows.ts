@@ -34,7 +34,7 @@ export const triggerSchema = z.discriminatedUnion("type", [
   }),
 ]);
 
-export const allowedActionSchema = z.enum([
+export const actionSchema = z.enum([
   "send_message",
   "http_request",
   "notify",
@@ -50,7 +50,7 @@ export const workflowsZodSchema = {
   triggerType: triggerTypeSchema,
   trigger: z.string(), // JSON-serialized triggerSchema
   instructions: z.string(),
-  allowedActions: z.array(allowedActionSchema),
+  actions: z.array(actionSchema),
   model: z.string(),
   inputModalities: z.array(inputModalitySchema),
   sandboxId: sandboxesWithSystemFields._id.optional(),

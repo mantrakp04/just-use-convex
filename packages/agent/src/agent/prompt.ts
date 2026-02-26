@@ -96,7 +96,7 @@ ${triggerPayload}
 
 ## Actions Context
 Use the following actions during / at end of execution, these are configured by user and must be realized:
-${workflow.allowedActions.map((action) => `- ${action}`).join("\n")}
+${workflow.actions.map((action) => `- ${action}`).join("\n")}
 
 ## Rules
 - Be decisive and complete the workflow efficiently

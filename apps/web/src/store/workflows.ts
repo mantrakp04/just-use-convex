@@ -1,18 +1,18 @@
 import { atom } from "jotai";
 import type { Id } from "@just-use-convex/backend/convex/_generated/dataModel";
 import type {
-  AllowedAction,
+  Action,
   EventType,
   TriggerType,
 } from "@just-use-convex/backend/convex/workflows/types";
 
-export type { AllowedAction, EventType, TriggerType };
+export type { Action, EventType, TriggerType };
 
 export type ScheduleMode = "every" | "at" | "cron";
 
 export type IntervalUnit = "minutes" | "hours" | "days";
 
-export const ALL_ACTIONS: { value: AllowedAction; label: string; description: string }[] = [
+export const ALL_ACTIONS: { value: Action; label: string; description: string }[] = [
   { value: "send_message", label: "Send Message", description: "Send a workflow output message" },
   { value: "http_request", label: "HTTP Request", description: "Make an external HTTP request" },
   { value: "notify", label: "Notify", description: "Send a notification" },
@@ -143,6 +143,6 @@ export const builderAtTimeAtom = atom("09:00");
 export const builderCronAtom = atom("0 * * * *");
 export const builderEventAtom = atom<EventType>("on_todo_create");
 export const builderInstructionsAtom = atom("");
-export const builderAllowedActionsAtom = atom<AllowedAction[]>(["notify"]);
+export const builderActionsAtom = atom<Action[]>(["notify"]);
 export const builderModelAtom = atom<string | undefined>(undefined);
 export const builderSandboxIdAtom = atom<Id<"sandboxes"> | null>(null);

@@ -3,11 +3,11 @@ import { defineEntFromTable } from "convex-ents";
 import { Table } from "convex-helpers/server";
 import { convexToZodFields, zodToConvexFields } from "convex-helpers/server/zod4";
 import { workflowExecutionsWithSystemFields } from "./workflowExecutions";
-import { allowedActionSchema } from "./workflows";
+import { actionSchema } from "./workflows";
 
 export const workflowStepsZodSchema = {
   workflowExecutionId: workflowExecutionsWithSystemFields._id,
-  action: allowedActionSchema,
+  action: actionSchema,
   status: z.enum(["pending", "success", "failure"]),
   callCount: z.number(),
   successCount: z.number(),

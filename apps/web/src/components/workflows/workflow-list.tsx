@@ -115,7 +115,7 @@ function WorkflowCard({
               </Badge>
             )}
             <Badge variant="secondary" className="text-xs">
-              {workflow.allowedActions.length} action{workflow.allowedActions.length !== 1 ? "s" : ""}
+              {workflow.actions.length} action{workflow.actions.length !== 1 ? "s" : ""}
             </Badge>
             {workflow.sandbox && (
               <Badge variant="secondary" className="text-xs gap-1">
