@@ -57,7 +57,6 @@ import { Daytona, type Sandbox } from "@daytonaio/sdk";
 import { ensureSandboxStarted, downloadFileUrlsInSandbox } from "../tools/utils/sandbox";
 import {
   buildInitArgsFromUrl,
-  buildWorkflowExecutionMessages,
 } from "./helpers";
 import { createWorkerPlanAgent } from "../agent/agent";
 
@@ -273,13 +272,23 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, AgentArgs> {
         if (!this.convexAdapter) {
           throw new Error("No convex adapter");
         }
+
+        this.persistMessages([{
+          id: `user-${crypto.randomUUID()}`,
+          role: "user",
+          parts: [{ type: "text", text: "Execute this workflow now." }],
+        }]).catch(() => {});
+
         await this.convexAdapter.mutation(api.workflows.index.updateExecutionStatusExt, {
           executionId,
           status: "running",
         });
         return await this._onChatMessage(() => {});
       } catch (error) {
-        console.error("onRequest failed", error);
+        await this._markWorkflowExecutionFailed(
+          error,
+          this.state?.modeConfig?.mode === "workflow" ? this.state.modeConfig.executionId : null,
+        );
         return new Response(JSON.stringify({ error: error instanceof Error ? error.message : "Internal Server Error" }), { status: 500 });
       }
     }
@@ -290,7 +299,6 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, AgentArgs> {
   override async onConnect(connection: Connection, ctx: ConnectionContext): Promise<void> {
     const url = new URL(ctx.request.url);
     await this._init(buildInitArgsFromUrl(url));
-    await this._prepAgent();
     return await super.onConnect(connection, ctx);
   }
 
@@ -418,32 +426,6 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, AgentArgs> {
 
       const agent = this.planAgent || (await this._prepAgent());
 
-      // Workflow: non-streaming generateText, update execution status
-      if (isWorkflow && this.state.modeConfig && this.workflowDoc) {
-        const modelMessages = buildWorkflowExecutionMessages();
-        const result = await agent.generateText(modelMessages);
-
-        await this.convexAdapter.mutation(
-          api.workflows.index.finalizeWorkflowStepsExt,
-          { executionId: modeConfig.executionId },
-        );
-
-        await this.convexAdapter.mutation(
-          api.workflows.index.updateExecutionStatusExt,
-          {
-            executionId: modeConfig.executionId,
-            status: "completed",
-            agentOutput: result.text,
-            completedAt: Date.now(),
-          },
-        );
-
-        return new Response(JSON.stringify({ status: "completed" }), {
-          status: 200,
-          headers: { "Content-Type": "application/json" },
-        });
-      }
-
       // Chat: streaming with retrieval + file downloads
       const { messages: messagesForAgent, lastUserIdx, lastUserQueryText, lastUserFilePartUrls } =
         processMessagesForAgent(this.messages, this.state.inputModalities);
@@ -470,29 +452,43 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, AgentArgs> {
 
       const modelMessages = messagesForAgent.toSpliced(lastUserIdx, 0, immediateSystemMessage);
 
-      const stream = await agent.streamText(modelMessages, {
-        abortSignal: options?.abortSignal,
-      });
+      if (!isWorkflow) {
+        const stream = await agent.streamText(modelMessages, {
+          abortSignal: options?.abortSignal,
+        });
 
-      return createUIMessageStreamResponse({
-        stream: createUIMessageStream({
-          execute: ({ writer }) => parseStreamToUI(stream.fullStream, writer),
-        }),
-      });
+        return createUIMessageStreamResponse({
+          stream: createUIMessageStream({
+            execute: ({ writer }) => parseStreamToUI(stream.fullStream, writer),
+          }),
+        });
+      } else {
+        const text = await agent.generateText(modelMessages, {
+          abortSignal: options?.abortSignal,
+        });
+        
+        this.persistMessages([{
+          id: `assistant-${crypto.randomUUID()}`,
+          role: "assistant",
+          parts: [{ type: "text", text: text.text }],
+        }]).catch(() => {});
+
+        return new Response(JSON.stringify({ text }), { status: 200 });
+      }
     } catch (error) {
-      await this._markWorkflowExecutionFailed(
-        error,
-        this.state?.modeConfig?.mode === "workflow" ? this.state.modeConfig.executionId : null,
-      );
+      throw error;
+    }
+  }
+
+  override async onChatMessage(onFinish: StreamTextOnFinishCallback<ToolSet>, options?: OnChatMessageOptions): Promise<Response> {
+    try {
+      return await this._onChatMessage(onFinish, options);
+    } catch (error) {
       console.error("onChatMessage failed", error);
       return new Response(
         JSON.stringify({ error: error instanceof Error ? error.message : "Internal Server Error" }),
         { status: 500 },
       );
     }
-  }
-
-  override async onChatMessage(onFinish: StreamTextOnFinishCallback<ToolSet>, options?: OnChatMessageOptions): Promise<Response> {
-    return await this._onChatMessage(onFinish, options);
   }
 }

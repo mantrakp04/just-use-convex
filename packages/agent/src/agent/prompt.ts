@@ -14,12 +14,11 @@ ${chat.sandbox ? createSandboxContextMessage(chat.sandbox) : ""}
 export const WORKFLOW_SYSTEM_PROMPT = (
   workflow: Doc<"workflows"> & { sandbox?: Doc<"sandboxes"> | null },
   executionId: Id<"workflowExecutions">,
-  triggerPayload: string,
 ) => `${CORE_SYSTEM_PROMPT}
 
 ${workflow.sandbox ? createSandboxContextMessage(workflow.sandbox) : ""}
 
-${buildWorkflowSystemPrompt(workflow, executionId, triggerPayload)}
+${buildWorkflowSystemPrompt(workflow, executionId)}
 `;
 
 export const TASK_PROMPT = `
@@ -78,7 +77,6 @@ function createSandboxContextMessage(sandbox?: Doc<"sandboxes"> | null): string 
 function buildWorkflowSystemPrompt(
   workflow: Doc<"workflows">,
   executionId: Id<"workflowExecutions">,
-  triggerPayload: string,
 ): string {
   return `You are executing a workflow automation.
 
@@ -90,9 +88,6 @@ function buildWorkflowSystemPrompt(
 
 ## Instructions
 ${workflow.instructions}
-
-## Trigger Context
-${triggerPayload}
 
 ## Actions Context
 Use the following actions during / at end of execution, these are configured by user and must be realized:

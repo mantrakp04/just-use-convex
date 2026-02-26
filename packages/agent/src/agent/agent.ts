@@ -185,7 +185,6 @@ function resolveSystemPrompt(
   return WORKFLOW_SYSTEM_PROMPT(
     workflowDoc,
     modeConfig.executionId,
-    modeConfig.triggerPayload,
   );
 }
 
