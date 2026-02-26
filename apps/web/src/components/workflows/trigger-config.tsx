@@ -82,7 +82,7 @@ export function TriggerConfig({
       {triggerType === "event" && (
         <div className="flex flex-col gap-2">
           <Label>Event</Label>
-          <Select value={event} onValueChange={(v) => onEventChange(v as EventType)}>
+          <Select value={ALL_EVENTS.find((e) => e.value === event)?.label} onValueChange={(v) => onEventChange(v as EventType)}>
             <SelectTrigger>
               <SelectValue />
             </SelectTrigger>
