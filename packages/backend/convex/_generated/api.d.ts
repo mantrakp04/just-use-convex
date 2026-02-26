@@ -55,14 +55,13 @@ import type * as todos_stats from "../todos/stats.js";
 import type * as todos_statsTypes from "../todos/statsTypes.js";
 import type * as todos_types from "../todos/types.js";
 import type * as workflows_dispatch from "../workflows/dispatch.js";
+import type * as workflows_executions from "../workflows/executions.js";
 import type * as workflows_functions from "../workflows/functions.js";
+import type * as workflows_helpers from "../workflows/helpers.js";
 import type * as workflows_index from "../workflows/index.js";
-import type * as workflows_internalMutations from "../workflows/internalMutations.js";
-import type * as workflows_memberIdentity from "../workflows/memberIdentity.js";
 import type * as workflows_scheduler from "../workflows/scheduler.js";
 import type * as workflows_triggers from "../workflows/triggers.js";
 import type * as workflows_types from "../workflows/types.js";
-import type * as workflows_webhookQuery from "../workflows/webhookQuery.js";
 
 import type {
   ApiFromModules,
@@ -118,14 +117,13 @@ declare const fullApi: ApiFromModules<{
   "todos/statsTypes": typeof todos_statsTypes;
   "todos/types": typeof todos_types;
   "workflows/dispatch": typeof workflows_dispatch;
+  "workflows/executions": typeof workflows_executions;
   "workflows/functions": typeof workflows_functions;
+  "workflows/helpers": typeof workflows_helpers;
   "workflows/index": typeof workflows_index;
-  "workflows/internalMutations": typeof workflows_internalMutations;
-  "workflows/memberIdentity": typeof workflows_memberIdentity;
   "workflows/scheduler": typeof workflows_scheduler;
   "workflows/triggers": typeof workflows_triggers;
   "workflows/types": typeof workflows_types;
-  "workflows/webhookQuery": typeof workflows_webhookQuery;
 }>;
 
 /**
