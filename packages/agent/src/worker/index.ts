@@ -399,7 +399,7 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, AgentArgs> {
       }
 
       if (this.sandbox) {
-        await ensureSandboxStarted(this.sandbox, false);
+        await ensureSandboxStarted(this.sandbox);
       }
 
       const modeConfig = this.state.modeConfig;

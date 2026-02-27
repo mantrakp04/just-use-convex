@@ -13,23 +13,29 @@ import {
 import { env } from "@just-use-convex/env/backend";
 import { Daytona, Sandbox } from "@daytonaio/sdk";
 
-const daytonaClient = new Daytona({
-  apiKey: env.DAYTONA_API_KEY,
-  apiUrl: env.DAYTONA_API_URL,
-  target: env.DAYTONA_TARGET,
-});
+function getDaytonaClient(): Daytona {
+  const apiKey = env.DAYTONA_API_KEY;
+  if (!apiKey) {
+    throw new Error("DAYTONA_API_KEY is required for sandbox operations. Set it in Convex dashboard.");
+  }
+  return new Daytona({
+    apiKey,
+    apiUrl: env.DAYTONA_API_URL,
+    target: env.DAYTONA_TARGET,
+  });
+}
 
 export const provision = internalAction({
   args: types.sandboxIdArgs,
   handler: async (_ctx, args) => {
-    await ensureSandboxReady(daytonaClient, args.sandboxId);
+    await ensureSandboxReady(getDaytonaClient(), args.sandboxId);
   },
 });
 
 export const destroy = internalAction({
   args: types.sandboxIdArgs,
   handler: async (_ctx, args) => {
-    await destroySandbox(daytonaClient, args.sandboxId);
+    await destroySandbox(getDaytonaClient(), args.sandboxId);
   },
 });
 
@@ -62,7 +68,7 @@ async function createChatSshAccessFunction(ctx: zActionCtx, args: z.infer<typeof
     throw new Error("This chat does not have a sandbox attached");
   }
 
-  const sandbox = await ensureSandboxReady(daytonaClient, chat.sandboxId);
+  const sandbox = await ensureSandboxReady(getDaytonaClient(), chat.sandboxId);
 
   const sshAccess = await sandbox.createSshAccess(args.expiresInMinutes);
   return sshAccess;
@@ -82,7 +88,7 @@ async function createChatPreviewAccessFunction(ctx: zActionCtx, args: z.infer<ty
     throw new Error("This chat does not have a sandbox attached");
   }
 
-  const sandbox = await ensureSandboxReady(daytonaClient, chat.sandboxId);
+  const sandbox = await ensureSandboxReady(getDaytonaClient(), chat.sandboxId);
 
   const [previewLink, signedPreviewLink] = await Promise.all([
     sandbox.getPreviewLink(args.previewPort),

@@ -1,9 +1,8 @@
 import { createEnv } from "@t3-oss/env-core";
 import { z } from "zod";
-import { sharedEnv } from "./shared";
+import { env as sharedEnv } from "./shared";
 
-export const backendEnvSchema = {
-  ...sharedEnv,
+const backendEnvSchema = {
   JWKS: z.string(),
 };
 
@@ -11,5 +10,6 @@ export const env = createEnv({
   server: backendEnvSchema,
   runtimeEnv: process.env,
   emptyStringAsUndefined: true,
+  extends: [sharedEnv],
   skipValidation: !process.env.JWKS,
 });
