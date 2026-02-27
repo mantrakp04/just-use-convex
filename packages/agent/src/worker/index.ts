@@ -57,8 +57,8 @@ import { Daytona, type Sandbox } from "@daytonaio/sdk";
 import {
   ensureSandboxReady,
   ensureSandboxStarted,
-  downloadFileUrlsInSandbox,
-} from "../tools/utils/sandbox";
+} from "@just-use-convex/backend/convex/shared/sandbox";
+import { downloadFileUrlsInSandbox } from "../tools/utils/sandbox";
 import {
   buildInitArgsFromUrl,
 } from "./helpers";

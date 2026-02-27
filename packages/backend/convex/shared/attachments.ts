@@ -1,6 +1,6 @@
 import mime from "mime";
 
-export async function toHexHash(bytes: Uint8Array | Buffer) {
+export async function toHexHash(bytes: Uint8Array) {
   const hashBuffer = await crypto.subtle.digest("SHA-256", Uint8Array.from(bytes));
   return Array.from(new Uint8Array(hashBuffer))
     .map((byte) => byte.toString(16).padStart(2, "0"))
@@ -24,7 +24,7 @@ export function inferAttachmentContentType(fileNameOrPath: string): string | und
 
 export async function uploadBytesToConvexStorage(
   uploadUrl: string,
-  fileBytes: Buffer,
+  fileBytes: Uint8Array,
   contentType: string | undefined,
 ) {
   const normalized = Uint8Array.from(fileBytes);

@@ -39,6 +39,7 @@ import type * as shared_attachments from "../shared/attachments.js";
 import type * as shared_auth from "../shared/auth.js";
 import type * as shared_pagination from "../shared/pagination.js";
 import type * as shared_patch from "../shared/patch.js";
+import type * as shared_sandbox from "../shared/sandbox.js";
 import type * as tables_chats from "../tables/chats.js";
 import type * as tables_globalAttachments from "../tables/globalAttachments.js";
 import type * as tables_orgMemberAttachments from "../tables/orgMemberAttachments.js";
@@ -102,6 +103,7 @@ declare const fullApi: ApiFromModules<{
   "shared/auth": typeof shared_auth;
   "shared/pagination": typeof shared_pagination;
   "shared/patch": typeof shared_patch;
+  "shared/sandbox": typeof shared_sandbox;
   "tables/chats": typeof tables_chats;
   "tables/globalAttachments": typeof tables_globalAttachments;
   "tables/orgMemberAttachments": typeof tables_orgMemberAttachments;

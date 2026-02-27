@@ -26,6 +26,7 @@
     "zod": "catalog:"
   },
   "devDependencies": {
+    "@noble/ciphers": "^2.1.1",
     "eslint": "catalog:",
     "@just-use-convex/env": "workspace:*",
     "@just-use-convex/config": "workspace:*",

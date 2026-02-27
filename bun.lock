@@ -179,6 +179,7 @@
       "devDependencies": {
         "@just-use-convex/config": "workspace:*",
         "@just-use-convex/env": "workspace:*",
+        "@noble/ciphers": "^2.1.1",
         "@types/node": "^24.10.13",
         "eslint": "catalog:",
         "typescript": "catalog:",
