@@ -16,7 +16,7 @@ import { CHAT_SYSTEM_PROMPT, WORKFLOW_SYSTEM_PROMPT, TASK_PROMPT } from "./promp
 import { createAskUserToolkit } from "../tools/ask-user";
 import { createWebSearchToolkit } from "../tools/websearch";
 import { createBackgroundTaskToolkit } from "../tools/utils/wrapper/toolkit";
-import { normalizeDuration } from "../tools/utils/duration";
+import { normalizePositiveInt } from "../tools/utils/duration";
 import {
   BackgroundTaskStore,
   TruncatedOutputStore,
@@ -66,8 +66,8 @@ export async function createWorkerPlanAgent({
 
   setWaitUntil(waitUntil);
   configureVoltOpsClient(env);
-  const defaultToolTimeoutMs = normalizeDuration(env.MAX_TOOL_DURATION_MS, 600_000);
-  const backgroundTaskPollIntervalMs = normalizeDuration(
+  const defaultToolTimeoutMs = normalizePositiveInt(env.MAX_TOOL_DURATION_MS, 600_000);
+  const backgroundTaskPollIntervalMs = normalizePositiveInt(
     env.BACKGROUND_TASK_POLL_INTERVAL_MS,
     3_000,
   );

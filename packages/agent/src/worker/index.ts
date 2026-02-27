@@ -20,7 +20,7 @@ import {
 } from "@just-use-convex/backend/convex/lib/convexAdapter";
 import { env as agentDefaults } from "@just-use-convex/env/agent";
 import { createAiClient } from "../agent/client";
-import { normalizeDuration } from "../tools/utils/duration";
+import { normalizePositiveInt } from "../tools/utils/duration";
 import { parseStreamToUI } from "../utils/fullStreamParser";
 import {
   BackgroundTaskStore,
@@ -71,15 +71,15 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, AgentArgs> {
   private planAgent: PlanAgent | null = null;
   private backgroundTaskStore = new BackgroundTaskStore(this.ctx.waitUntil.bind(this.ctx));
   private truncatedOutputStore = new TruncatedOutputStore();
-  private readonly maxToolDurationMs = normalizeDuration(
+  private readonly maxToolDurationMs = normalizePositiveInt(
     agentDefaults.MAX_TOOL_DURATION_MS,
     600_000,
   );
-  private readonly maxBackgroundDurationMs = normalizeDuration(
+  private readonly maxBackgroundDurationMs = normalizePositiveInt(
     agentDefaults.MAX_BACKGROUND_DURATION_MS,
     3_600_000,
   );
-  private readonly backgroundTaskPollIntervalMs = normalizeDuration(
+  private readonly backgroundTaskPollIntervalMs = normalizePositiveInt(
     agentDefaults.BACKGROUND_TASK_POLL_INTERVAL_MS,
     3_000,
   );

@@ -1,10 +1,10 @@
 /**
- * Parse and clamp an unknown value to a positive integer duration in ms.
+ * Parse and clamp an unknown value to a positive integer.
  * Handles both number and string inputs (useful for env vars).
  */
-export function normalizeDuration(value: unknown, fallback: number): number;
-export function normalizeDuration(value: unknown, fallback?: number): number | undefined;
-export function normalizeDuration(value: unknown, fallback?: number): number | undefined {
+export function normalizePositiveInt(value: unknown, fallback: number): number;
+export function normalizePositiveInt(value: unknown, fallback?: number): number | undefined;
+export function normalizePositiveInt(value: unknown, fallback?: number): number | undefined {
   if (typeof value === "number" && Number.isFinite(value)) {
     return Math.max(1, Math.floor(value));
   }
