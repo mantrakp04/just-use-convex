@@ -19,6 +19,7 @@
     "zod": "catalog:"
   },
   "devDependencies": {
+    "@types/node": "catalog:",
     "eslint": "catalog:",
     "@just-use-convex/config": "workspace:*",
     "typescript": "catalog:"

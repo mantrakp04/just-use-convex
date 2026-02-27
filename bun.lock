@@ -202,6 +202,7 @@
       },
       "devDependencies": {
         "@just-use-convex/config": "workspace:*",
+        "@types/node": "catalog:",
         "eslint": "catalog:",
         "typescript": "catalog:",
       },
@@ -211,6 +212,7 @@
     "@convex-dev/better-auth": "^0.10.11",
     "@convex-dev/eslint-plugin": "^1.1.1",
     "@eslint/js": "^9.30.0",
+    "@types/node": "^24.10.13",
     "better-auth": "^1.4.19",
     "convex": "^1.32.0",
     "croner": "^9.0.0",
