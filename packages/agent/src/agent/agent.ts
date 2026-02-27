@@ -2,6 +2,7 @@ import {
   Agent,
   AgentRegistry,
   PlanAgent,
+  Tool,
   createPlanningToolkit,
   createVoltAgentObservability,
   createVoltOpsClient,
@@ -221,7 +222,7 @@ async function createSubagents({
   const toolkits = await Promise.all(toolkitPromises);
   return toolkits.map((toolkit) => new Agent({
     name: toolkit.name,
-    purpose: toolkit.description,
+    purpose: `${toolkit.description}\n\nAvailable tools in this agent: ${toolkit.tools.filter((t): t is Tool => t instanceof Tool).map((t) => t.name).join(", ")}`,
     model: createAiClient(model, reasoningEffort),
     instructions: toolkit.instructions ?? "",
     tools: toolkit.tools,

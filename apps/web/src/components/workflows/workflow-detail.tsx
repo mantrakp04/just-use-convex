@@ -87,6 +87,9 @@ export function WorkflowDetail({ workflowId }: WorkflowDetailProps) {
           <Badge variant={workflow.enabled ? "default" : "secondary"}>
             {workflow.enabled ? "Enabled" : "Disabled"}
           </Badge>
+          <Badge variant="outline">
+            {workflow.isolationMode === "shared" ? "Shared" : "Isolated"}
+          </Badge>
         </div>
         <div className="flex items-center gap-2">
           <Button

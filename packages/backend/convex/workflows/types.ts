@@ -8,6 +8,7 @@ import {
   actionSchema,
   eventSchema,
   inputModalitySchema,
+  isolationModeSchema,
 } from "../tables/workflows";
 import { sandboxesWithSystemFields } from "../tables/sandboxes";
 import { workflowExecutionsWithSystemFields } from "../tables/workflowExecutions";
@@ -86,6 +87,7 @@ export const CreateArgs = z.object({
     actions: z.array(actionSchema),
     model: z.string(),
     inputModalities: z.array(inputModalitySchema).default(["text"]),
+    isolationMode: isolationModeSchema.default("isolated"),
     sandboxId: sandboxesWithSystemFields._id.optional(),
   }),
 });
@@ -98,6 +100,7 @@ export const UpdateArgs = WorkflowWithSystemFields.pick({ _id: true }).extend({
     actions: z.array(actionSchema),
     model: z.string().optional(),
     inputModalities: z.array(inputModalitySchema),
+    isolationMode: isolationModeSchema,
     sandboxId: sandboxesWithSystemFields._id.nullable().optional(),
     enabled: z.boolean(),
   }).partial(),

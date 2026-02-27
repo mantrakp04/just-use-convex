@@ -39,7 +39,8 @@ export async function ListExecutions(ctx: zQueryCtx, args: z.infer<typeof types.
 }
 
 export async function GetExecution(ctx: zQueryCtx, args: z.infer<typeof types.GetExecutionArgs>) {
-  const execution = await ctx.table("workflowExecutions").getX(args._id);
+  const execution = await ctx.table("workflowExecutions").get(args._id);
+  if (!execution) return null;
   assertWorkflowAccess(ctx.identity, execution, "read");
 
   const steps = await listStepsByExecutionId(ctx, execution._id);
@@ -78,9 +79,13 @@ export async function CreateExecution(ctx: zMutationCtx, args: z.infer<typeof ty
     updatedAt: now,
   })));
 
+  const namespace = workflow.isolationMode === "shared"
+    ? `workflow-${args.workflowId}`
+    : `workflow-${execution}`;
+
   return {
     executionId: execution,
-    namespace: `workflow-${execution}`,
+    namespace,
     model: workflow.model,
     inputModalities: workflow.inputModalities,
   };

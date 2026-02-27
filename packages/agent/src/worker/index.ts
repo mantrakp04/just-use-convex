@@ -64,6 +64,8 @@ import {
 } from "./helpers";
 import { createWorkerPlanAgent } from "../agent/agent";
 
+const WORKFLOW_SHARED_MESSAGE_LIMIT = 10;
+
 export class AgentWorker extends AIChatAgent<typeof worker.Env, AgentArgs> {
   private convexAdapter: ConvexAdapter | null = null;
   private planAgent: PlanAgent | null = null;
@@ -101,6 +103,7 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, AgentArgs> {
     this.convexAdapter = await createConvexAdapter(this.env.CONVEX_URL, stored.tokenConfig);
     this.chatDoc = null;
     this.workflowDoc = null;
+    this.planAgent = null;
 
     let sandboxId: string | undefined;
     if (this.state.modeConfig.mode === "workflow" && this.state.tokenConfig.type === "ext") {
@@ -276,11 +279,11 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, AgentArgs> {
           throw new Error("No convex adapter");
         }
 
-        this.persistMessages([{
+        await this.persistMessages([{
           id: `user-${crypto.randomUUID()}`,
           role: "user",
           parts: [{ type: "text", text: "Execute this workflow now." }],
-        }]).catch(() => {});
+        }]);
 
         await this.convexAdapter.mutation(api.workflows.index.updateExecutionStatusExt, {
           executionId,
@@ -429,9 +432,11 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, AgentArgs> {
 
       const agent = this.planAgent || (await this._prepAgent());
 
-      // Chat: streaming with retrieval + file downloads
+      const messagesForModel = isWorkflow
+        ? this.messages.slice(-WORKFLOW_SHARED_MESSAGE_LIMIT)
+        : this.messages;
       const { messages: messagesForAgent, lastUserIdx, lastUserQueryText, lastUserFilePartUrls } =
-        processMessagesForAgent(this.messages, this.state.inputModalities);
+        processMessagesForAgent(messagesForModel, this.state.inputModalities);
 
       const [retrievalMessage, downloadedPaths] = await Promise.all([
         buildRetrievalMessage({
@@ -466,17 +471,39 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, AgentArgs> {
           }),
         });
       } else {
-        const text = await agent.generateText(modelMessages, {
+        const result = await agent.generateText(modelMessages, {
           abortSignal: options?.abortSignal,
         });
-        
-        this.persistMessages([{
+
+        await this.persistMessages([{
           id: `assistant-${crypto.randomUUID()}`,
           role: "assistant",
-          parts: [{ type: "text", text: text.text }],
-        }]).catch(() => {});
+          parts: [{ type: "text", text: result.text }],
+        }]);
 
-        return new Response(JSON.stringify({ text }), { status: 200 });
+        console.log(`[workflow:shared-debug] post-generate messages_count=${this.messages.length}`);
+
+        const executionId = (modeConfig as import("../agent/types").WorkflowModeConfig).executionId;
+
+        await this.convexAdapter.mutation(
+          api.workflows.index.finalizeWorkflowStepsExt,
+          { executionId },
+        );
+
+        await this.convexAdapter.mutation(
+          api.workflows.index.updateExecutionStatusExt,
+          {
+            executionId,
+            status: "completed",
+            agentOutput: result.text,
+            completedAt: Date.now(),
+          },
+        );
+
+        return new Response(JSON.stringify({ status: "completed" }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
       }
     } catch (error) {
       throw error;

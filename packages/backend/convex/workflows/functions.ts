@@ -48,7 +48,8 @@ export async function ListWorkflows(ctx: zQueryCtx, args: z.infer<typeof types.L
 }
 
 export async function GetWorkflow(ctx: zQueryCtx, args: z.infer<typeof types.GetArgs>) {
-  const workflow = await ctx.table("workflows").getX(args._id);
+  const workflow = await ctx.table("workflows").get(args._id);
+  if (!workflow) return null;
   assertWorkflowAccess(ctx.identity, workflow, "read");
 
   const sandbox = await workflow.edge("sandbox");
@@ -82,8 +83,9 @@ export async function CreateWorkflow(ctx: zMutationCtx, args: z.infer<typeof typ
     actions: args.data.actions,
     model: args.data.model,
     inputModalities: args.data.inputModalities,
+    isolationMode: args.data.isolationMode,
     sandboxId: args.data.sandboxId,
-    enabled: false,
+    enabled: true,
     organizationId: ctx.identity.activeOrganizationId,
     memberId: ctx.identity.memberId,
     updatedAt: Date.now(),

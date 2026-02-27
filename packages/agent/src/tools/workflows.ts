@@ -4,6 +4,7 @@ import type { FunctionArgs } from "convex/server";
 import { api } from "@just-use-convex/backend/convex/_generated/api";
 import type { Id } from "@just-use-convex/backend/convex/_generated/dataModel";
 import type { ConvexAdapter } from "@just-use-convex/backend/convex/lib/convexAdapter";
+import { UpdateArgs } from "@just-use-convex/backend/convex/workflows/types";
 
 type WorkflowUpdatePatch = FunctionArgs<typeof api.workflows.index.update>["patch"];
 
@@ -88,6 +89,7 @@ export async function createWorkflowToolkit(
     execute: async ({ workflowId }) => {
       const targetWorkflowId = workflowId as Id<"workflows">;
       const workflow = await getWorkflow(targetWorkflowId);
+      if (!workflow) throw new Error(`Workflow ${workflowId} not found`);
       return {
         ...workflow,
         triggerParsed: tryParseJson(workflow.trigger),
@@ -135,6 +137,7 @@ export async function createWorkflowToolkit(
     }),
     execute: async ({ executionId, field = "agentOutput", cursor = 0, pageSize = 2000 }) => {
       const run = await getRun(executionId as Id<"workflowExecutions">);
+      if (!run) throw new Error(`Execution ${executionId} not found`);
       const raw = run[field];
       const source = typeof raw === "string" ? raw : "";
       const slice = paginateText(source, cursor, pageSize);
@@ -153,12 +156,13 @@ export async function createWorkflowToolkit(
     description: "Update workflow fields by ID.",
     parameters: z.object({
       workflowId: z.string().describe("Workflow ID."),
-      patch: z.custom<WorkflowUpdatePatch>().describe("Patch object for workflow updates."),
+      patch: UpdateArgs.shape.patch.describe("Patch object for workflow updates."),
     }),
     execute: async ({ workflowId, patch }) => {
       const targetWorkflowId = workflowId as Id<"workflows">;
       await updateWorkflow(targetWorkflowId, patch);
       const workflow = await getWorkflow(targetWorkflowId);
+      if (!workflow) throw new Error(`Workflow ${workflowId} not found after update`);
       return {
         ...workflow,
         triggerParsed: tryParseJson(workflow.trigger),

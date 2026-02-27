@@ -26,6 +26,7 @@ import {
   builderActionsAtom,
   builderModelAtom,
   builderSandboxIdAtom,
+  builderIsolationModeAtom,
   ALL_ACTIONS,
   intervalToCron,
   timeToCron,
@@ -72,6 +73,7 @@ export function WorkflowBuilder({
   const [actions, setActions] = useAtom(builderActionsAtom);
   const [model, setModel] = useAtom(builderModelAtom);
   const [sandboxId, setSandboxId] = useAtom(builderSandboxIdAtom);
+  const [isolationMode, setIsolationMode] = useAtom(builderIsolationModeAtom);
   const [webhookSecret, setWebhookSecret] = useState("");
   const resolvedModel = model ?? defaultSettings.model;
   const selectedModel = useMemo(
@@ -85,6 +87,7 @@ export function WorkflowBuilder({
     setActions(["notify"]);
     setModel(undefined);
     setSandboxId(null);
+    setIsolationMode("isolated");
     setTriggerType("event");
     setScheduleMode("every");
     setIntervalAmount(30);
@@ -94,7 +97,7 @@ export function WorkflowBuilder({
     setCron("0 * * * *");
     setEvent("on_todos_create");
     setWebhookSecret("");
-  }, [setName, setInstructions, setActions, setModel, setSandboxId, setTriggerType, setScheduleMode, setIntervalAmount, setIntervalUnit, setIntervalStart, setAtTime, setCron, setEvent]);
+  }, [setName, setInstructions, setActions, setModel, setSandboxId, setIsolationMode, setTriggerType, setScheduleMode, setIntervalAmount, setIntervalUnit, setIntervalStart, setAtTime, setCron, setEvent]);
 
   useEffect(() => {
     if (!isEditMode || !workflow) {
@@ -108,6 +111,7 @@ export function WorkflowBuilder({
     setActions(workflow.actions);
     setModel(workflow.model);
     setSandboxId(workflow.sandboxId ?? null);
+    setIsolationMode(workflow.isolationMode);
     setTriggerType(parsed.triggerType);
     setScheduleMode(parsed.scheduleMode);
     setIntervalAmount(parsed.intervalAmount);
@@ -125,6 +129,7 @@ export function WorkflowBuilder({
     setActions,
     setModel,
     setSandboxId,
+    setIsolationMode,
     setTriggerType,
     setScheduleMode,
     setIntervalAmount,
@@ -187,6 +192,7 @@ export function WorkflowBuilder({
           actions,
           model,
           inputModalities,
+          isolationMode,
           sandboxId: patchedSandboxId,
         },
       });
@@ -199,6 +205,7 @@ export function WorkflowBuilder({
           actions,
           model: resolvedModel,
           inputModalities,
+          isolationMode,
           sandboxId: sandboxId ?? undefined,
         },
       });
@@ -232,6 +239,7 @@ export function WorkflowBuilder({
     resolvedModel,
     selectedModel,
     sandboxId,
+    isolationMode,
     webhookSecret,
     defaultSettings.inputModalities,
     updateWorkflow,
@@ -315,6 +323,31 @@ export function WorkflowBuilder({
                   size="default"
                 />
             </div>
+          </div>
+
+          <div className="flex flex-col gap-2">
+            <Label>Isolation</Label>
+            <div className="flex gap-2">
+              {(["isolated", "shared"] as const).map((value) => (
+                <button
+                  key={value}
+                  type="button"
+                  onClick={() => setIsolationMode(value)}
+                  className={`flex-1 rounded-md border px-3 py-2 text-sm font-medium transition-colors ${
+                    isolationMode === value
+                      ? "border-primary bg-primary text-primary-foreground"
+                      : "border-border bg-background text-muted-foreground hover:bg-muted/50"
+                  }`}
+                >
+                  {value === "isolated" ? "Isolated" : "Shared"}
+                </button>
+              ))}
+            </div>
+            <span className="text-xs text-muted-foreground">
+              {isolationMode === "isolated"
+                ? "Each execution runs in its own instance"
+                : "All executions share one instance"}
+            </span>
           </div>
 
           <TriggerConfig

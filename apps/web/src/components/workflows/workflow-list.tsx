@@ -123,6 +123,9 @@ function WorkflowCard({
                 {workflow.sandbox.name}
               </Badge>
             )}
+            <Badge variant="secondary" className="text-xs">
+              {workflow.isolationMode === "shared" ? "Shared" : "Isolated"}
+            </Badge>
           </div>
         </div>
         <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>

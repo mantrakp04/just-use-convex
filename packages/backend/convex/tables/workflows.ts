@@ -43,6 +43,8 @@ export const actionSchema = z.enum([
 
 export const inputModalitySchema = z.enum(["text", "image", "file"]);
 
+export const isolationModeSchema = z.enum(["isolated", "shared"]);
+
 export const workflowsZodSchema = {
   organizationId: z.string(),
   memberId: z.string(),
@@ -54,6 +56,7 @@ export const workflowsZodSchema = {
   actions: z.array(actionSchema),
   model: z.string(),
   inputModalities: z.array(inputModalitySchema),
+  isolationMode: isolationModeSchema,
   sandboxId: sandboxesWithSystemFields._id.optional(),
   updatedAt: z.number(),
   lastScheduledAt: z.number().optional(),

@@ -6,6 +6,7 @@ const {
   SANDBOX_VOLUME_MOUNT_PATH: SANDBOX_MOUNT_PATH,
   SANDBOX_INACTIVITY_TIMEOUT_MINUTES,
 } = env;
+const SANDBOX_AUTOSTOP_INTERVAL = normalizeAutostopInterval(SANDBOX_INACTIVITY_TIMEOUT_MINUTES);
 
 async function createSandbox(daytona: Daytona, connectionId: string): Promise<Sandbox> {
   console.info(`[sandbox] Creating sandbox for ${connectionId}`);
@@ -14,14 +15,14 @@ async function createSandbox(daytona: Daytona, connectionId: string): Promise<Sa
     name: connectionId,
     snapshot: SANDBOX_SNAPSHOT,
     volumes: [{ volumeId: volume.id, mountPath: SANDBOX_MOUNT_PATH }],
-    autoStopInterval: SANDBOX_INACTIVITY_TIMEOUT_MINUTES,
+    autoStopInterval: SANDBOX_AUTOSTOP_INTERVAL,
   });
 }
 
 async function startSandbox(sandbox: Sandbox): Promise<void> {
   if (sandbox.state === "started") return;
   await sandbox.start();
-  await sandbox.setAutostopInterval(SANDBOX_INACTIVITY_TIMEOUT_MINUTES);
+  await sandbox.setAutostopInterval(SANDBOX_AUTOSTOP_INTERVAL);
 }
 
 export async function ensureSandboxReady(daytona: Daytona, connectionId: string): Promise<Sandbox> {
@@ -89,4 +90,13 @@ function isNotFoundError(error: unknown): boolean {
   const msg = error.message.toLowerCase();
   const statusCode = "statusCode" in error ? (error as { statusCode: number }).statusCode : undefined;
   return msg.includes("not found") || msg.includes("404") || statusCode === 404;
+}
+
+function normalizeAutostopInterval(value: number): number {
+  if (!Number.isFinite(value)) {
+    return 0;
+  }
+
+  const normalized = Math.floor(value);
+  return normalized < 0 ? 0 : normalized;
 }

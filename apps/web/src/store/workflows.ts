@@ -6,6 +6,10 @@ import {
   type EventType,
   type TriggerType,
 } from "@just-use-convex/backend/convex/workflows/types";
+import type { z } from "zod";
+import type { isolationModeSchema } from "@just-use-convex/backend/convex/tables/workflows";
+
+export type IsolationMode = z.infer<typeof isolationModeSchema>;
 
 export type { Action, EventType, TriggerType };
 export { ALL_EVENTS };
@@ -139,3 +143,4 @@ export const builderInstructionsAtom = atom("");
 export const builderActionsAtom = atom<Action[]>(["notify"]);
 export const builderModelAtom = atom<string | undefined>(undefined);
 export const builderSandboxIdAtom = atom<Id<"sandboxes"> | null>(null);
+export const builderIsolationModeAtom = atom<IsolationMode>("isolated");
