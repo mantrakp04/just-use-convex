@@ -2,7 +2,7 @@ import { createEnv } from "@t3-oss/env-core";
 import { z } from "zod";
 import { env as sharedEnv } from "./shared";
 
-const backendEnvSchema = {
+export const backendEnvSchema = {
   JWKS: z.string(),
 };
 
