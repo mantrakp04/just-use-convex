@@ -81,7 +81,7 @@ export const MessageItem = memo(function MessageItem({
   const messageText = extractMessageText(message);
   const messageFiles = extractMessageFiles(message);
   const sources = useMemo(() => extractSourcesFromMessage(message), [message]);
-  const containerClassName = "w-full px-3 @xl/chat-column:mx-auto @xl/chat-column:w-4xl @xl/chat-column:px-4";
+  const containerClassName = "w-full px-3 @xl/chat-column:mx-auto @xl/chat-column:max-w-4xl @xl/chat-column:px-4";
 
   const isUser = message.role === "user";
   const isAssistant = message.role === "assistant";

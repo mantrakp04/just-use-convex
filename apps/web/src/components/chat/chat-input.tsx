@@ -75,7 +75,7 @@ export const ChatInput = memo(function ChatInput({
   );
 
   return (
-    <div className="w-full px-3 pb-1 @xl/chat-column:mx-auto @xl/chat-column:w-4xl @xl/chat-column:px-0">
+    <div className="w-full px-3 pb-1 @xl/chat-column:mx-auto @xl/chat-column:max-w-4xl @xl/chat-column:px-0">
       <PromptInput
         onSubmit={onSubmit}
         multiple

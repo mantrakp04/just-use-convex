@@ -195,7 +195,7 @@ function ChatPage() {
             />
           )}
           {error && (
-            <div className="w-full rounded-lg bg-destructive/10 px-4 py-3 text-sm text-destructive @xl/chat-column:mx-auto @xl/chat-column:w-4xl">
+            <div className="w-full rounded-lg bg-destructive/10 px-4 py-3 text-sm text-destructive @xl/chat-column:mx-auto @xl/chat-column:max-w-4xl">
               {error.message}
             </div>
           )}
@@ -203,7 +203,7 @@ function ChatPage() {
         <ConversationScrollButton />
       </Conversation>
 
-      <div className="w-full px-3 @xl/chat-column:mx-auto @xl/chat-column:w-4xl @xl/chat-column:px-0">
+      <div className="w-full px-3 @xl/chat-column:mx-auto @xl/chat-column:max-w-4xl @xl/chat-column:px-0">
         {activeAskUserState ? (
           <AskUserDisplay
             input={activeAskUserState.input}
