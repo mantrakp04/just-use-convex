@@ -27,14 +27,13 @@ import {
   builderModelAtom,
   builderSandboxIdAtom,
   builderIsolationModeAtom,
-  ALL_ACTIONS,
+  TOOL_GROUPS,
   intervalToCron,
   timeToCron,
   type TriggerType,
   type EventType,
   type ScheduleMode,
   type IntervalUnit,
-  type Action,
 } from "@/store/workflows";
 import { defaultChatSettingsAtom } from "@/store/models";
 import { SandboxSelector } from "@/components/sandboxes/sandbox-selector";
@@ -250,7 +249,7 @@ export function WorkflowBuilder({
   ]);
 
   const toggleAction = useCallback(
-    (action: Action) => {
+    (action: string) => {
       setActions((prev) =>
         prev.includes(action)
           ? prev.filter((a) => a !== action)
@@ -281,7 +280,7 @@ export function WorkflowBuilder({
     : submitLabel;
 
   return (
-    <div className="flex flex-col gap-4 w-full max-w-4xl mx-auto">
+    <div className="flex flex-col gap-4 w-full max-w-4xl mx-auto flex-1 min-h-0 overflow-y-auto px-4 pb-4">
       <div className="flex items-center gap-2">
         <Button variant="ghost" size="icon" onClick={handleBack}>
           <ArrowLeft className="size-4" />
@@ -380,23 +379,36 @@ export function WorkflowBuilder({
             />
           </div>
 
-          <div className="flex flex-col gap-2">
-            <Label>Actions</Label>
-            <div className="grid grid-cols-2 gap-2">
-              {ALL_ACTIONS.map(({ value, label, description: desc }) => (
-                <label
-                  key={value}
-                  className="flex items-start gap-2 p-2 rounded-lg border border-border cursor-pointer hover:bg-muted/50 transition-colors"
-                >
-                  <Checkbox
-                    checked={actions.includes(value)}
-                    onCheckedChange={() => toggleAction(value)}
-                  />
-                  <div className="flex flex-col">
-                    <span className="text-sm font-medium">{label}</span>
-                    <span className="text-xs text-muted-foreground">{desc}</span>
+          <div className="flex flex-col gap-3">
+            <Label>Required Actions</Label>
+            <p className="text-xs text-muted-foreground -mt-1">
+              Select tools the agent must execute. All tools are available — these are tracked and verified.
+            </p>
+            <div className="flex flex-col gap-4 max-h-[100px] overflow-y-auto">
+              {TOOL_GROUPS.map((group) => (
+                <div key={group.toolkit} className="flex flex-col gap-2">
+                  <div className="flex flex-col gap-0.5">
+                    <span className="text-sm font-medium">{group.label}</span>
+                    <span className="text-xs text-muted-foreground">{group.description}</span>
                   </div>
-                </label>
+                  <div className="grid grid-cols-2 gap-2">
+                    {group.tools.map(({ name, label, description: desc }) => (
+                      <label
+                        key={name}
+                        className="flex items-start gap-2 p-2 rounded-lg border border-border cursor-pointer hover:bg-muted/50 transition-colors"
+                      >
+                        <Checkbox
+                          checked={actions.includes(name)}
+                          onCheckedChange={() => toggleAction(name)}
+                        />
+                        <div className="flex flex-col">
+                          <span className="text-sm font-medium">{label}</span>
+                          <span className="text-xs text-muted-foreground">{desc}</span>
+                        </div>
+                      </label>
+                    ))}
+                  </div>
+                </div>
               ))}
             </div>
           </div>
@@ -435,7 +447,7 @@ function buildTrigger(
     case "webhook":
       return { type: "webhook" as const, secret: webhookSecret ?? "" };
     case "schedule": {
-      let resolvedCron: string;
+      let resolvedCron: string = cron;
       switch (scheduleMode) {
         case "every": resolvedCron = intervalToCron(intervalAmount, intervalUnit, intervalStart); break;
         case "at":    resolvedCron = timeToCron(atTime); break;

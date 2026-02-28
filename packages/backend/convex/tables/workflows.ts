@@ -35,11 +35,7 @@ export const triggerSchema = z.discriminatedUnion("type", [
   }),
 ]);
 
-export const actionSchema = z.enum([
-  "send_message",
-  "http_request",
-  "notify",
-]);
+export const actionSchema = z.string();
 
 export const inputModalitySchema = z.enum(["text", "image", "file"]);
 

@@ -20,6 +20,8 @@ import { normalizePositiveInt } from "../tools/utils/duration";
 import {
   BackgroundTaskStore,
   TruncatedOutputStore,
+  patchToolWithStepTracking,
+  type StepTrackingContext,
 } from "../tools/utils/wrapper";
 import { createDaytonaToolkit } from "../tools/sandbox";
 import { createWorkflowActionToolkit } from "../tools/workflow-actions";
@@ -76,7 +78,6 @@ export async function createWorkerPlanAgent({
     model: state.model,
     reasoningEffort: state.reasoningEffort,
     modeConfig,
-    workflowDoc: modeConfig.mode === "workflow" ? workflowDoc : null,
     convexAdapter,
     sandbox,
   });
@@ -193,10 +194,9 @@ async function createSubagents({
   model,
   reasoningEffort,
   modeConfig,
-  workflowDoc,
   convexAdapter,
   sandbox,
-}: Pick<CreateWorkerPlanAgentArgs, "modeConfig" | "workflowDoc" | "convexAdapter" | "sandbox"> & {
+}: Pick<CreateWorkerPlanAgentArgs, "modeConfig" | "convexAdapter" | "sandbox"> & {
   model: string;
   reasoningEffort: AgentArgs["reasoningEffort"];
 }): Promise<Agent[]> {
@@ -209,17 +209,27 @@ async function createSubagents({
     toolkitPromises.push(createWorkflowToolkit(convexAdapter));
   }
 
-  if (modeConfig.mode === "workflow" && workflowDoc) {
-    if (!convexAdapter) {
-      throw new Error("No convex adapter");
-    }
-    toolkitPromises.push(createWorkflowActionToolkit(workflowDoc.actions, {
-      executionId: modeConfig.executionId,
-      convexAdapter,
-    }));
+  if (modeConfig.mode === "workflow") {
+    toolkitPromises.push(createWorkflowActionToolkit());
   }
 
   const toolkits = await Promise.all(toolkitPromises);
+
+  // In workflow mode, apply step tracking to all tools before creating subagents
+  if (modeConfig.mode === "workflow" && convexAdapter) {
+    const stepContext: StepTrackingContext = {
+      executionId: modeConfig.executionId,
+      convexAdapter,
+    };
+    for (const toolkit of toolkits) {
+      for (const tool of toolkit.tools) {
+        if (tool instanceof Tool) {
+          patchToolWithStepTracking(tool, stepContext);
+        }
+      }
+    }
+  }
+
   return toolkits.map((toolkit) => new Agent({
     name: toolkit.name,
     purpose: `${toolkit.description}\n\nAvailable tools in this agent: ${toolkit.tools.filter((t): t is Tool => t instanceof Tool).map((t) => t.name).join(", ")}`,

@@ -62,6 +62,7 @@ import type * as workflows_functions from "../workflows/functions.js";
 import type * as workflows_helpers from "../workflows/helpers.js";
 import type * as workflows_index from "../workflows/index.js";
 import type * as workflows_scheduler from "../workflows/scheduler.js";
+import type * as workflows_toolRegistry from "../workflows/toolRegistry.js";
 import type * as workflows_triggers from "../workflows/triggers.js";
 import type * as workflows_types from "../workflows/types.js";
 
@@ -126,6 +127,7 @@ declare const fullApi: ApiFromModules<{
   "workflows/helpers": typeof workflows_helpers;
   "workflows/index": typeof workflows_index;
   "workflows/scheduler": typeof workflows_scheduler;
+  "workflows/toolRegistry": typeof workflows_toolRegistry;
   "workflows/triggers": typeof workflows_triggers;
   "workflows/types": typeof workflows_types;
 }>;

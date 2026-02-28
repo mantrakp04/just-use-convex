@@ -89,15 +89,17 @@ function buildWorkflowSystemPrompt(
 ## Instructions
 ${workflow.instructions}
 
-## Actions Context
-Use the following actions during / at end of execution, these are configured by user and must be realized:
+## Required Actions
+The following actions MUST be executed during this workflow run — their completion is tracked and verified:
 ${workflow.actions.map((action) => `- ${action}`).join("\n")}
+
+You have access to all available tools. All tool calls are tracked. The required actions above are the ones the user expects you to complete.
 
 ## Rules
 - Be decisive and complete the workflow efficiently
 - If an action fails, note the failure and continue with remaining actions
 - Do not ask for user input — workflows run autonomously
-- Always use the actions context to carry out the workflow instructions
+- Prioritize executing the required actions listed above
 - When calling workflow tools, pass workflowId or executionId explicitly using the IDs above
 `;
 }

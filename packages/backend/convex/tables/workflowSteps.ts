@@ -8,6 +8,7 @@ import { actionSchema } from "./workflows";
 export const workflowStepsZodSchema = {
   workflowExecutionId: workflowExecutionsWithSystemFields._id,
   action: actionSchema,
+  required: z.boolean(),
   status: z.enum(["pending", "success", "failure"]),
   callCount: z.number(),
   successCount: z.number(),

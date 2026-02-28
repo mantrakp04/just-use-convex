@@ -21,6 +21,7 @@ async function createSandbox(daytona: Daytona, connectionId: string): Promise<Sa
 
 async function startSandbox(sandbox: Sandbox): Promise<void> {
   if (sandbox.state === "started") return;
+  if (sandbox.state === "stopping") await sandbox.waitUntilStopped();
   await sandbox.start();
   await sandbox.setAutostopInterval(SANDBOX_AUTOSTOP_INTERVAL);
 }

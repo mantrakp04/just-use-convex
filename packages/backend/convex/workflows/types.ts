@@ -143,7 +143,7 @@ export const RetryExecutionArgs = z.object({
 
 export const RecordWorkflowStepOutcomeArgs = z.object({
   executionId: WorkflowExecution.shape._id,
-  action: actionSchema,
+  action: z.string(),
   outcome: z.enum(["success", "failure"]),
   error: z.string().optional(),
 });

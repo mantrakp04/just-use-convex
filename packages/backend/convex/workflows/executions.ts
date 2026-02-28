@@ -72,6 +72,7 @@ export async function CreateExecution(ctx: zMutationCtx, args: z.infer<typeof ty
   await Promise.all(requiredActions.map((action) => ctx.table("workflowSteps").insert({
     workflowExecutionId: execution,
     action,
+    required: true,
     status: "pending",
     callCount: 0,
     successCount: 0,
@@ -145,12 +146,29 @@ export async function RecordWorkflowStepOutcome(
     )
     .unique();
 
-  if (!step) {
-    throw new Error(`Workflow step not found for action "${args.action}"`);
-  }
-
   const now = Date.now();
   const isSuccess = args.outcome === "success";
+
+  if (!step) {
+    // Bonus step: tool called but not in the required actions array — create on-demand
+    await ctx.table("workflowSteps").insert({
+      workflowExecutionId: args.executionId,
+      action: args.action,
+      required: false,
+      status: isSuccess ? "success" : "failure",
+      callCount: 1,
+      successCount: isSuccess ? 1 : 0,
+      failureCount: isSuccess ? 0 : 1,
+      lastError: !isSuccess ? args.error : undefined,
+      failureReason: !isSuccess ? "tool_error" : undefined,
+      firstCalledAt: now,
+      lastCalledAt: now,
+      updatedAt: now,
+    });
+    // Don't recompute required actions summary for bonus steps
+    return { ok: true };
+  }
+
   const nextStatus = step.status === "success" || isSuccess ? "success" : "failure";
 
   await ctx.db.patch(step._id, {
@@ -180,9 +198,9 @@ export async function FinalizeWorkflowSteps(
 
   const now = Date.now();
   const steps = await listStepsByExecutionId(ctx, args.executionId);
-  const pendingSteps = steps.filter((s) => s.status === "pending");
+  const pendingRequiredSteps = steps.filter((s) => s.required && s.status === "pending");
 
-  await Promise.all(pendingSteps.map((s) => ctx.db.patch(s._id, {
+  await Promise.all(pendingRequiredSteps.map((s) => ctx.db.patch(s._id, {
     status: "failure",
     failureReason: "not_called",
     updatedAt: now,
@@ -191,7 +209,7 @@ export async function FinalizeWorkflowSteps(
   const summary = await recomputeStepSummary(ctx, execution._id);
   await execution.patch(summary);
 
-  return { ok: true, updatedSteps: pendingSteps.length, ...summary };
+  return { ok: true, updatedSteps: pendingRequiredSteps.length, ...summary };
 }
 
 // ═══════════════════════════════════════════════════════════════════
@@ -253,7 +271,8 @@ async function recomputeStepSummary(
   ctx: Pick<zMutationCtx, "db">,
   executionId: Id<"workflowExecutions">,
 ) {
-  const steps = await listStepsByExecutionId(ctx, executionId);
+  const allSteps = await listStepsByExecutionId(ctx, executionId);
+  const steps = allSteps.filter((s) => s.required);
   const total = steps.length;
   const success = steps.filter((s) => s.status === "success").length;
   const failure = steps.filter((s) => s.status === "failure").length;

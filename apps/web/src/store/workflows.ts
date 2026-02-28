@@ -6,23 +6,18 @@ import {
   type EventType,
   type TriggerType,
 } from "@just-use-convex/backend/convex/workflows/types";
+import { TOOL_GROUPS } from "@just-use-convex/backend/convex/workflows/toolRegistry";
 import type { z } from "zod";
 import type { isolationModeSchema } from "@just-use-convex/backend/convex/tables/workflows";
 
 export type IsolationMode = z.infer<typeof isolationModeSchema>;
 
 export type { Action, EventType, TriggerType };
-export { ALL_EVENTS };
+export { ALL_EVENTS, TOOL_GROUPS };
 
 export type ScheduleMode = "every" | "at" | "cron";
 
 export type IntervalUnit = "minutes" | "hours" | "days";
-
-export const ALL_ACTIONS: { value: Action; label: string; description: string }[] = [
-  { value: "send_message", label: "Send Message", description: "Send a workflow output message" },
-  { value: "http_request", label: "HTTP Request", description: "Make an external HTTP request" },
-  { value: "notify", label: "Notify", description: "Send a notification" },
-];
 
 /**
  * Converts "Every X units, starting from HH:MM" to a cron expression.
@@ -140,7 +135,7 @@ export const builderAtTimeAtom = atom("09:00");
 export const builderCronAtom = atom("0 * * * *");
 export const builderEventAtom = atom<EventType>("on_todos_create");
 export const builderInstructionsAtom = atom("");
-export const builderActionsAtom = atom<Action[]>(["notify"]);
+export const builderActionsAtom = atom<string[]>(["notify"]);
 export const builderModelAtom = atom<string | undefined>(undefined);
 export const builderSandboxIdAtom = atom<Id<"sandboxes"> | null>(null);
 export const builderIsolationModeAtom = atom<IsolationMode>("isolated");
