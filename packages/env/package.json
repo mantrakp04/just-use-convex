@@ -2,12 +2,16 @@
   "name": "@just-use-convex/env",
   "version": "0.0.0",
   "private": true,
+  "scripts": {
+    "lint": "bunx eslint ."
+  },
   "type": "module",
   "exports": {
     "./web": "./src/web.ts",
     "./backend": "./src/backend.ts",
     "./agent": "./src/agent.ts",
-    "./deploy": "./src/deploy.ts"
+    "./deploy": "./src/deploy.ts",
+    "./shared": "./src/shared.ts"
   },
   "dependencies": {
     "@t3-oss/env-core": "^0.13.10",
@@ -15,6 +19,8 @@
     "zod": "catalog:"
   },
   "devDependencies": {
+    "@types/node": "catalog:",
+    "eslint": "catalog:",
     "@just-use-convex/config": "workspace:*",
     "typescript": "catalog:"
   }

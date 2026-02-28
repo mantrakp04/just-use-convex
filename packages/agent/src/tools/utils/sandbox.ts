@@ -2,14 +2,6 @@ import type { Sandbox } from "@daytonaio/sdk";
 import { env } from "@just-use-convex/env/agent";
 import type { FilePartUrl } from "../../agent/messages";
 
-export async function ensureSandboxStarted(sandbox: Sandbox, skipWaitUntilStarted: boolean = true) {
-  await sandbox.start();
-  await sandbox.setAutostopInterval(env.SANDBOX_INACTIVITY_TIMEOUT_MINUTES);
-  if (!skipWaitUntilStarted) {
-    await sandbox.waitUntilStarted();
-  }
-}
-
 export async function downloadFileUrlsInSandbox(
   sandbox: Sandbox,
   filePartUrls: FilePartUrl[]

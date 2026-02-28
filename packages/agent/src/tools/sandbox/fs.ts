@@ -1,7 +1,7 @@
 import { type Sandbox } from '@daytonaio/sdk';
 import { z } from 'zod';
 import { listSchema } from './types';
-import { ensureSandboxStarted } from '../utils/sandbox';
+import { ensureSandboxStarted } from '@just-use-convex/backend/convex/shared/sandbox';
 
 const deleteEntrySchema = z.object({ path: z.string() });
 const downloadFolderSchema = z.object({ path: z.string() });

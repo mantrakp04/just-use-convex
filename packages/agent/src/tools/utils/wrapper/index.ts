@@ -9,6 +9,7 @@ export {
 
 // ── Wrapping ───────────────────────────────────────────────────────────
 export { createWrappedTool, patchToolWithBackgroundSupport } from "./wrap";
+export { patchToolWithStepTracking, type StepTrackingContext } from "./step-tracking";
 
 // ── Toolkit ────────────────────────────────────────────────────────────
 export { createBackgroundTaskToolkit } from "./toolkit";

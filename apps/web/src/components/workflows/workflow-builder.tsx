@@ -9,7 +9,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ArrowLeft } from "lucide-react";
 import {
@@ -23,17 +22,17 @@ import {
   builderAtTimeAtom,
   builderEventAtom,
   builderInstructionsAtom,
-  builderAllowedActionsAtom,
+  builderActionsAtom,
   builderModelAtom,
   builderSandboxIdAtom,
-  ALL_ACTIONS,
+  builderIsolationModeAtom,
+  TOOL_GROUPS,
   intervalToCron,
   timeToCron,
   type TriggerType,
   type EventType,
   type ScheduleMode,
   type IntervalUnit,
-  type AllowedAction,
 } from "@/store/workflows";
 import { defaultChatSettingsAtom } from "@/store/models";
 import { SandboxSelector } from "@/components/sandboxes/sandbox-selector";
@@ -69,9 +68,10 @@ export function WorkflowBuilder({
   const [atTime, setAtTime] = useAtom(builderAtTimeAtom);
   const [event, setEvent] = useAtom(builderEventAtom);
   const [instructions, setInstructions] = useAtom(builderInstructionsAtom);
-  const [allowedActions, setAllowedActions] = useAtom(builderAllowedActionsAtom);
+  const [actions, setActions] = useAtom(builderActionsAtom);
   const [model, setModel] = useAtom(builderModelAtom);
   const [sandboxId, setSandboxId] = useAtom(builderSandboxIdAtom);
+  const [isolationMode, setIsolationMode] = useAtom(builderIsolationModeAtom);
   const [webhookSecret, setWebhookSecret] = useState("");
   const resolvedModel = model ?? defaultSettings.model;
   const selectedModel = useMemo(
@@ -82,9 +82,10 @@ export function WorkflowBuilder({
   const resetForm = useCallback(() => {
     setName("");
     setInstructions("");
-    setAllowedActions(["notify"]);
+    setActions(["notify"]);
     setModel(undefined);
     setSandboxId(null);
+    setIsolationMode("isolated");
     setTriggerType("event");
     setScheduleMode("every");
     setIntervalAmount(30);
@@ -92,9 +93,9 @@ export function WorkflowBuilder({
     setIntervalStart(undefined);
     setAtTime("09:00");
     setCron("0 * * * *");
-    setEvent("on_todo_create");
+    setEvent("on_todos_create");
     setWebhookSecret("");
-  }, [setName, setInstructions, setAllowedActions, setModel, setSandboxId, setTriggerType, setScheduleMode, setIntervalAmount, setIntervalUnit, setIntervalStart, setAtTime, setCron, setEvent]);
+  }, [setName, setInstructions, setActions, setModel, setSandboxId, setIsolationMode, setTriggerType, setScheduleMode, setIntervalAmount, setIntervalUnit, setIntervalStart, setAtTime, setCron, setEvent]);
 
   useEffect(() => {
     if (!isEditMode || !workflow) {
@@ -105,9 +106,10 @@ export function WorkflowBuilder({
     const parsed = parseWorkflowTrigger(workflow.trigger);
     setName(workflow.name);
     setInstructions(workflow.instructions);
-    setAllowedActions(workflow.allowedActions);
+    setActions(workflow.actions);
     setModel(workflow.model);
     setSandboxId(workflow.sandboxId ?? null);
+    setIsolationMode(workflow.isolationMode);
     setTriggerType(parsed.triggerType);
     setScheduleMode(parsed.scheduleMode);
     setIntervalAmount(parsed.intervalAmount);
@@ -122,9 +124,10 @@ export function WorkflowBuilder({
     workflow,
     setName,
     setInstructions,
-    setAllowedActions,
+    setActions,
     setModel,
     setSandboxId,
+    setIsolationMode,
     setTriggerType,
     setScheduleMode,
     setIntervalAmount,
@@ -184,9 +187,10 @@ export function WorkflowBuilder({
           name: name.trim(),
           trigger,
           instructions: instructions.trim(),
-          allowedActions,
+          actions,
           model,
           inputModalities,
+          isolationMode,
           sandboxId: patchedSandboxId,
         },
       });
@@ -196,9 +200,10 @@ export function WorkflowBuilder({
           name: name.trim(),
           trigger,
           instructions: instructions.trim(),
-          allowedActions,
+          actions,
           model: resolvedModel,
           inputModalities,
+          isolationMode,
           sandboxId: sandboxId ?? undefined,
         },
       });
@@ -227,11 +232,12 @@ export function WorkflowBuilder({
     cron,
     event,
     instructions,
-    allowedActions,
+    actions,
     model,
     resolvedModel,
     selectedModel,
     sandboxId,
+    isolationMode,
     webhookSecret,
     defaultSettings.inputModalities,
     updateWorkflow,
@@ -242,14 +248,14 @@ export function WorkflowBuilder({
   ]);
 
   const toggleAction = useCallback(
-    (action: AllowedAction) => {
-      setAllowedActions((prev) =>
+    (action: string) => {
+      setActions((prev) =>
         prev.includes(action)
           ? prev.filter((a) => a !== action)
           : [...prev, action]
       );
     },
-    [setAllowedActions]
+    [setActions]
   );
 
   const handleTriggerTypeChange = useCallback((type: TriggerType) => {
@@ -273,7 +279,7 @@ export function WorkflowBuilder({
     : submitLabel;
 
   return (
-    <div className="flex flex-col gap-4 w-full max-w-4xl mx-auto">
+    <div className="grid grid-rows-[auto_auto_auto_1fr_auto] gap-4 w-full max-w-4xl mx-auto h-full min-h-0 px-4 pb-4">
       <div className="flex items-center gap-2">
         <Button variant="ghost" size="icon" onClick={handleBack}>
           <ArrowLeft className="size-4" />
@@ -281,21 +287,18 @@ export function WorkflowBuilder({
         <h1 className="text-2xl font-semibold">{isEditMode ? "Edit Workflow" : "New Workflow"}</h1>
       </div>
 
-      <Card className="border-border border">
-        <CardHeader>
-          <CardTitle>Configuration</CardTitle>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-4">
-          <div className="flex flex-col gap-2">
-            <Label htmlFor="name">Name</Label>
-            <Input
-              id="name"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="My Workflow"
-            />
-          </div>
+      <div className="flex flex-col gap-4">
+        <div className="flex flex-col gap-2">
+          <Label htmlFor="name">Name</Label>
+          <Input
+            id="name"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="My Workflow"
+          />
+        </div>
 
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div className="flex flex-col gap-2">
             <Label>Sandbox</Label>
             <SandboxSelector value={sandboxId} onChange={setSandboxId} />
@@ -303,58 +306,98 @@ export function WorkflowBuilder({
 
           <div className="flex flex-col gap-2">
             <Label>Model</Label>
-            <div className="w-fit rounded-md border border-border p-1">
-              <ChatModelSelector
-                groupedModels={groupedModels}
-                models={models}
-                selectedModel={selectedModel}
-                onSettingsChange={handleModelSettingsChange}
-                hasMessages
-              />
-            </div>
-          </div>
-
-          <TriggerConfig
-            triggerType={triggerType}
-            onTriggerTypeChange={handleTriggerTypeChange}
-            event={event}
-            onEventChange={setEvent}
-            scheduleMode={scheduleMode}
-            onScheduleModeChange={setScheduleMode}
-            intervalAmount={intervalAmount}
-            onIntervalAmountChange={setIntervalAmount}
-            intervalUnit={intervalUnit}
-            onIntervalUnitChange={setIntervalUnit}
-            intervalStart={intervalStart}
-            onIntervalStartChange={setIntervalStart}
-            atTime={atTime}
-            onAtTimeChange={setAtTime}
-            cron={cron}
-            onCronChange={setCron}
-          />
-
-          <div className="flex flex-col gap-2">
-            <Label htmlFor="instructions">Instructions</Label>
-            <Textarea
-              id="instructions"
-              value={instructions}
-              onChange={(e) => setInstructions(e.target.value)}
-              placeholder="Tell the agent what to do when this workflow triggers..."
-              rows={6}
+            <ChatModelSelector
+              groupedModels={groupedModels}
+              models={models}
+              selectedModel={selectedModel}
+              onSettingsChange={handleModelSettingsChange}
+              hasMessages
+              useDefaults
+              variant="outline"
+              size="default"
             />
           </div>
+        </div>
 
-          <div className="flex flex-col gap-2">
-            <Label>Allowed Actions</Label>
+        <div className="flex flex-col gap-2">
+          <Label>Isolation</Label>
+          <div className="flex gap-2">
+            {(["isolated", "shared"] as const).map((value) => (
+              <button
+                key={value}
+                type="button"
+                onClick={() => setIsolationMode(value)}
+                className={`flex-1 rounded-md border px-3 py-2 text-sm font-medium transition-colors ${
+                  isolationMode === value
+                    ? "border-primary bg-primary text-primary-foreground"
+                    : "border-border bg-background text-muted-foreground hover:bg-muted/50"
+                }`}
+              >
+                {value === "isolated" ? "Isolated" : "Shared"}
+              </button>
+            ))}
+          </div>
+          <span className="text-xs text-muted-foreground">
+            {isolationMode === "isolated"
+              ? "Each execution runs in its own instance"
+              : "All executions share one instance"}
+          </span>
+        </div>
+
+        <TriggerConfig
+          triggerType={triggerType}
+          onTriggerTypeChange={handleTriggerTypeChange}
+          event={event}
+          onEventChange={setEvent}
+          scheduleMode={scheduleMode}
+          onScheduleModeChange={setScheduleMode}
+          intervalAmount={intervalAmount}
+          onIntervalAmountChange={setIntervalAmount}
+          intervalUnit={intervalUnit}
+          onIntervalUnitChange={setIntervalUnit}
+          intervalStart={intervalStart}
+          onIntervalStartChange={setIntervalStart}
+          atTime={atTime}
+          onAtTimeChange={setAtTime}
+          cron={cron}
+          onCronChange={setCron}
+        />
+
+        <div className="flex flex-col gap-2">
+          <Label htmlFor="instructions">Instructions</Label>
+          <Textarea
+            id="instructions"
+            value={instructions}
+            onChange={(e) => setInstructions(e.target.value)}
+            placeholder="Tell the agent what to do when this workflow triggers..."
+            rows={6}
+          />
+        </div>
+      </div>
+
+      <div className="flex flex-col gap-1">
+        <Label>Required Actions</Label>
+        <p className="text-xs text-muted-foreground">
+          Select tools the agent must execute. All tools are available — these are tracked and verified.
+        </p>
+      </div>
+
+      <div className="overflow-y-auto min-h-0 rounded-md border border-border p-3 flex flex-col gap-4">
+        {TOOL_GROUPS.map((group) => (
+          <div key={group.toolkit} className="flex flex-col gap-2">
+            <div className="flex flex-col gap-0.5">
+              <span className="text-sm font-medium">{group.label}</span>
+              <span className="text-xs text-muted-foreground">{group.description}</span>
+            </div>
             <div className="grid grid-cols-2 gap-2">
-              {ALL_ACTIONS.map(({ value, label, description: desc }) => (
+              {group.tools.map(({ name, label, description: desc }) => (
                 <label
-                  key={value}
+                  key={name}
                   className="flex items-start gap-2 p-2 rounded-lg border border-border cursor-pointer hover:bg-muted/50 transition-colors"
                 >
                   <Checkbox
-                    checked={allowedActions.includes(value)}
-                    onCheckedChange={() => toggleAction(value)}
+                    checked={actions.includes(name)}
+                    onCheckedChange={() => toggleAction(name)}
                   />
                   <div className="flex flex-col">
                     <span className="text-sm font-medium">{label}</span>
@@ -364,10 +407,10 @@ export function WorkflowBuilder({
               ))}
             </div>
           </div>
-        </CardContent>
-        </Card>
+        ))}
+      </div>
 
-      <div className="flex items-center justify-end gap-2 self-end">
+      <div className="flex items-center justify-end gap-2">
         {isEditMode && onCancel && (
           <Button variant="outline" onClick={onCancel}>
             Cancel
@@ -399,7 +442,7 @@ function buildTrigger(
     case "webhook":
       return { type: "webhook" as const, secret: webhookSecret ?? "" };
     case "schedule": {
-      let resolvedCron: string;
+      let resolvedCron: string = cron;
       switch (scheduleMode) {
         case "every": resolvedCron = intervalToCron(intervalAmount, intervalUnit, intervalStart); break;
         case "at":    resolvedCron = timeToCron(atTime); break;
@@ -432,7 +475,7 @@ type WorkflowCronBuilderState = Pick<
 function parseWorkflowTrigger(triggerJson: string): WorkflowTriggerBuilderState {
   const defaults: WorkflowTriggerBuilderState = {
     triggerType: "event" as TriggerType,
-    event: "on_todo_create" as EventType,
+    event: "on_todos_create" as EventType,
     scheduleMode: "every" as ScheduleMode,
     intervalAmount: 30,
     intervalUnit: "minutes" as IntervalUnit,

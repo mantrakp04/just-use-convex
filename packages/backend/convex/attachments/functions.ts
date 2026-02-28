@@ -56,7 +56,7 @@ export async function CreateAttachmentFromHash(
       q
         .eq("organizationId", ctx.identity.activeOrganizationId)
         .eq("memberId", ctx.identity.memberId)
-        .eq("globalAttachmentId", globalAttachment?._id!)
+        .eq("globalAttachmentId", globalAttachment._id)
   ).unique();
 
   const url = await getStorageUrl(ctx, globalAttachment.storageId);

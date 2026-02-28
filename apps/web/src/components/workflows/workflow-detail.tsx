@@ -87,6 +87,9 @@ export function WorkflowDetail({ workflowId }: WorkflowDetailProps) {
           <Badge variant={workflow.enabled ? "default" : "secondary"}>
             {workflow.enabled ? "Enabled" : "Disabled"}
           </Badge>
+          <Badge variant="outline">
+            {workflow.isolationMode === "shared" ? "Shared" : "Isolated"}
+          </Badge>
         </div>
         <div className="flex items-center gap-2">
           <Button
@@ -159,7 +162,7 @@ export function WorkflowDetail({ workflowId }: WorkflowDetailProps) {
             <CardTitle className="text-sm">Actions</CardTitle>
           </CardHeader>
           <CardContent className="py-2 flex flex-wrap gap-1">
-            {workflow.allowedActions.map((action) => (
+            {workflow.actions.map((action) => (
               <Badge key={action} variant="secondary" className="text-xs">
                 {action}
               </Badge>

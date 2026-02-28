@@ -96,8 +96,7 @@ export async function ListTodos(ctx: zQueryCtx, args: z.infer<typeof types.ListA
     assignedTodoIds = new Set(assignments.map((a) => a.todoId));
   }
 
-  let todos;
-  todos = await withInvalidCursorRetry(
+  const todos = await withInvalidCursorRetry(
     normalizedArgs,
     (nextArgs) => runTodosQuery(ctx, nextArgs),
     (nextArgs) => ({ ...nextArgs, paginationOpts: { ...nextArgs.paginationOpts, cursor: null } })

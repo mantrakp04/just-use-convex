@@ -1,17 +1,15 @@
 import { createEnv } from "@t3-oss/env-core";
 import { z } from "zod";
-import { sharedEnv } from "./shared";
+import { env as sharedEnv } from "./shared";
 
 export const backendEnvSchema = {
-  ...sharedEnv,
-  MAX_VOLUME_READY_RETRIES: z.coerce.number().int().positive().default(10),
   JWKS: z.string(),
-  SANDBOX_SNAPSHOT: z.string().default("daytona-medium"),
 };
 
 export const env = createEnv({
   server: backendEnvSchema,
   runtimeEnv: process.env,
   emptyStringAsUndefined: true,
+  extends: [sharedEnv],
   skipValidation: !process.env.JWKS,
 });

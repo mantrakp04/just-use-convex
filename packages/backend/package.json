@@ -8,6 +8,7 @@
     "dev": "convex dev",
     "dev:setup": "convex dev --configure --until-success",
     "build": "tsc --noEmit --project convex",
+    "lint": "bunx eslint convex",
     "check-types": "tsc --noEmit --project convex"
   },
   "dependencies": {
@@ -18,12 +19,15 @@
     "better-auth": "catalog:",
     "convex": "catalog:",
     "convex-ents": "^0.20.0",
-    "convex-helpers": "^0.1.113",
+    "convex-helpers": "^0.1.114",
     "dotenv": "catalog:",
     "mime": "catalog:",
+    "croner": "catalog:",
     "zod": "catalog:"
   },
   "devDependencies": {
+    "@noble/ciphers": "^2.1.1",
+    "eslint": "catalog:",
     "@just-use-convex/env": "workspace:*",
     "@just-use-convex/config": "workspace:*",
     "@types/node": "^24.10.13",

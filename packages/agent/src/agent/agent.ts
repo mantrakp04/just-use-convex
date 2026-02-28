@@ -2,6 +2,7 @@ import {
   Agent,
   AgentRegistry,
   PlanAgent,
+  Tool,
   createPlanningToolkit,
   createVoltAgentObservability,
   createVoltOpsClient,
@@ -15,10 +16,12 @@ import { CHAT_SYSTEM_PROMPT, WORKFLOW_SYSTEM_PROMPT, TASK_PROMPT } from "./promp
 import { createAskUserToolkit } from "../tools/ask-user";
 import { createWebSearchToolkit } from "../tools/websearch";
 import { createBackgroundTaskToolkit } from "../tools/utils/wrapper/toolkit";
-import { normalizeDuration } from "../tools/utils/duration";
+import { normalizePositiveInt } from "../tools/utils/duration";
 import {
   BackgroundTaskStore,
   TruncatedOutputStore,
+  patchToolWithStepTracking,
+  type StepTrackingContext,
 } from "../tools/utils/wrapper";
 import { createDaytonaToolkit } from "../tools/sandbox";
 import { createWorkflowActionToolkit } from "../tools/workflow-actions";
@@ -65,8 +68,8 @@ export async function createWorkerPlanAgent({
 
   setWaitUntil(waitUntil);
   configureVoltOpsClient(env);
-  const defaultToolTimeoutMs = normalizeDuration(env.MAX_TOOL_DURATION_MS, 600_000);
-  const backgroundTaskPollIntervalMs = normalizeDuration(
+  const defaultToolTimeoutMs = normalizePositiveInt(env.MAX_TOOL_DURATION_MS, 600_000);
+  const backgroundTaskPollIntervalMs = normalizePositiveInt(
     env.BACKGROUND_TASK_POLL_INTERVAL_MS,
     3_000,
   );
@@ -75,7 +78,6 @@ export async function createWorkerPlanAgent({
     model: state.model,
     reasoningEffort: state.reasoningEffort,
     modeConfig,
-    workflowDoc: modeConfig.mode === "workflow" ? workflowDoc : null,
     convexAdapter,
     sandbox,
   });
@@ -185,7 +187,6 @@ function resolveSystemPrompt(
   return WORKFLOW_SYSTEM_PROMPT(
     workflowDoc,
     modeConfig.executionId,
-    modeConfig.triggerPayload,
   );
 }
 
@@ -193,10 +194,9 @@ async function createSubagents({
   model,
   reasoningEffort,
   modeConfig,
-  workflowDoc,
   convexAdapter,
   sandbox,
-}: Pick<CreateWorkerPlanAgentArgs, "modeConfig" | "workflowDoc" | "convexAdapter" | "sandbox"> & {
+}: Pick<CreateWorkerPlanAgentArgs, "modeConfig" | "convexAdapter" | "sandbox"> & {
   model: string;
   reasoningEffort: AgentArgs["reasoningEffort"];
 }): Promise<Agent[]> {
@@ -209,20 +209,30 @@ async function createSubagents({
     toolkitPromises.push(createWorkflowToolkit(convexAdapter));
   }
 
-  if (modeConfig.mode === "workflow" && workflowDoc) {
-    if (!convexAdapter) {
-      throw new Error("No convex adapter");
-    }
-    toolkitPromises.push(createWorkflowActionToolkit(workflowDoc.allowedActions, {
-      executionId: modeConfig.executionId,
-      convexAdapter,
-    }));
+  if (modeConfig.mode === "workflow") {
+    toolkitPromises.push(createWorkflowActionToolkit());
   }
 
   const toolkits = await Promise.all(toolkitPromises);
+
+  // In workflow mode, apply step tracking to all tools before creating subagents
+  if (modeConfig.mode === "workflow" && convexAdapter) {
+    const stepContext: StepTrackingContext = {
+      executionId: modeConfig.executionId,
+      convexAdapter,
+    };
+    for (const toolkit of toolkits) {
+      for (const tool of toolkit.tools) {
+        if (tool instanceof Tool) {
+          patchToolWithStepTracking(tool, stepContext);
+        }
+      }
+    }
+  }
+
   return toolkits.map((toolkit) => new Agent({
     name: toolkit.name,
-    purpose: toolkit.description,
+    purpose: `${toolkit.description}\n\nAvailable tools in this agent: ${toolkit.tools.filter((t): t is Tool => t instanceof Tool).map((t) => t.name).join(", ")}`,
     model: createAiClient(model, reasoningEffort),
     instructions: toolkit.instructions ?? "",
     tools: toolkit.tools,

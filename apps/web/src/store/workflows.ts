@@ -1,31 +1,23 @@
 import { atom } from "jotai";
 import type { Id } from "@just-use-convex/backend/convex/_generated/dataModel";
-import type {
-  AllowedAction,
-  EventType,
-  TriggerType,
+import {
+  ALL_EVENTS,
+  type Action,
+  type EventType,
+  type TriggerType,
 } from "@just-use-convex/backend/convex/workflows/types";
+import { TOOL_GROUPS } from "@just-use-convex/backend/convex/workflows/toolRegistry";
+import type { z } from "zod";
+import type { isolationModeSchema } from "@just-use-convex/backend/convex/tables/workflows";
 
-export type { AllowedAction, EventType, TriggerType };
+export type IsolationMode = z.infer<typeof isolationModeSchema>;
+
+export type { Action, EventType, TriggerType };
+export { ALL_EVENTS, TOOL_GROUPS };
 
 export type ScheduleMode = "every" | "at" | "cron";
 
 export type IntervalUnit = "minutes" | "hours" | "days";
-
-export const ALL_ACTIONS: { value: AllowedAction; label: string; description: string }[] = [
-  { value: "send_message", label: "Send Message", description: "Send a workflow output message" },
-  { value: "http_request", label: "HTTP Request", description: "Make an external HTTP request" },
-  { value: "notify", label: "Notify", description: "Send a notification" },
-];
-
-export const ALL_EVENTS: { value: EventType; label: string }[] = [
-  { value: "on_chat_create", label: "Chat Created" },
-  { value: "on_chat_delete", label: "Chat Deleted" },
-  { value: "on_sandbox_provision", label: "Sandbox Provisioned" },
-  { value: "on_sandbox_delete", label: "Sandbox Deleted" },
-  { value: "on_todo_create", label: "Todo Created" },
-  { value: "on_todo_complete", label: "Todo Completed" },
-];
 
 /**
  * Converts "Every X units, starting from HH:MM" to a cron expression.
@@ -141,8 +133,9 @@ export const builderIntervalUnitAtom = atom<IntervalUnit>("minutes");
 export const builderIntervalStartAtom = atom<string | undefined>(undefined);
 export const builderAtTimeAtom = atom("09:00");
 export const builderCronAtom = atom("0 * * * *");
-export const builderEventAtom = atom<EventType>("on_todo_create");
+export const builderEventAtom = atom<EventType>("on_todos_create");
 export const builderInstructionsAtom = atom("");
-export const builderAllowedActionsAtom = atom<AllowedAction[]>(["notify"]);
+export const builderActionsAtom = atom<string[]>(["notify"]);
 export const builderModelAtom = atom<string | undefined>(undefined);
 export const builderSandboxIdAtom = atom<Id<"sandboxes"> | null>(null);
+export const builderIsolationModeAtom = atom<IsolationMode>("isolated");

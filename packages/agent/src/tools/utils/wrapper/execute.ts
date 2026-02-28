@@ -11,7 +11,7 @@ import type {
   WrappedExecuteFactoryOptions,
   WrappedExecuteOptions,
 } from "./types";
-import { normalizeDuration } from "../duration";
+import { normalizePositiveInt } from "../duration";
 
 // ── Public ─────────────────────────────────────────────────────────────
 
@@ -211,16 +211,16 @@ function splitToolArgs(args: Record<string, unknown>, config: ToolCallConfig) {
   }
 
   const maxAllowedDuration =
-    normalizeDuration(config.maxDuration, DEFAULT_MAX_DURATION_MS) ?? DEFAULT_MAX_DURATION_MS;
+    normalizePositiveInt(config.maxDuration, DEFAULT_MAX_DURATION_MS) ?? DEFAULT_MAX_DURATION_MS;
   const maxBackgroundDuration =
-    normalizeDuration(config.maxBackgroundDuration, DEFAULT_MAX_BACKGROUND_DURATION_MS) ?? DEFAULT_MAX_BACKGROUND_DURATION_MS;
+    normalizePositiveInt(config.maxBackgroundDuration, DEFAULT_MAX_BACKGROUND_DURATION_MS) ?? DEFAULT_MAX_BACKGROUND_DURATION_MS;
   const effectiveTimeout =
     requestedTimeout !== undefined
       ? Math.min(requestedTimeout, maxAllowedDuration)
       : maxAllowedDuration;
   const effectiveBackgroundTimeout = maxBackgroundDuration;
   const effectiveMaxOutputTokens =
-    normalizeTokenCount(config.maxOutputTokens, DEFAULT_MAX_OUTPUT_TOKENS) ??
+    normalizePositiveInt(config.maxOutputTokens, DEFAULT_MAX_OUTPUT_TOKENS) ??
     DEFAULT_MAX_OUTPUT_TOKENS;
 
   return {
@@ -240,10 +240,10 @@ function resolveRequestedTimeout(
 ): number | undefined {
   if (!allowAgentSetDuration) return undefined;
 
-  const timeout = normalizeDuration(args.timeout);
+  const timeout = normalizePositiveInt(args.timeout);
   if (timeout !== undefined) return timeout;
 
-  return normalizeDuration(args.timeoutMs);
+  return normalizePositiveInt(args.timeoutMs);
 }
 
 function resolveToolCallId(options?: ToolExecuteOptions): string {
@@ -289,10 +289,4 @@ function linkAbortSignal(
 
   sourceSignal.addEventListener("abort", abortTarget, { once: true });
   return () => sourceSignal.removeEventListener("abort", abortTarget);
-}
-
-
-function normalizeTokenCount(value: unknown, fallback?: number): number | undefined {
-  if (typeof value !== "number" || !Number.isFinite(value)) return fallback;
-  return Math.max(1, Math.floor(value));
 }

@@ -15,6 +15,6 @@ export const env = createEnv({
     VITE_GITHUB_REPO: z.string().default("mantrakp04/just-use-convex"),
     VITE_TWITTER_HANDLE: z.string().default("barre_of_lube"),
   },
-  runtimeEnv: (import.meta as any).env,
+  runtimeEnv: import.meta.env as Record<string, string | undefined>,
   emptyStringAsUndefined: true,
 });

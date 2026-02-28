@@ -75,38 +75,38 @@ export const createAuthOptions = (ctx: GenericCtx<DataModel>) => {
           enabled: true,
         },
         organizationHooks: {
-          afterCreateOrganization: async ({ organization: _organization, member: _member, user: _user }) => {
+          afterCreateOrganization: async () => {
             // Session updates are handled by the session.update.before hook
             // when setActive is called from the client
           },
-          afterAddMember: async ({ member: _member, organization: _organization, user: _user }) => {
+          afterAddMember: async () => {
             // TODO: Add logic after member is added
           },
-          afterRemoveMember: async ({ member: _member }) => {
+          afterRemoveMember: async () => {
             // TODO: Add logic after member is removed
           },
-          afterCreateTeam: async ({ team: _team, organization: _organization }) => {
+          afterCreateTeam: async () => {
             // TODO: Add logic after team creation
           },
-          afterDeleteTeam: async ({ team: _team }) => {
+          afterDeleteTeam: async () => {
             // TODO: Add logic after team deletion
           },
-          afterAddTeamMember: async ({ team: _team, teamMember: _teamMember }) => {
+          afterAddTeamMember: async () => {
             // TODO: Add logic after team member is added
           },
-          afterRemoveTeamMember: async ({ teamMember: _teamMember }) => {
+          afterRemoveTeamMember: async () => {
             // TODO: Add logic after team member is removed
           },
-          afterAcceptInvitation: async ({ member: _member, organization: _organization, user: _user }) => {
+          afterAcceptInvitation: async () => {
             // TODO: Add logic after invitation is accepted
           },
-          afterUpdateMemberRole: async ({ member: _member, previousRole: _previousRole }) => {
+          afterUpdateMemberRole: async () => {
             // TODO: Add logic after member role is updated
           },
-          beforeDeleteOrganization: async ({ organization: _organization }) => {
+          beforeDeleteOrganization: async () => {
             // TODO: Add logic before organization deletion
           },
-          afterDeleteOrganization: async ({ organization: _organization }) => {
+          afterDeleteOrganization: async () => {
             // TODO: Add logic after organization deletion
           },
         }
@@ -219,7 +219,7 @@ export const createAuthOptions = (ctx: GenericCtx<DataModel>) => {
           },
         },
         delete: {
-          after: async (_user) => {
+          after: async () => {
             // TODO: Add logic after user deletion
           },
         },

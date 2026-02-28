@@ -7,7 +7,7 @@ import {
   DEFAULT_MAX_OUTPUT_TOKENS,
   OUTPUT_CHARS_PER_TOKEN,
 } from "./types";
-import { normalizeDuration } from "../duration";
+import { normalizePositiveInt } from "../duration";
 import type {
   BackgroundTaskStoreApi,
   BackgroundTaskToolkitConfig,
@@ -150,8 +150,8 @@ export function createBackgroundTaskToolkit(
   config: Partial<BackgroundTaskToolkitConfig> = {},
 ): Toolkit {
   const toolkitConfig: BackgroundTaskToolkitConfig = {
-    pollIntervalMs: normalizeDuration(config.pollIntervalMs, DEFAULT_BACKGROUND_TASK_POLL_INTERVAL_MS),
-    defaultTimeoutMs: normalizeDuration(config.defaultTimeoutMs, DEFAULT_MAX_DURATION_MS),
+    pollIntervalMs: normalizePositiveInt(config.pollIntervalMs, DEFAULT_BACKGROUND_TASK_POLL_INTERVAL_MS),
+    defaultTimeoutMs: normalizePositiveInt(config.defaultTimeoutMs, DEFAULT_MAX_DURATION_MS),
   };
 
   return createToolkit({

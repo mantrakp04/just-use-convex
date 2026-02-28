@@ -33,7 +33,6 @@ export async function executeWithTimeout<R>(
 
   return new Promise<R | undefined>((resolve, reject) => {
     let settled = false;
-    let timeoutId: ReturnType<typeof setTimeout> | undefined;
 
     const cleanup = () => {
       settled = true;
@@ -50,7 +49,7 @@ export async function executeWithTimeout<R>(
 
     abortSignal?.addEventListener("abort", onAbort);
 
-    timeoutId = setTimeout(() => {
+    const timeoutId = setTimeout(() => {
       if (!settled) {
         cleanup();
         reject(new ToolTimeoutError(timeoutMs));

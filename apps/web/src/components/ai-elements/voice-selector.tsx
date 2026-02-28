@@ -87,11 +87,9 @@ export const VoiceSelector = ({
     [value, setValue, open, setOpen]
   );
 
-  const handleOpenChange = (newOpen: boolean, eventDetails?: any) => {
+  const handleOpenChange: NonNullable<ComponentProps<typeof Dialog>["onOpenChange"]> = (newOpen, eventDetails) => {
     setOpen(newOpen);
-    if (onOpenChange) {
-      onOpenChange(newOpen, eventDetails);
-    }
+    onOpenChange?.(newOpen, eventDetails);
   };
 
   return (

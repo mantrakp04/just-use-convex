@@ -1,6 +1,6 @@
 import { ToolTimeoutError } from "./timeout";
 import { TERMINAL_STATUSES } from "./types";
-import { normalizeDuration } from "../duration";
+import { normalizePositiveInt } from "../duration";
 import type {
   BackgroundTask,
   BackgroundTaskFilterStatus,
@@ -18,7 +18,7 @@ export async function getBackgroundTask(
     return buildTaskResult(getTaskOrThrow(store, input.taskId));
   }
 
-  const timeoutMs = normalizeDuration(input.timeoutMs, waitConfig.defaultTimeoutMs);
+  const timeoutMs = normalizePositiveInt(input.timeoutMs, waitConfig.defaultTimeoutMs);
   const startTime = Date.now();
 
   while (Date.now() - startTime < timeoutMs) {

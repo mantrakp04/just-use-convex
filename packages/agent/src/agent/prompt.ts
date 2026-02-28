@@ -14,12 +14,11 @@ ${chat.sandbox ? createSandboxContextMessage(chat.sandbox) : ""}
 export const WORKFLOW_SYSTEM_PROMPT = (
   workflow: Doc<"workflows"> & { sandbox?: Doc<"sandboxes"> | null },
   executionId: Id<"workflowExecutions">,
-  triggerPayload: string,
 ) => `${CORE_SYSTEM_PROMPT}
 
 ${workflow.sandbox ? createSandboxContextMessage(workflow.sandbox) : ""}
 
-${buildWorkflowSystemPrompt(workflow, executionId, triggerPayload)}
+${buildWorkflowSystemPrompt(workflow, executionId)}
 `;
 
 export const TASK_PROMPT = `
@@ -78,7 +77,6 @@ function createSandboxContextMessage(sandbox?: Doc<"sandboxes"> | null): string 
 function buildWorkflowSystemPrompt(
   workflow: Doc<"workflows">,
   executionId: Id<"workflowExecutions">,
-  triggerPayload: string,
 ): string {
   return `You are executing a workflow automation.
 
@@ -91,18 +89,17 @@ function buildWorkflowSystemPrompt(
 ## Instructions
 ${workflow.instructions}
 
-## Trigger Context
-${triggerPayload}
+## Required Actions
+The following actions MUST be executed during this workflow run — their completion is tracked and verified:
+${workflow.actions.map((action) => `- ${action}`).join("\n")}
 
-## Actions Context
-Use the following actions during / at end of execution, these are configured by user and must be realized:
-${workflow.allowedActions.map((action) => `- ${action}`).join("\n")}
+You have access to all available tools. All tool calls are tracked. The required actions above are the ones the user expects you to complete.
 
 ## Rules
 - Be decisive and complete the workflow efficiently
 - If an action fails, note the failure and continue with remaining actions
 - Do not ask for user input — workflows run autonomously
-- Always use the actions context to carry out the workflow instructions
+- Prioritize executing the required actions listed above
 - When calling workflow tools, pass workflowId or executionId explicitly using the IDs above
 `;
 }

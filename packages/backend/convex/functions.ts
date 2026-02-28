@@ -19,6 +19,7 @@ import { allSandboxAggregates } from "./sandboxes/aggregates";
 import { allAttachmentAggregates } from "./attachments/aggregates";
 import { sandboxDaytonaTrigger } from "./tables/sandboxes";
 import { workflowEventTrigger } from "./workflows/triggers";
+import { tableNames } from "./lib/schemaTables";
 import { env } from "@just-use-convex/env/backend";
 import type { UserIdentity } from "convex/server";
 
@@ -45,10 +46,10 @@ for (const aggregate of allSandboxAggregates) {
 // Register lifecycle trigger for Daytona sandbox provisioning/cleanup
 triggers.register("sandboxes", sandboxDaytonaTrigger);
 
-// Register workflow event triggers
-triggers.register("chats", workflowEventTrigger("chats"));
-triggers.register("sandboxes", workflowEventTrigger("sandboxes"));
-triggers.register("todos", workflowEventTrigger("todos"));
+// Register workflow event triggers for all schema tables
+for (const table of tableNames) {
+  triggers.register(table, workflowEventTrigger(table));
+}
 
 // Register all aggregate triggers for orgMemberAttachments table
 for (const aggregate of allAttachmentAggregates) {

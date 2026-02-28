@@ -1,4 +1,3 @@
-import { type UIMessage } from "ai";
 import { agentArgsSchema, type AgentArgs } from "../agent/types";
 import { env } from "@just-use-convex/env/agent";
 
@@ -9,12 +8,4 @@ export function buildInitArgsFromUrl(url: URL): AgentArgs {
     throw new Error("Unauthorized");
   }
   return args;
-}
-
-export function buildWorkflowExecutionMessages(): UIMessage[] {
-  return [{
-    id: `workflow-exec-${crypto.randomUUID()}`,
-    role: "user",
-    parts: [{ type: "text", text: "Execute this workflow now." }],
-  }];
 }

@@ -16,16 +16,19 @@ import { useChats, useChatsList, useChat, type Chat } from "@/hooks/use-chats";
 import type { Id } from "@just-use-convex/backend/convex/_generated/dataModel";
 import { Badge } from "@/components/ui/badge";
 import { selectedSandboxIdAtom } from "@/store/sandbox";
-import { MessageSquare, Pin, ChevronDown, Loader2, Box, Plus } from "lucide-react";
+import { MessageSquare, ChevronDown, Loader2, Plus, Box } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-function formatDate(timestamp: number) {
-  return new Intl.DateTimeFormat("en-US", {
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  }).format(new Date(timestamp));
+function formatTimeAgo(timestamp: number) {
+  const diff = Date.now() - timestamp;
+  const minute = 60 * 1000;
+  const hour = 60 * minute;
+  const day = 24 * hour;
+
+  if (diff < minute) return "now";
+  if (diff < hour) return `${Math.floor(diff / minute)}m`;
+  if (diff < day) return `${Math.floor(diff / hour)}h`;
+  return `${Math.floor(diff / day)}d`;
 }
 
 const LOAD_MORE_COUNT = 20;
@@ -100,7 +103,7 @@ export function HeaderChatsDropdown() {
     <DropdownMenu>
       <DropdownMenuTrigger
         className={cn(
-          "flex items-center gap-2 rounded-md border border-border px-2 py-1.5 text-sm font-medium backdrop-blur-xs",
+          "flex items-center gap-2 rounded-md border border-border px-2 py-1 text-sm font-medium backdrop-blur-xs",
           "hover:bg-muted/50 transition-colors cursor-pointer"
         )}
       >
@@ -217,33 +220,20 @@ function ChatItem({
       type="button"
       onClick={onSelect}
       className={cn(
-        "w-full flex items-center gap-2 rounded-md px-2 py-2 text-left text-sm",
+        "w-full flex items-center justify-between gap-3 rounded-md px-2 py-1.5 text-left text-sm",
         "hover:bg-muted/70 transition-colors",
-        isActive && "bg-muted"
+        isActive ? "bg-muted text-foreground" : "text-muted-foreground hover:text-foreground"
       )}
     >
-      <div className="size-8 shrink-0 rounded-md bg-muted flex items-center justify-center">
-        {chat.isPinned ? (
-          <Pin className="size-4 text-primary" />
-        ) : (
-          <MessageSquare className="size-4" />
+      <div className="font-medium truncate">{chat.title}</div>
+      <div className="flex items-center gap-2 shrink-0">
+        {chat.sandbox && (
+          <Badge variant="outline" className="h-5 px-1.5 text-[10px] font-normal gap-1 bg-background/50">
+            <Box className="size-3" />
+            {chat.sandbox.name}
+          </Badge>
         )}
-      </div>
-      <div className="min-w-0 flex-1">
-        <div className="font-medium truncate">{chat.title}</div>
-        <div className="flex items-center gap-2 text-xs text-muted-foreground">
-          <span>
-            {chat.updatedAt
-              ? `Last message ${formatDate(chat.updatedAt)}`
-              : `Created ${formatDate(chat._creationTime)}`}
-          </span>
-          {chat.sandbox && (
-            <Badge variant="outline" className="shrink-0">
-              <Box className="size-3" />
-              {chat.sandbox.name}
-            </Badge>
-          )}
-        </div>
+        <span className="text-xs opacity-60">{formatTimeAgo(chat.updatedAt || chat._creationTime)}</span>
       </div>
     </button>
   );
@@ -263,21 +253,20 @@ function ChatSubItem({
       type="button"
       onClick={onSelect}
       className={cn(
-        "w-full flex items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs -translate-x-px",
+        "w-full flex items-center justify-between gap-3 rounded-md px-2 py-1 text-left text-sm -translate-x-px",
         "hover:bg-muted/70 transition-colors",
-        isActive && "bg-muted"
+        isActive ? "bg-muted text-foreground" : "text-muted-foreground hover:text-foreground"
       )}
     >
-      <div className="size-6 shrink-0 rounded bg-muted flex items-center justify-center">
-        <Pin className="size-3 text-primary" />
-      </div>
-      <div className="min-w-0 flex-1">
-        <div className="font-medium truncate">{chat.title}</div>
-        <div className="text-muted-foreground truncate">
-          {chat.updatedAt
-            ? formatDate(chat.updatedAt)
-            : formatDate(chat._creationTime)}
-        </div>
+      <div className="font-medium truncate">{chat.title}</div>
+      <div className="flex items-center gap-2 shrink-0">
+        {chat.sandbox && (
+          <Badge variant="outline" className="h-5 px-1.5 text-[10px] font-normal gap-1 bg-background/50">
+            <Box className="size-3" />
+            {chat.sandbox.name}
+          </Badge>
+        )}
+        <span className="text-xs opacity-60">{formatTimeAgo(chat.updatedAt || chat._creationTime)}</span>
       </div>
     </button>
   );

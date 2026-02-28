@@ -20,7 +20,7 @@ import {
 } from "@just-use-convex/backend/convex/lib/convexAdapter";
 import { env as agentDefaults } from "@just-use-convex/env/agent";
 import { createAiClient } from "../agent/client";
-import { normalizeDuration } from "../tools/utils/duration";
+import { normalizePositiveInt } from "../tools/utils/duration";
 import { parseStreamToUI } from "../utils/fullStreamParser";
 import {
   BackgroundTaskStore,
@@ -54,27 +54,32 @@ import {
   createSandboxPtyFunctions,
 } from "../tools/sandbox";
 import { Daytona, type Sandbox } from "@daytonaio/sdk";
-import { ensureSandboxStarted, downloadFileUrlsInSandbox } from "../tools/utils/sandbox";
+import {
+  ensureSandboxReady,
+  ensureSandboxStarted,
+} from "@just-use-convex/backend/convex/shared/sandbox";
+import { downloadFileUrlsInSandbox } from "../tools/utils/sandbox";
 import {
   buildInitArgsFromUrl,
-  buildWorkflowExecutionMessages,
 } from "./helpers";
 import { createWorkerPlanAgent } from "../agent/agent";
+
+const WORKFLOW_SHARED_MESSAGE_LIMIT = 10;
 
 export class AgentWorker extends AIChatAgent<typeof worker.Env, AgentArgs> {
   private convexAdapter: ConvexAdapter | null = null;
   private planAgent: PlanAgent | null = null;
   private backgroundTaskStore = new BackgroundTaskStore(this.ctx.waitUntil.bind(this.ctx));
   private truncatedOutputStore = new TruncatedOutputStore();
-  private readonly maxToolDurationMs = normalizeDuration(
+  private readonly maxToolDurationMs = normalizePositiveInt(
     agentDefaults.MAX_TOOL_DURATION_MS,
     600_000,
   );
-  private readonly maxBackgroundDurationMs = normalizeDuration(
+  private readonly maxBackgroundDurationMs = normalizePositiveInt(
     agentDefaults.MAX_BACKGROUND_DURATION_MS,
     3_600_000,
   );
-  private readonly backgroundTaskPollIntervalMs = normalizeDuration(
+  private readonly backgroundTaskPollIntervalMs = normalizePositiveInt(
     agentDefaults.BACKGROUND_TASK_POLL_INTERVAL_MS,
     3_000,
   );
@@ -98,6 +103,7 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, AgentArgs> {
     this.convexAdapter = await createConvexAdapter(this.env.CONVEX_URL, stored.tokenConfig);
     this.chatDoc = null;
     this.workflowDoc = null;
+    this.planAgent = null;
 
     let sandboxId: string | undefined;
     if (this.state.modeConfig.mode === "workflow" && this.state.tokenConfig.type === "ext") {
@@ -126,9 +132,8 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, AgentArgs> {
     });
     if (sandboxId) {
       if (!this.sandbox || this.sandbox.id !== sandboxId) {
-        this.sandbox = await this.daytona.get(sandboxId);
+        this.sandbox = await ensureSandboxReady(this.daytona, sandboxId);
       }
-      await ensureSandboxStarted(this.sandbox);
     } else {
       this.sandbox = null;
     }
@@ -273,13 +278,23 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, AgentArgs> {
         if (!this.convexAdapter) {
           throw new Error("No convex adapter");
         }
+
+        await this.persistMessages([{
+          id: `user-${crypto.randomUUID()}`,
+          role: "user",
+          parts: [{ type: "text", text: "Execute this workflow now." }],
+        }]);
+
         await this.convexAdapter.mutation(api.workflows.index.updateExecutionStatusExt, {
           executionId,
           status: "running",
         });
         return await this._onChatMessage(() => {});
       } catch (error) {
-        console.error("onRequest failed", error);
+        await this._markWorkflowExecutionFailed(
+          error,
+          this.state?.modeConfig?.mode === "workflow" ? this.state.modeConfig.executionId : null,
+        );
         return new Response(JSON.stringify({ error: error instanceof Error ? error.message : "Internal Server Error" }), { status: 500 });
       }
     }
@@ -290,7 +305,6 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, AgentArgs> {
   override async onConnect(connection: Connection, ctx: ConnectionContext): Promise<void> {
     const url = new URL(ctx.request.url);
     await this._init(buildInitArgsFromUrl(url));
-    await this._prepAgent();
     return await super.onConnect(connection, ctx);
   }
 
@@ -388,7 +402,7 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, AgentArgs> {
       }
 
       if (this.sandbox) {
-        await ensureSandboxStarted(this.sandbox, false);
+        await ensureSandboxStarted(this.sandbox);
       }
 
       const modeConfig = this.state.modeConfig;
@@ -418,35 +432,11 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, AgentArgs> {
 
       const agent = this.planAgent || (await this._prepAgent());
 
-      // Workflow: non-streaming generateText, update execution status
-      if (isWorkflow && this.state.modeConfig && this.workflowDoc) {
-        const modelMessages = buildWorkflowExecutionMessages();
-        const result = await agent.generateText(modelMessages);
-
-        await this.convexAdapter.mutation(
-          api.workflows.index.finalizeWorkflowStepsExt,
-          { executionId: modeConfig.executionId },
-        );
-
-        await this.convexAdapter.mutation(
-          api.workflows.index.updateExecutionStatusExt,
-          {
-            executionId: modeConfig.executionId,
-            status: "completed",
-            agentOutput: result.text,
-            completedAt: Date.now(),
-          },
-        );
-
-        return new Response(JSON.stringify({ status: "completed" }), {
-          status: 200,
-          headers: { "Content-Type": "application/json" },
-        });
-      }
-
-      // Chat: streaming with retrieval + file downloads
+      const messagesForModel = isWorkflow
+        ? this.messages.slice(-WORKFLOW_SHARED_MESSAGE_LIMIT)
+        : this.messages;
       const { messages: messagesForAgent, lastUserIdx, lastUserQueryText, lastUserFilePartUrls } =
-        processMessagesForAgent(this.messages, this.state.inputModalities);
+        processMessagesForAgent(messagesForModel, this.state.inputModalities);
 
       const [retrievalMessage, downloadedPaths] = await Promise.all([
         buildRetrievalMessage({
@@ -470,29 +460,65 @@ export class AgentWorker extends AIChatAgent<typeof worker.Env, AgentArgs> {
 
       const modelMessages = messagesForAgent.toSpliced(lastUserIdx, 0, immediateSystemMessage);
 
-      const stream = await agent.streamText(modelMessages, {
-        abortSignal: options?.abortSignal,
-      });
+      if (!isWorkflow) {
+        const stream = await agent.streamText(modelMessages, {
+          abortSignal: options?.abortSignal,
+        });
 
-      return createUIMessageStreamResponse({
-        stream: createUIMessageStream({
-          execute: ({ writer }) => parseStreamToUI(stream.fullStream, writer),
-        }),
-      });
+        return createUIMessageStreamResponse({
+          stream: createUIMessageStream({
+            execute: ({ writer }) => parseStreamToUI(stream.fullStream, writer),
+          }),
+        });
+      } else {
+        const result = await agent.generateText(modelMessages, {
+          abortSignal: options?.abortSignal,
+        });
+
+        await this.persistMessages([{
+          id: `assistant-${crypto.randomUUID()}`,
+          role: "assistant",
+          parts: [{ type: "text", text: result.text }],
+        }]);
+
+        console.log(`[workflow:shared-debug] post-generate messages_count=${this.messages.length}`);
+
+        const executionId = (modeConfig as import("../agent/types").WorkflowModeConfig).executionId;
+
+        await this.convexAdapter.mutation(
+          api.workflows.index.finalizeWorkflowStepsExt,
+          { executionId },
+        );
+
+        await this.convexAdapter.mutation(
+          api.workflows.index.updateExecutionStatusExt,
+          {
+            executionId,
+            status: "completed",
+            agentOutput: result.text,
+            completedAt: Date.now(),
+          },
+        );
+
+        return new Response(JSON.stringify({ status: "completed" }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
     } catch (error) {
-      await this._markWorkflowExecutionFailed(
-        error,
-        this.state?.modeConfig?.mode === "workflow" ? this.state.modeConfig.executionId : null,
-      );
+      throw error;
+    }
+  }
+
+  override async onChatMessage(onFinish: StreamTextOnFinishCallback<ToolSet>, options?: OnChatMessageOptions): Promise<Response> {
+    try {
+      return await this._onChatMessage(onFinish, options);
+    } catch (error) {
       console.error("onChatMessage failed", error);
       return new Response(
         JSON.stringify({ error: error instanceof Error ? error.message : "Internal Server Error" }),
         { status: 500 },
       );
     }
-  }
-
-  override async onChatMessage(onFinish: StreamTextOnFinishCallback<ToolSet>, options?: OnChatMessageOptions): Promise<Response> {
-    return await this._onChatMessage(onFinish, options);
   }
 }

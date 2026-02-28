@@ -106,6 +106,14 @@ function getToolNameFromPart(part: UIMessage["parts"][number]): string | null {
 
 export function sanitizeFilename(filename: string): string {
   const base = filename.split(/[\\/]/).pop() ?? "file";
-  const sanitized = base.replace(/[\u0000-\u001F\u007F]/g, "_").trim();
+  const sanitized = [...base]
+    .map((char) => {
+      const code = char.codePointAt(0);
+      if (code === undefined) return "_";
+      if ((code >= 0 && code <= 0x1f) || code === 0x7f) return "_";
+      return char;
+    })
+    .join("")
+    .trim();
   return sanitized.length > 0 ? sanitized : "file";
 }

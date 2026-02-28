@@ -1,23 +1,54 @@
 import { z } from "zod";
 import type { Doc } from "../_generated/dataModel";
+import type { MemberRole } from "../shared/auth";
 import {
   workflowsZodSchema,
   workflowsWithSystemFields,
   triggerSchema,
-  allowedActionSchema,
+  actionSchema,
   eventSchema,
   inputModalitySchema,
+  isolationModeSchema,
 } from "../tables/workflows";
 import { sandboxesWithSystemFields } from "../tables/sandboxes";
 import { workflowExecutionsWithSystemFields } from "../tables/workflowExecutions";
 import { workflowStepsWithSystemFields } from "../tables/workflowSteps";
+import { tableNames } from "../lib/schemaTables";
 import { paginationOptsValidator } from "convex/server";
 import { convexToZod } from "convex-helpers/server/zod4";
 
-/** Inferred from allowedActionSchema */
-export type AllowedAction = z.infer<typeof allowedActionSchema>;
+// Re-export for consumers
+export { triggerSchema as TriggerSchema } from "../tables/workflows";
+
+/** Inferred from actionSchema */
+export type Action = z.infer<typeof actionSchema>;
 /** Inferred from eventSchema */
 export type EventType = z.infer<typeof eventSchema>;
+
+const OPERATIONS = ["create", "update", "delete"] as const;
+const OP_LABELS: Record<(typeof OPERATIONS)[number], string> = {
+  create: "Created",
+  update: "Updated",
+  delete: "Deleted",
+};
+
+function humanizeTable(name: string): string {
+  return name
+    .replace(/([A-Z])/g, " $1")
+    .replace(/^./, (s) => s.toUpperCase())
+    .trim()
+    .split(" ")
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+    .join(" ");
+}
+
+/** Event options inferred from schema tables — for UI selectors */
+export const ALL_EVENTS: { value: EventType; label: string }[] = tableNames.flatMap((table) =>
+  OPERATIONS.map((op) => ({
+    value: `on_${table}_${op}` as EventType,
+    label: `${humanizeTable(table)} ${OP_LABELS[op]}`,
+  }))
+);
 /** Inferred from triggerSchema discriminant */
 export type TriggerType = z.infer<typeof triggerSchema>["type"];
 /** Inferred from inputModalitySchema */
@@ -30,10 +61,13 @@ export const WorkflowWithSystemFields = z.object(workflowsWithSystemFields);
 export const WorkflowExecution = z.object(workflowExecutionsWithSystemFields);
 export const WorkflowStep = z.object(workflowStepsWithSystemFields);
 
-/** Workflow list item (doc + sandbox edge). Use instead of inferring from FunctionReturnType for correct enum array types. */
+/** Workflow list item (doc + sandbox edge) */
 export type WorkflowWithSandbox = z.infer<typeof WorkflowWithSystemFields> & {
   sandbox: Doc<"sandboxes"> | null;
 };
+
+/** Resolved member identity for workflow dispatch */
+export type WorkflowMember = { role: MemberRole; userId: string };
 
 // ═══════════════════════════════════════════════════════════════════
 // WORKFLOW ARGS
@@ -50,9 +84,10 @@ export const CreateArgs = z.object({
     name: z.string(),
     trigger: triggerSchema,
     instructions: z.string(),
-    allowedActions: z.array(allowedActionSchema),
+    actions: z.array(actionSchema),
     model: z.string(),
     inputModalities: z.array(inputModalitySchema).default(["text"]),
+    isolationMode: isolationModeSchema.default("isolated"),
     sandboxId: sandboxesWithSystemFields._id.optional(),
   }),
 });
@@ -62,9 +97,10 @@ export const UpdateArgs = WorkflowWithSystemFields.pick({ _id: true }).extend({
     name: z.string(),
     trigger: triggerSchema,
     instructions: z.string(),
-    allowedActions: z.array(allowedActionSchema),
+    actions: z.array(actionSchema),
     model: z.string().optional(),
     inputModalities: z.array(inputModalitySchema),
+    isolationMode: isolationModeSchema,
     sandboxId: sandboxesWithSystemFields._id.nullable().optional(),
     enabled: z.boolean(),
   }).partial(),
@@ -87,9 +123,6 @@ export const ListExecutionsArgs = z.object({
 
 export const GetExecutionArgs = WorkflowExecution.pick({ _id: true });
 
-// Used by agent (external)
-export const GetForExecutionArgs = WorkflowWithSystemFields.pick({ _id: true });
-
 export const UpdateExecutionStatusArgs = z.object({
   executionId: WorkflowExecution.shape._id,
   status: z.enum(["running", "completed", "failed", "cancelled"]),
@@ -110,7 +143,7 @@ export const RetryExecutionArgs = z.object({
 
 export const RecordWorkflowStepOutcomeArgs = z.object({
   executionId: WorkflowExecution.shape._id,
-  action: allowedActionSchema,
+  action: z.string(),
   outcome: z.enum(["success", "failure"]),
   error: z.string().optional(),
 });

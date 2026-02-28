@@ -25,6 +25,7 @@ import type * as functions from "../functions.js";
 import type * as healthCheck from "../healthCheck.js";
 import type * as http from "../http.js";
 import type * as lib_convexAdapter from "../lib/convexAdapter.js";
+import type * as lib_schemaTables from "../lib/schemaTables.js";
 import type * as migrations from "../migrations.js";
 import type * as privateData from "../privateData.js";
 import type * as sandboxes_aggregates from "../sandboxes/aggregates.js";
@@ -38,6 +39,7 @@ import type * as shared_attachments from "../shared/attachments.js";
 import type * as shared_auth from "../shared/auth.js";
 import type * as shared_pagination from "../shared/pagination.js";
 import type * as shared_patch from "../shared/patch.js";
+import type * as shared_sandbox from "../shared/sandbox.js";
 import type * as tables_chats from "../tables/chats.js";
 import type * as tables_globalAttachments from "../tables/globalAttachments.js";
 import type * as tables_orgMemberAttachments from "../tables/orgMemberAttachments.js";
@@ -55,14 +57,14 @@ import type * as todos_stats from "../todos/stats.js";
 import type * as todos_statsTypes from "../todos/statsTypes.js";
 import type * as todos_types from "../todos/types.js";
 import type * as workflows_dispatch from "../workflows/dispatch.js";
+import type * as workflows_executions from "../workflows/executions.js";
 import type * as workflows_functions from "../workflows/functions.js";
+import type * as workflows_helpers from "../workflows/helpers.js";
 import type * as workflows_index from "../workflows/index.js";
-import type * as workflows_internalMutations from "../workflows/internalMutations.js";
-import type * as workflows_memberIdentity from "../workflows/memberIdentity.js";
 import type * as workflows_scheduler from "../workflows/scheduler.js";
+import type * as workflows_toolRegistry from "../workflows/toolRegistry.js";
 import type * as workflows_triggers from "../workflows/triggers.js";
 import type * as workflows_types from "../workflows/types.js";
-import type * as workflows_webhookQuery from "../workflows/webhookQuery.js";
 
 import type {
   ApiFromModules,
@@ -88,6 +90,7 @@ declare const fullApi: ApiFromModules<{
   healthCheck: typeof healthCheck;
   http: typeof http;
   "lib/convexAdapter": typeof lib_convexAdapter;
+  "lib/schemaTables": typeof lib_schemaTables;
   migrations: typeof migrations;
   privateData: typeof privateData;
   "sandboxes/aggregates": typeof sandboxes_aggregates;
@@ -101,6 +104,7 @@ declare const fullApi: ApiFromModules<{
   "shared/auth": typeof shared_auth;
   "shared/pagination": typeof shared_pagination;
   "shared/patch": typeof shared_patch;
+  "shared/sandbox": typeof shared_sandbox;
   "tables/chats": typeof tables_chats;
   "tables/globalAttachments": typeof tables_globalAttachments;
   "tables/orgMemberAttachments": typeof tables_orgMemberAttachments;
@@ -118,14 +122,14 @@ declare const fullApi: ApiFromModules<{
   "todos/statsTypes": typeof todos_statsTypes;
   "todos/types": typeof todos_types;
   "workflows/dispatch": typeof workflows_dispatch;
+  "workflows/executions": typeof workflows_executions;
   "workflows/functions": typeof workflows_functions;
+  "workflows/helpers": typeof workflows_helpers;
   "workflows/index": typeof workflows_index;
-  "workflows/internalMutations": typeof workflows_internalMutations;
-  "workflows/memberIdentity": typeof workflows_memberIdentity;
   "workflows/scheduler": typeof workflows_scheduler;
+  "workflows/toolRegistry": typeof workflows_toolRegistry;
   "workflows/triggers": typeof workflows_triggers;
   "workflows/types": typeof workflows_types;
-  "workflows/webhookQuery": typeof workflows_webhookQuery;
 }>;
 
 /**
